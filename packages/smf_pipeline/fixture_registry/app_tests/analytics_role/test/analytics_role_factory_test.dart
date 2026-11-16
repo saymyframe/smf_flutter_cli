@@ -17,8 +17,8 @@ import 'analytics_role.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  // What reached the platform side of the fixture analytics: each call as
-  // its method and its arguments.
+  // What reached the platform side of the fixture analytics after the
+  // start-up: each call as its method and its arguments.
   final fixtureCalls = <List<Object?>>[];
   Object? failure;
   var printed = <String>[];
@@ -27,6 +27,9 @@ void main() {
     serviceLogFactoriesThrow = true;
     recordFixtureAnalytics(fixtureCalls);
     (failure, printed) = await runStartUp();
+    // What a provider sends its platform side as it starts is no call of
+    // the app.
+    fixtureCalls.clear();
   });
 
   test(

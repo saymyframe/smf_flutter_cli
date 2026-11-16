@@ -377,8 +377,11 @@ void main() {
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
-      'the auth role, and one of every module for each state manager, each '
-      'once more for each other mode', () async {
+      'the auth role, one of Firebase Analytics with the DI container and '
+      'the router that collects nothing before its code chose, and one of '
+      'every module for each state manager, each once more for each other '
+      'combination of the mode of the auth role and of the collection of '
+      'the analytics role', () async {
     final (:apps, :failed) = await _cliMatrix;
     // The modules whose labels and titles are texts of the app, each with
     // the provider of the texts. The app of settings with it is the app of
@@ -407,11 +410,26 @@ void main() {
     String inMode(String mode) => 'auth by firebase_auth with router, '
         'localization --auth-mode=$mode (firebase_auth, go_router, gen_l10n, '
         'firebase_core, flutter_core, shared_preferences)';
-    // An app with every module in another mode of the auth role.
-    String everyModuleIn(String stateManager, String mode) =>
+    // The app of Firebase Analytics with the DI container and the router,
+    // which its role uses, that collects nothing before its code chose.
+    const analyticsOff = 'analytics by firebase_analytics with di, router '
+        '--analytics-collection=off (firebase_analytics, get_it, go_router, '
+        'firebase_core, flutter_core)';
+    // The options of the apps with every module of the other combinations
+    // of the mode of the auth role and of the collection of the analytics
+    // role, in the order of the matrix.
+    const otherModes = [
+      '--analytics-collection=off',
+      '--auth-mode=guest',
+      '--auth-mode=guest --analytics-collection=off',
+      '--auth-mode=anonymous',
+      '--auth-mode=anonymous --analytics-collection=off',
+    ];
+    // An app with every module with the options [modes].
+    String everyModuleIn(String stateManager, String modes) =>
         everyModule(stateManager).replaceFirst(
           'every module ($stateManager)',
-          'every module ($stateManager) --auth-mode=$mode',
+          'every module ($stateManager) $modes',
         );
 
     expect(failed, isEmpty);
@@ -653,14 +671,14 @@ void main() {
       'github_actions (github_actions, flutter_core)',
       inMode('guest'),
       inMode('anonymous'),
+      analyticsOff,
       everyModule('bloc'),
       everyModule('riverpod'),
-      // The apps with every module in the other modes of the auth role
-      // come last.
-      everyModuleIn('bloc', 'guest'),
-      everyModuleIn('bloc', 'anonymous'),
-      everyModuleIn('riverpod', 'guest'),
-      everyModuleIn('riverpod', 'anonymous'),
+      // The apps with every module of the other combinations of the mode of
+      // the auth role and of the collection of the analytics role come
+      // last.
+      for (final stateManager in const ['bloc', 'riverpod'])
+        for (final modes in otherModes) everyModuleIn(stateManager, modes),
     ]);
     // The apps with every module tell apart by the providers other than
     // the first of their roles, bloc of the state managers, and those of
@@ -668,17 +686,21 @@ void main() {
     expect(
       [for (final app in apps) app.everyModuleWith],
       [
-        for (final _ in apps.skip(6)) isNull,
+        for (final _ in apps.skip(12)) isNull,
         isEmpty,
         [RiverpodModule.id],
-        isEmpty,
-        isEmpty,
-        [RiverpodModule.id],
-        [RiverpodModule.id],
+        for (final _ in otherModes) isEmpty,
+        for (final _ in otherModes) [RiverpodModule.id],
       ],
     );
     // An app of another mode has the mode as its option, and any other app
     // has no option: its role chooses the first mode.
+    const authApp = 'auth by firebase_auth with router, localization';
+    const analyticsApp = 'analytics by firebase_analytics with di, router';
+    Map<String, String> optionsOf(String modes) => {
+          for (final option in modes.split(' '))
+            option.substring(2).split('=').first: option.split('=').last,
+        };
     expect(
       [
         for (final app in apps)
@@ -686,16 +708,23 @@ void main() {
             [app.name, app.modes, app.roleOptions],
       ],
       [
-        for (final name in const [
-          'auth by firebase_auth with router, localization',
-          'every module (bloc)',
-          'every module (riverpod)',
-        ])
-          for (final mode in const ['guest', 'anonymous'])
+        for (final mode in const ['guest', 'anonymous'])
+          [
+            '$authApp --auth-mode=$mode',
+            {'auth-mode': mode},
+            {'auth-mode': mode},
+          ],
+        [
+          '$analyticsApp --analytics-collection=off',
+          {'analytics-collection': 'off'},
+          {'analytics-collection': 'off'},
+        ],
+        for (final stateManager in const ['bloc', 'riverpod'])
+          for (final modes in otherModes)
             [
-              '$name --auth-mode=$mode',
-              {'auth-mode': mode},
-              {'auth-mode': mode},
+              'every module ($stateManager) $modes',
+              optionsOf(modes),
+              optionsOf(modes),
             ],
       ],
     );
@@ -1264,7 +1293,8 @@ void main() {
 
   test(
       'the report of the app tests names the answer of CI that the probe of '
-      'each asks for, if it asks for one', () async {
+      'each asks for, if it asks for one, and what gives the verdict on it',
+      () async {
     final cli = await _appTestsOf('smf_flutter_cli');
     const probe = 'integration_test/probe.dart';
 
@@ -1277,6 +1307,16 @@ void main() {
             probe,
             'probeMessages',
             answer: 'messages',
+          ),
+        ),
+        MatrixAppTest(
+          '$cli/events',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(
+            probe,
+            'probeEvents',
+            answer: 'events',
+            verdict: MatrixAnswerVerdict.exitCode,
           ),
         ),
         MatrixAppTest(
@@ -1294,10 +1334,13 @@ void main() {
     );
 
     expect(
-      [for (final test in report) test['answer']],
-      ['messages', null, null],
+      [for (final test in report) (test['answer'], test['verdict'])],
+      [('messages', 'app'), ('events', 'exitCode'), (null, null), (null, null)],
     );
-    expect(report[1].containsKey('answer'), isFalse);
+    for (final test in report.sublist(2)) {
+      expect(test.containsKey('answer'), isFalse);
+      expect(test.containsKey('verdict'), isFalse);
+    }
   });
 
   test(
@@ -2625,10 +2668,19 @@ Type type() => Types;
           ),
           1,
         );
-        // Only the cases that failed are problems.
+        // Only the cases that failed are problems: those of the provider and
+        // of the app with every module, each also for the other value of the
+        // mode option of the analytics role.
         expect(problems(), [
           startsWith('broken_analytics: error [broken_analytics]'),
+          startsWith(
+            'analytics by broken_analytics --analytics-collection=off: '
+            'error [broken_analytics]',
+          ),
           startsWith('every module: error [broken_analytics]'),
+          startsWith(
+            'every module --analytics-collection=off: error [broken_analytics]',
+          ),
         ]);
       });
     });
@@ -3686,8 +3738,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
     /// The tests of [directory] with a probe in a file of their own in
     /// `integration_test/`, named after the directory, that asks for
-    /// [answer].
-    MatrixAppTest asking(String directory, String answer) {
+    /// [answer], with the [verdict] on it.
+    MatrixAppTest asking(
+      String directory,
+      String answer, {
+      MatrixAnswerVerdict verdict = MatrixAnswerVerdict.app,
+    }) {
       final probe = 'integration_test/${directory.split('/').last}.dart';
       fileSystem.file('$directory/$probe')
         ..createSync(recursive: true)
@@ -3695,7 +3751,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       return MatrixAppTest(
         directory,
         appliesTo: (_) => true,
-        startProbe: MatrixStartProbe(probe, 'probe', answer: answer),
+        startProbe: MatrixStartProbe(
+          probe,
+          'probe',
+          answer: answer,
+          verdict: verdict,
+        ),
       );
     }
 
@@ -3706,7 +3767,9 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
     test(
         'go into the app with the answers of CI that they ask for and the '
         'arguments that build the app, next to the list, each on a line of '
-        'its own, for the script that starts the app on a device', () {
+        'its own, for the script that starts the app on a device: an answer '
+        'by its name, with exit-code after it when its exit code is the '
+        'verdict on it', () {
       expect(startAnswersFile, 'integration_test/start_answers');
       expect(startBuildArgumentsFile, 'integration_test/start_build_arguments');
       expect(
@@ -3726,6 +3789,11 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           asking('/tests/messages', 'messages'),
           start,
           walk(),
+          asking(
+            '/tests/events',
+            'events',
+            verdict: MatrixAnswerVerdict.exitCode,
+          ),
           asking('/tests/access', 'access_2'),
         ],
         buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
@@ -3742,7 +3810,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           startReleaseArgumentsFile,
         ]),
       );
-      expect(read(startAnswersFile), 'messages\naccess_2\n');
+      expect(read(startAnswersFile), 'messages\nevents exit-code\naccess_2\n');
       expect(
         read(startBuildArgumentsFile),
         '--dart-define-from-file=.env\n--flavor=ci\n',
@@ -3852,6 +3920,32 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         );
       }
       expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+
+    test(
+        'take the exit code of their answer for the verdict on it only with '
+        'an answer, and the verdict of the app by default', () {
+      MatrixStartProbe probe({String? answer, MatrixAnswerVerdict? verdict}) =>
+          verdict == null
+              ? MatrixStartProbe('integration_test/p.dart', 'p', answer: answer)
+              : MatrixStartProbe(
+                  'integration_test/p.dart',
+                  'p',
+                  answer: answer,
+                  verdict: verdict,
+                );
+
+      expect(probe().verdict, MatrixAnswerVerdict.app);
+      expect(probe(answer: 'messages').verdict, MatrixAnswerVerdict.app);
+      expect(
+        probe(answer: 'events', verdict: MatrixAnswerVerdict.exitCode).verdict,
+        MatrixAnswerVerdict.exitCode,
+      );
+      expect(
+        () => probe(verdict: MatrixAnswerVerdict.exitCode),
+        throwsA(isA<AssertionError>()),
+        reason: 'Without an answer, no command has an exit code.',
+      );
     });
 
     test('the answers and the build arguments are no files of a test', () {

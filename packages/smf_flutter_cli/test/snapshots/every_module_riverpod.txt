@@ -289,6 +289,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 - Record what users do through `AnalyticsService` of `lib/core/analytics/analytics_service.dart`, never through the SDK of a provider. `createAnalyticsService()` returns the one service of the app. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead.
 - The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
+- `setAnalyticsCollectionEnabled()` is the one switch of collection, and every provider keeps it on the device across starts. Until the code first chose, the app collects as `analyticsCollectedFromFirstStart` in that file says, and a provider whose SDK starts before Dart has native lines for it, which its section of `README.md` names. Change them together.
 - A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
 
 With `firebase_analytics`:
@@ -795,6 +796,10 @@ The events of the app reach Google Analytics only once the Firebase project is l
 
 The link belongs to the project, and every app of the project sends its events there. So repeat this in each Firebase project of your flavors. Flavors that share a project need it once, and their events go to one property.
 
+Firebase Analytics keeps what `setAnalyticsCollectionEnabled()` chose on the device, across starts. It starts before any Dart code runs, and records the first open of the app and the start of a session there. So in an app generated with `--analytics-collection=off`, its collection is off by default in the native projects too: `firebase_analytics_collection_enabled` is `false` in `android/app/src/main/AndroidManifest.xml`, and `FIREBASE_ANALYTICS_COLLECTION_ENABLED` is `false` in `ios/Runner/Info.plist`. An app generated with `--analytics-collection=on`, or without the option, has neither line. To change what the app does before its code chose, change those lines together with `analyticsCollectedFromFirstStart`, as the section Analytics tells. An install whose user turns collection on later has no `first_open` event.
+
+Firebase Analytics adds the permission `com.google.android.gms.permission.AD_ID` to the Android app, so the declaration of the advertising ID in Play Console applies to the app: declare that it uses the advertising ID, for analytics.
+
 ## Firebase Authentication
 
 The app signs in with [Firebase Authentication](https://firebase.google.com/docs/auth) through `firebase_auth`: `lib/core/auth/firebase_auth_service.dart` implements the sign-in service of the app on it.
@@ -952,6 +957,26 @@ dart run flutter_native_splash:create
 The command rewrites `ios/Runner/Info.plist` with one more level of indentation. Keep `android_min_sdk` out of `flutter_native_splash.yaml`: with it, the tool leaves the launch background of Android below 12 as it is, and the screen there has no image.
 
 A file `flutter_native_splash-<flavor>.yaml` does not give a flavor its own screen on iOS: the tool writes one, and the app keeps showing the screen of `flutter_native_splash.yaml`.
+
+## Analytics
+
+This app was generated with `--analytics-collection=on`: it collects analytics from its first start, until its code turns collection off. `analyticsCollectedFromFirstStart` in `lib/core/analytics/analytics_service.dart` is `true`.
+
+`setAnalyticsCollectionEnabled()` of the analytics service is the one switch, for every provider of the app. Once a call with `false` completes, no provider sends anything to its backend, neither what the app logs nor what an SDK records itself, such as a screen or a session, until a call with `true` completes. Every provider keeps the setting on the device, so what the code chose holds from the first moment of every later start. `analyticsCollectedFromFirstStart` applies only on a device where the code never chose.
+
+Off means that nothing is sent. It does not mean that no SDK writes to the device: an SDK keeps at least the setting there.
+
+To change what the app does before its code chose, change `analyticsCollectedFromFirstStart`, and the native lines of each provider whose SDK starts before Dart, which its section of this README names. Or generate the app again with the other value of `--analytics-collection`.
+
+In the European Economic Area, the ePrivacy rules generally need the consent of the user before an app stores or reads analytics data on the device. In the UK, the Privacy and Electronic Communications Regulations, as the Data (Use and Access) Act 2025 amended them, let some analytics run without consent: storage whose only purpose is statistics on how the app is used, to improve it, as long as the user gets clear information about it and a simple and free way to object. The guidance of the ICO tells what qualifies. Where consent is needed, generate the app with `--analytics-collection=off`, ask the user in a screen of your own, such as a page of the onboarding, and call `setAnalyticsCollectionEnabled(true)` once the user agreed. SMF shows no consent dialog.
+
+Apple's App Review Guideline 5.1.1(ii) asks for an easily accessible and understandable way to withdraw consent: give the settings screen a switch that calls `setAnalyticsCollectionEnabled()`.
+
+The App Store and Google Play ask for a link to a privacy policy in the listing of the app and inside the app. Say there what the analytics of the app collect.
+
+Crash reports are another role, which this setting does not stop.
+
+This is not legal advice.
 
 ## App icon
 
@@ -1796,7 +1821,15 @@ abstract interface class AnalyticsService {
     Map<String, Object>? parameters,
   });
 
-  /// Turns the collection of analytics data on or off.
+  /// Turns the collection of analytics data on or off, for every provider of
+  /// the app: the one switch of collection.
+  ///
+  /// Once a call with false completes, no provider sends anything to its
+  /// backend, neither what the app logs nor what its SDK records itself, such
+  /// as a screen, a session or an install, until a call with true completes.
+  /// Every provider keeps the setting on the device, so it holds from the
+  /// first moment of every later start. Until the code first calls it, the
+  /// app collects as [analyticsCollectedFromFirstStart] says.
   Future<void> setAnalyticsCollectionEnabled(bool enabled);
 
   /// Sets the id of the signed-in user, or clears it with `null`.
@@ -1805,6 +1838,16 @@ abstract interface class AnalyticsService {
   /// Sets the user property [name] to [value], or clears it with `null`.
   Future<void> setUserProperty({required String name, required String? value});
 }
+
+/// Whether the app collects analytics from its first start, before its code
+/// chose with [AnalyticsService.setAnalyticsCollectionEnabled]:
+/// `--analytics-collection` of `smf create`. With false, no provider sends
+/// anything until the code turns collection on, as once the user agreed.
+/// Every provider keeps what the code chose across starts, so this applies
+/// only on a device where the code never chose. A provider whose SDK starts
+/// before Dart follows this value in the native projects too, which its
+/// section of the README names: change both, or generate the app again.
+const bool analyticsCollectedFromFirstStart = true;
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.

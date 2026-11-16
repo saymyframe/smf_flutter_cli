@@ -15,9 +15,6 @@ FAKE_ENV_USER_SECOND=
 # The third value of the fixture
 FAKE_ENV_USER_THIRD=
 
-# The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
-REVIEW_APP_STORE_ID=
-
 # The address of the REST API of the app, such as https://api.example.com/v1
 REST_BASE_URL=
 === .env.example (role:env) ===
@@ -37,9 +34,6 @@ FAKE_ENV_USER_SECOND=
 
 # The third value of the fixture
 FAKE_ENV_USER_THIRD=
-
-# The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
-REVIEW_APP_STORE_ID=
 
 # The address of the REST API of the app, such as https://api.example.com/v1
 REST_BASE_URL=
@@ -204,6 +198,7 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 - Record what users do through `AnalyticsService` of `lib/core/analytics/analytics_service.dart`, never through the SDK of a provider. `createAnalyticsService()` returns the one service of the app. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead.
 - The service never fails, and you need not await a call: in debug mode it prints the failure of a provider.
+- `setAnalyticsCollectionEnabled()` is the one switch of collection, and every provider keeps it on the device across starts. Until the code first chose, the app collects as `analyticsCollectedFromFirstStart` in that file says, and a provider whose SDK starts before Dart has native lines for it, which its section of `README.md` names. Change them together.
 - A new provider implements `AnalyticsService`. The function that creates it gets an entry in `_analyticsServices` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initAnalytics()`, which the file has once a provider needs it.
 
 ## Authentication
@@ -316,6 +311,14 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - On a 401 it gets a new token once and repeats once, for any method. Then it fails with `unauthorized`, which signs nobody out: decide in the app what that means.
 - A request made while the app starts, before `initAuth()` is over, waits for the start at most `anonymousWait`, and goes without a token if there is still no session. So make a request that needs the user after `bootstrap()`.
 
+## Remote config
+
+- `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart` holds the values of remote config, which a backend changes without a new version of the app. Its `value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave or the default of the parameter. It is a `ValueListenable`: a widget that follows a value reads it in `build` under a `ValueListenableBuilder`, and code that must not change on the screen reads it once, such as in `initState`. The app has one controller, so create no other `AppRemoteConfigController`.
+- The values never hold the start. The start makes active what the device kept from the last fetch, and an app with parameters fetches new values in the background, also each time the user comes back to it, which take effect at once. While the app has no parameter, it asks the backend nothing.
+- A parameter has a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and the same name and type in the backend of the provider. The code of a module reads only its own parameters.
+- Every value reaches every installation that fetches it, where anyone can read it: never put a secret into remote config, such as a key or a password.
+- A new provider implements `RemoteConfigService` of `lib/core/remote_config/remote_config_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/remote_config/app_remote_config.dart`, which exports `RemoteValues`, and calls neither `initRemoteConfig()` nor `createRemoteConfigService()` nor `appRemoteConfig.start()`. A test gives `appRemoteConfig.start()` a service of its own.
+
 ## Router
 
 - Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
@@ -326,13 +329,6 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
 - `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
 - `NotFoundScreen` in `lib/core/router/not_found_screen.dart` is the page that the router shows for a location that it cannot show, such as a link to a page that the app does not have. Change its look there, and keep its `const` constructor without arguments. `appRouter.navigatorOf(context).goToStart()` shows the screen that the app starts on, as `go()` shows a location.
-
-## Store reviews
-
-- `appReview` in `lib/core/review/app_review.dart` asks for the review dialog of the App Store or Google Play only where the code of the app calls `appReview.requestIfDue()`. Call it at a natural break, such as after the user has finished a task: `unawaited(appReview.requestIfDue());`. It asks only when `ReviewPolicy` says that a review is due: never on the first launch, in the flow of a guard of the routes, twice in a version or twice in 14 days. It returns nothing, since the store tells nothing.
-- Never call it from a button or after a question of your own, and show nothing around the dialog. Nothing in the app may depend on whether the app asked.
-- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, also from a build of another flavor.
-- A new provider implements `ReviewService` of `lib/core/review/review_service.dart`, and only the files of that implementation import it. The code of the app calls neither `initReview()`, `createReviewService()` nor `appReview.start()`, and writes nothing under the keys `review.*`.
 
 ## Theme
 
@@ -363,7 +359,6 @@ Once any commands of the sections below have run, the setup still needs these st
 1. In Xcode, sign the iOS app with your paid Apple Developer team
 2. Set up payments in App Store Connect and Google Play Console
 3. Create the products of your plans in App Store Connect and Google Play Console
-4. Copy the App Store ID of the app from App Store Connect into .env
 
 Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
 
@@ -409,6 +404,26 @@ The texts of the screen are in English, since the texts of the app need the star
 ## Fixture
 
 The app has something in every socket of its entry, with `code` and a [link](https://example.com).
+
+## Analytics
+
+This app was generated with `--analytics-collection=on`: it collects analytics from its first start, until its code turns collection off. `analyticsCollectedFromFirstStart` in `lib/core/analytics/analytics_service.dart` is `true`.
+
+`setAnalyticsCollectionEnabled()` of the analytics service is the one switch, for every provider of the app. Once a call with `false` completes, no provider sends anything to its backend, neither what the app logs nor what an SDK records itself, such as a screen or a session, until a call with `true` completes. Every provider keeps the setting on the device, so what the code chose holds from the first moment of every later start. `analyticsCollectedFromFirstStart` applies only on a device where the code never chose.
+
+Off means that nothing is sent. It does not mean that no SDK writes to the device: an SDK keeps at least the setting there.
+
+To change what the app does before its code chose, change `analyticsCollectedFromFirstStart`, and the native lines of each provider whose SDK starts before Dart, which its section of this README names. Or generate the app again with the other value of `--analytics-collection`.
+
+In the European Economic Area, the ePrivacy rules generally need the consent of the user before an app stores or reads analytics data on the device. In the UK, the Privacy and Electronic Communications Regulations, as the Data (Use and Access) Act 2025 amended them, let some analytics run without consent: storage whose only purpose is statistics on how the app is used, to improve it, as long as the user gets clear information about it and a simple and free way to object. The guidance of the ICO tells what qualifies. Where consent is needed, generate the app with `--analytics-collection=off`, ask the user in a screen of your own, such as a page of the onboarding, and call `setAnalyticsCollectionEnabled(true)` once the user agreed. SMF shows no consent dialog.
+
+Apple's App Review Guideline 5.1.1(ii) asks for an easily accessible and understandable way to withdraw consent: give the settings screen a switch that calls `setAnalyticsCollectionEnabled()`.
+
+The App Store and Google Play ask for a link to a privacy policy in the listing of the app and inside the app. Say there what the analytics of the app collect.
+
+Crash reports are another role, which this setting does not stop.
+
+This is not legal advice.
 
 ## Sign-in
 
@@ -473,7 +488,6 @@ The keys of the app:
 - `FAKE_ENV_USER_FIRST`, read as `AppEnv.fakeEnvUserFirst`, from the module `fake_env_user`: The first value of the fixture
 - `FAKE_ENV_USER_SECOND`, read as `AppEnv.fakeEnvUserSecond`, from the module `fake_env_user`: The second value of the fixture
 - `FAKE_ENV_USER_THIRD`, read as `AppEnv.fakeEnvUserThird`, from the module `fake_env_user`: The third value of the fixture
-- `REVIEW_APP_STORE_ID`, read as `AppEnv.reviewAppStoreId`, from the store reviews role: The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
 - `REST_BASE_URL`, read as `AppEnv.restBaseUrl`, from the REST API role: The address of the REST API of the app, such as https://api.example.com/v1
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
@@ -535,6 +549,23 @@ A message that arrives while the app is in the foreground reaches `appPush.messa
 
 A message with data and no title or body reaches the app only while it is in the foreground. In the background, or when the app is closed, it runs no code of the app. Images in a message do not show on iOS, which needs an extension of the app for them.
 
+## Remote config
+
+The app reads values of remote config through `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart`. A backend of the provider changes them without a new version of the app. `appRemoteConfig.value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave the parameter, or its default while the backend gives none or gives a value that the type of the parameter does not take.
+
+The values never hold the start of the app. The start makes active what the last fetch got, which the device keeps, also without the network, and waits for that at most a second. In an app with parameters, the app then asks the backend for new values in the background, at the start and each time the user comes back to the app, and makes them active at once, also while a screen shows. Where the provider tells of values that the backend publishes while the app runs, they come the same way. While the app has no parameter, it asks the backend nothing: it starts asking with its first parameter. A widget that follows a value reads it in `build` under a `ValueListenableBuilder` of `appRemoteConfig`, and code that must not change on the screen reads it once, such as in `initState`.
+
+The parameters of the app:
+
+- `fake_config_user_greeting`, a text read as `fakeConfigUserGreeting`, by default `Hello`, from the module `fake_config_user`: The greeting of the fixture
+- `fake_config_user_enabled`, a Boolean read as `fakeConfigUserEnabled`, by default `true`, from the module `fake_config_user`: Whether the fixture is on
+- `fake_config_user_limit`, a whole number read as `fakeConfigUserLimit`, by default `3`, from the module `fake_config_user`: How many the fixture takes
+- `fake_config_user_ratio`, a number read as `fakeConfigUserRatio`, by default `0.5`, from the module `fake_config_user`: The ratio of the fixture
+
+To add a parameter of your own, give it a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and create it in the backend of the provider with the same name and type. The section of the module that provides remote config tells where its backend is.
+
+Every value reaches every installation of the app that fetches it, where anyone can read it. So never put a secret into remote config, such as a key or a password.
+
 ## REST API
 
 `appRest` in `lib/core/rest/app_rest.dart` makes the requests of the app:
@@ -560,23 +591,6 @@ In this app, each request to the origin of `REST_BASE_URL` carries the token of 
 `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. A list of JSON is a `List<dynamic>`, so a function of a list takes that and casts its items inside, as above. For generated models, run `flutter pub add json_annotation dev:json_serializable dev:build_runner` and pass the `fromJson` of the model.
 
 In a test, `RestTestServer` of `test/core/rest/rest_test_server.dart` is a local server, and `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a real request runs in `tester.runAsync`. A request that is still running when a `testWidgets` body ends fails the test with a pending timer. `test/core/rest/app_rest_test.dart` shows the first.
-
-## Store reviews
-
-The app asks for a review only where its code calls `appReview.requestIfDue()` of `lib/core/review/app_review.dart`. Call it at a natural break, such as when the user has finished a task:
-
-```dart
-await saveNote(note);
-unawaited(appReview.requestIfDue());
-```
-
-When a review is due, the call asks the App Store or Google Play for its own review dialog, and the app shows nothing around it. It returns nothing: the store tells no app whether the dialog showed or what the user did, so nothing in the app may depend on it. Never call it from a button, and never after a question of your own, such as "Do you like the app?": Google Play forbids both, and the App Store allows no prompt but its own.
-
-A review is due as `ReviewPolicy` in that file says: from the third launch of the app (`ReviewPolicy.launches`), three days after its first launch (`ReviewPolicy.sinceFirstLaunch`), and at most once a version of the app and once in 14 days (`ReviewPolicy.between`). Change the numbers there. The app counts its launches and remembers its last request in the preferences, under the keys `review.*`, so write nothing there.
-
-The store decides whether the dialog shows. iOS shows it in a debug build each time, never in TestFlight, and at most three times in 365 days. Google Play shows it only in an app that it installed, such as from an internal test track. Elsewhere the request fails and the app records nothing, so the next call of `appReview.requestIfDue()` asks again, also in the same launch.
-
-`appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page where the user writes a review. On Android that is the Google Play page of `com.example.fixture_app` (`googlePlayId`), the id of the flavor for a release, also from a build of another flavor. On iOS it is the App Store page of `REVIEW_APP_STORE_ID` in `.env`, the Apple ID of the app in App Store Connect. While that key is empty, the app has no App Store page, and `appReview.hasStorePage` is `false` on iOS.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -776,7 +790,6 @@ on request dev
   variable FAKE_ENV_USER_FIRST
   variable FAKE_ENV_USER_SECOND
   variable FAKE_ENV_USER_THIRD
-  variable REVIEW_APP_STORE_ID
   variable REST_BASE_URL
   run Write .env from the variables of the environment = dart tool/write_env.dart
   run Get the packages = flutter pub get
@@ -786,7 +799,6 @@ on request staging
   variable FAKE_ENV_USER_FIRST
   variable FAKE_ENV_USER_SECOND
   variable FAKE_ENV_USER_THIRD
-  variable REVIEW_APP_STORE_ID
   variable REST_BASE_URL
   run Write .env from the variables of the environment = dart tool/write_env.dart
   run Get the packages = flutter pub get
@@ -796,7 +808,6 @@ on request prod
   variable FAKE_ENV_USER_FIRST
   variable FAKE_ENV_USER_SECOND
   variable FAKE_ENV_USER_THIRD
-  variable REVIEW_APP_STORE_ID
   variable REST_BASE_URL
   run Write .env from the variables of the environment = dart tool/write_env.dart
   run Get the packages = flutter pub get
@@ -986,7 +997,7 @@ import 'package:fixture_app/core/notifications/app_notifications.dart';
 import 'package:fixture_app/core/preferences/app_preferences.dart';
 import 'package:fixture_app/core/purchases/app_purchases.dart';
 import 'package:fixture_app/core/push/app_push.dart';
-import 'package:fixture_app/core/review/app_review.dart';
+import 'package:fixture_app/core/remote_config/app_remote_config.dart';
 import 'package:flutter/foundation.dart';
 
 @pragma('vm:entry-point')
@@ -1008,13 +1019,13 @@ Future<void> bootstrap() async {
   await initNotifications();
   await initPurchases();
   await initPush();
+  await initRemoteConfig();
   debugPrint('di');
   await registerDependencies();
   debugPrint(createBadge().labels.join());
   setUpFixtureParent();
   debugPrint('late');
   await startFixtureOrFail();
-  await initReview();
 }
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
 import 'package:fixture_app/core/fixture_analytics/fixture_analytics.dart'
@@ -1035,7 +1046,15 @@ abstract interface class AnalyticsService {
     Map<String, Object>? parameters,
   });
 
-  /// Turns the collection of analytics data on or off.
+  /// Turns the collection of analytics data on or off, for every provider of
+  /// the app: the one switch of collection.
+  ///
+  /// Once a call with false completes, no provider sends anything to its
+  /// backend, neither what the app logs nor what its SDK records itself, such
+  /// as a screen, a session or an install, until a call with true completes.
+  /// Every provider keeps the setting on the device, so it holds from the
+  /// first moment of every later start. Until the code first calls it, the
+  /// app collects as [analyticsCollectedFromFirstStart] says.
   Future<void> setAnalyticsCollectionEnabled(bool enabled);
 
   /// Sets the id of the signed-in user, or clears it with `null`.
@@ -1044,6 +1063,16 @@ abstract interface class AnalyticsService {
   /// Sets the user property [name] to [value], or clears it with `null`.
   Future<void> setUserProperty({required String name, required String? value});
 }
+
+/// Whether the app collects analytics from its first start, before its code
+/// chose with [AnalyticsService.setAnalyticsCollectionEnabled]:
+/// `--analytics-collection` of `smf create`. With false, no provider sends
+/// anything until the code turns collection on, as once the user agreed.
+/// Every provider keeps what the code chose across starts, so this applies
+/// only on a device where the code never chose. A provider whose SDK starts
+/// before Dart follows this value in the native projects too, which its
+/// section of the README names: change both, or generate the app again.
+const bool analyticsCollectedFromFirstStart = true;
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.
@@ -2853,7 +2882,6 @@ abstract final class AppEnv {
       bool.hasEnvironment('FAKE_ENV_USER_FIRST') ||
       bool.hasEnvironment('FAKE_ENV_USER_SECOND') ||
       bool.hasEnvironment('FAKE_ENV_USER_THIRD') ||
-      bool.hasEnvironment('REVIEW_APP_STORE_ID') ||
       bool.hasEnvironment('REST_BASE_URL');
 
   /// The value of `FAKE_ENV_USER_FIRST`.
@@ -2864,9 +2892,6 @@ abstract final class AppEnv {
 
   /// The value of `FAKE_ENV_USER_THIRD`.
   static String? get fakeEnvUserThird => _valueOf('FAKE_ENV_USER_THIRD');
-
-  /// The value of `REVIEW_APP_STORE_ID`.
-  static String? get reviewAppStoreId => _valueOf('REVIEW_APP_STORE_ID');
 
   /// The value of `REST_BASE_URL`.
   static String? get restBaseUrl => _valueOf('REST_BASE_URL');
@@ -2881,8 +2906,6 @@ abstract final class AppEnv {
       'FAKE_ENV_USER_SECOND': String.fromEnvironment('FAKE_ENV_USER_SECOND'),
     if (bool.hasEnvironment('FAKE_ENV_USER_THIRD'))
       'FAKE_ENV_USER_THIRD': String.fromEnvironment('FAKE_ENV_USER_THIRD'),
-    if (bool.hasEnvironment('REVIEW_APP_STORE_ID'))
-      'REVIEW_APP_STORE_ID': String.fromEnvironment('REVIEW_APP_STORE_ID'),
     if (bool.hasEnvironment('REST_BASE_URL'))
       'REST_BASE_URL': String.fromEnvironment('REST_BASE_URL'),
   };
@@ -2972,12 +2995,20 @@ import '../analytics/analytics_service.dart';
 /// The platform side of the analytics of the fixture, which only the mocks
 /// of its own tests answer, as only the tests of a plugin know its
 /// platform side.
+///
+/// Like the SDK of a provider, the platform side keeps the setting of
+/// collection that `setAnalyticsCollectionEnabled` gave it on the device,
+/// across the starts of the app. Its start takes `collectByDefault` only
+/// while it has kept nothing, on a device where the code never chose.
 const fixtureAnalyticsChannel = MethodChannel('smf.fixture/analytics');
 
 /// Creates the analytics service of the fixture once its platform side has
-/// started.
+/// started, with whether it collects before the code chose: the setting of
+/// the analytics role, `analyticsCollectedFromFirstStart`.
 Future<AnalyticsService> initFixtureAnalytics() async {
-  await fixtureAnalyticsChannel.invokeMethod<void>('start');
+  await fixtureAnalyticsChannel.invokeMethod<void>('start', {
+    'collectByDefault': analyticsCollectedFromFirstStart,
+  });
   return const FixtureAnalytics();
 }
 
@@ -3460,6 +3491,25 @@ final class FixtureModel {
 
   /// The model as JSON.
   Map<String, dynamic> toJson() => _$FixtureModelToJson(this);
+}
+=== lib/core/fixture_config_user/fixture_config_user.dart (fake_config_user) ===
+import '../remote_config/app_remote_config.dart';
+
+/// What the fixture reads of remote config (fixture): the value of each of
+/// its parameters, one of each type, which the app has from the backend of
+/// the provider, or as the default of the parameter.
+abstract final class FixtureRemoteValues {
+  /// The greeting of the fixture.
+  static String get greeting => appRemoteConfig.value.fakeConfigUserGreeting;
+
+  /// Whether the fixture is on.
+  static bool get enabled => appRemoteConfig.value.fakeConfigUserEnabled;
+
+  /// How many the fixture takes.
+  static int get limit => appRemoteConfig.value.fakeConfigUserLimit;
+
+  /// The ratio of the fixture.
+  static double get ratio => appRemoteConfig.value.fakeConfigUserRatio;
 }
 === lib/core/fixture_crash/fixture_crash.dart (fake_crash) ===
 import 'package:flutter/foundation.dart';
@@ -4262,6 +4312,86 @@ final class FixturePush implements PushService {
     return null;
   }
 }
+=== lib/core/fixture_remote_config/fixture_remote_config.dart (fake_remote_config) ===
+import '../remote_config/remote_config_service.dart';
+
+/// What the backend of the fixture has, by parameter: no value of a
+/// parameter of the app, and the parameter of the check of the remote config
+/// role, which no app reads, as the role asks of the mocks of every provider.
+const Map<String, String> _backend = {
+  'remote_config_role_check': 'On the backend of the fixture',
+};
+
+/// What the last fetch got, by parameter. It stands for what the device
+/// keeps, which every start of the app finds as the last one left it.
+Map<String, String> _fetched = const {};
+
+/// The active values, by parameter, which the device keeps too.
+Map<String, String> _active = const {};
+
+/// When the last fetch that succeeded was, which the device keeps too.
+DateTime? _lastFetch;
+
+/// Waits for the answer of the system, which takes a moment, as with a
+/// provider that asks it: a turn of the event loop. So a test makes the
+/// calls of remote config in real time, as it runs the start-up of the app.
+Future<void> _answer() => Future<void>.delayed(Duration.zero);
+
+/// Creates the remote config of the fixture, as a start of the app does: it
+/// asks the backend nothing. Nothing outlives the process of the app, so
+/// each run of the tests of a file starts as on a first launch.
+RemoteConfigService createFixtureRemoteConfig() => FixtureRemoteConfig._();
+
+/// Remote config in memory: a backend with no value of a parameter of the
+/// app, which publishes nothing while the app runs, and a device that keeps
+/// what was fetched and activated from one start of the app to the next.
+final class FixtureRemoteConfig implements RemoteConfigService {
+  FixtureRemoteConfig._();
+
+  /// How often [fetch] may ask the backend at most.
+  Duration _interval = Duration.zero;
+
+  @override
+  Future<void> open(
+    Map<String, Object> defaults, {
+    required Duration fetchInterval,
+    required Duration fetchTimeout,
+  }) async {
+    await _answer();
+    _interval = fetchInterval;
+  }
+
+  @override
+  Future<bool> activate() async {
+    final changed = !_same(_fetched, _active);
+    _active = _fetched;
+    return changed;
+  }
+
+  @override
+  Map<String, String> get values => Map.unmodifiable(_active);
+
+  @override
+  Future<void> fetch() async {
+    await _answer();
+    final last = _lastFetch;
+    final now = DateTime.now();
+    if (last != null && now.difference(last) < _interval) return;
+    _fetched = Map.unmodifiable(_backend);
+    _lastFetch = now;
+  }
+
+  @override
+  bool get liveUpdates => false;
+
+  @override
+  Stream<void> get updates => const Stream<void>.empty();
+}
+
+/// Whether [one] and [other] have the same values of the same parameters.
+bool _same(Map<String, String> one, Map<String, String> other) =>
+    one.length == other.length &&
+    one.entries.every((entry) => other[entry.key] == entry.value);
 === lib/core/fixture_rest/fixture_rest_transport.dart (fake_rest) ===
 import 'dart:async';
 import 'dart:io';
@@ -4331,47 +4461,6 @@ final class FixtureRestTransport implements RestTransport {
       client.close();
     }
   }
-}
-=== lib/core/fixture_review/fixture_review.dart (fake_review) ===
-import '../review/review_service.dart';
-
-/// Waits for the answer of the store, which takes a moment, as with a
-/// provider that asks it: a turn of the event loop. So a test makes the
-/// calls of the reviews in real time, as it runs the start-up of the app.
-Future<void> _answer() => Future<void>.delayed(Duration.zero);
-
-/// Creates the reviews of the fixture, with the app. It asks the user
-/// nothing.
-ReviewService createFixtureReview() => const FixtureReview._();
-
-/// The reviews of a device whose store can always show its dialog, which
-/// shows nothing in the tests, and on which a page of the store always
-/// opens, as the mocks of the platform side of every provider of the role
-/// have it. The version of the app is `1.0.0`, as they have it too.
-final class FixtureReview implements ReviewService {
-  const FixtureReview._();
-
-  @override
-  Future<bool> isAvailable() async {
-    await _answer();
-    return true;
-  }
-
-  /// Asks the store of the device for its dialog, which shows nothing in
-  /// the tests, and shows nothing of its own around it.
-  @override
-  Future<void> requestReview() async {
-    await _answer();
-  }
-
-  @override
-  Future<bool> openStorePage(Uri page) async {
-    await _answer();
-    return true;
-  }
-
-  @override
-  Future<String?> appVersion() async => '1.0.0';
 }
 === lib/core/fixture_screen_log/fixture_screen_log.dart (fake_screen_log) ===
 /// The screens the user saw, as the screen listener of the fixture screen
@@ -5666,7 +5755,6 @@ import 'package:fixture_app/core/fixture_preferences/fixture_preferences.dart'
 import 'package:fixture_app/core/fixture_setting/fixture_setting.dart';
 import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/notifications/app_notifications.dart';
-import 'package:fixture_app/core/review/app_review.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/foundation.dart';
 
@@ -5759,7 +5847,6 @@ final List<void Function(AppPreferences preferences)> _restorers = [
   restoreFixtureSetting,
   restoreAppLocale,
   restoreNotifications,
-  restoreReview,
   restoreAppThemeMode,
 ];
 
@@ -6940,6 +7027,471 @@ abstract interface class PushService {
   /// launched in another way.
   Future<PushMessage?> launchMessage();
 }
+=== lib/core/remote_config/app_remote_config.dart (role:remote_config) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/fixture_remote_config/fixture_remote_config.dart'
+    as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'remote_config_service.dart';
+import 'remote_values.dart';
+
+export 'remote_values.dart';
+
+/// The values of remote config of the app: `appRemoteConfig.value` has a
+/// getter for each parameter of the app.
+///
+/// It tells its listeners when the value of a parameter changes. A widget
+/// follows it with a `ValueListenableBuilder`, and code that must not change
+/// on the screen reads it once, such as in `initState`.
+final appRemoteConfig = AppRemoteConfigController._();
+
+/// Keeps the values of remote config of the app up to date with the service
+/// of the provider of remote config. The app has one, [appRemoteConfig].
+///
+/// The values never hold the start of the app: [start] makes active what
+/// the last fetch got, which the device keeps, and waits for that at most
+/// [startWait]. In an app with parameters, the controller then asks the
+/// backend for new values in the background, in a later turn of the event
+/// loop, and again each time the user comes back to the app, and makes them
+/// active at once. Where the service tells of values that the backend
+/// publishes while the app runs, the controller makes each active as it
+/// comes. While the app has no parameter, it asks the backend nothing and
+/// listens to nothing.
+///
+/// The calls of the service run one after another, and the controller drops
+/// those of a service that it no longer has. An error of the service keeps
+/// the values, reaches no handler of the uncaught errors of the app, and
+/// prints in a debug build. So does a value that the type of its parameter
+/// does not take, once, and the parameter reads its default.
+///
+/// It tells its listeners of a change only when the values of the
+/// parameters of the app change: from the completion of a call of the
+/// service, from the values that the service tells of, and from [start],
+/// which takes the defaults back. Never while a widget builds.
+final class AppRemoteConfigController extends ChangeNotifier
+    implements ValueListenable<RemoteValues> {
+  AppRemoteConfigController._();
+
+  /// How long [start] waits at most for the values that the device kept.
+  static const startWait = Duration(seconds: 1);
+
+  /// How often the service may ask the backend at most, also across
+  /// launches of the app: every 12 hours in a release build, which keeps the
+  /// app within the quotas of a backend, and at each fetch in a debug build,
+  /// so that a value that a developer changed shows at the next start.
+  static const fetchInterval = kDebugMode ? Duration.zero : Duration(hours: 12);
+
+  /// How long a fetch may take.
+  static const fetchTimeout = Duration(seconds: 10);
+
+  /// How much longer than [fetchTimeout] the controller waits for a fetch of
+  /// a provider that does not stop, before it goes on with the other calls
+  /// of the service.
+  static const fetchGrace = Duration(seconds: 5);
+
+  /// Whether the app has a parameter: an app without one asks the backend
+  /// nothing.
+  static bool get _asks => RemoteValues.defaults.isNotEmpty;
+
+  RemoteValues _values = RemoteValues.initial;
+
+  /// What the controller does with the service of the last start, if any.
+  _Run? _run;
+
+  /// Tells when the user comes back to the app.
+  _ResumeObserver? _observer;
+
+  /// The values of parameters that their types do not take, which the
+  /// controller printed.
+  final Set<String> _printed = {};
+
+  /// The values of the parameters of the app.
+  @override
+  RemoteValues get value => _values;
+
+  /// Starts with [service]: opens it, makes active what the last fetch got,
+  /// which the device keeps, and takes those values. In an app with
+  /// parameters, it then fetches new values in the background, in a later
+  /// turn of the event loop, and follows those that the service tells of.
+  ///
+  /// `initRemoteConfig()` calls it in `bootstrap()`. It waits at most
+  /// [startWait]: values that come later still become [value], and the app
+  /// starts without waiting for them.
+  ///
+  /// It may be called again, with the service that the app has from then
+  /// on: `initRemoteConfig()` does so in a test of the next launch of the
+  /// app, and a test gives it a service of its own. The controller then drops
+  /// the calls of the service before, and [value] has the defaults until the
+  /// new service gives its values.
+  Future<void> start(RemoteConfigService service) {
+    unawaited(_run?.updates?.cancel());
+    final run = _run = _Run(service);
+    _set(RemoteValues.initial);
+    if (_observer == null) {
+      final observer = _observer = _ResumeObserver(_onResume);
+      WidgetsBinding.instance.addObserver(observer);
+    }
+    final ready = _inTurn(run, () => _open(run));
+    // In a later turn of the event loop, so that the code that runs right
+    // after the start reads what the start made active, and the first frame
+    // does not wait for the backend.
+    if (_asks) unawaited(ready.then((_) => Timer.run(() => _follow(run))));
+    return ready.timeout(startWait, onTimeout: () {});
+  }
+
+  /// Opens the service of [run], and makes active what the device kept.
+  Future<void> _open(_Run run) async {
+    await run.service.open(
+      RemoteValues.defaults,
+      fetchInterval: fetchInterval,
+      fetchTimeout: fetchTimeout,
+    );
+    run.opened = true;
+    await _activate(run);
+  }
+
+  /// Follows the backend with the service of [run], once it opened: listens
+  /// to the values that the service tells of, if it tells of any, and
+  /// fetches. It runs in a turn of the event loop of its own, where no call
+  /// awaits it, so an error of the service that it meets is printed as any
+  /// other, and the fetch still comes.
+  void _follow(_Run run) {
+    if (!identical(run, _run) || !run.opened) return;
+    final service = run.service;
+    try {
+      if (service.liveUpdates) {
+        run.updates = service.updates.listen(
+          (_) => _activateLater(run),
+          onError: (Object error) => _report(error),
+        );
+      }
+    } on Object catch (error) {
+      _report(error);
+    }
+    _fetchLater(run);
+  }
+
+  /// The user came back to the app: in an app with parameters, the
+  /// controller fetches again, which the provider throttles to
+  /// [fetchInterval].
+  void _onResume() {
+    final run = _run;
+    if (run != null && _asks && run.opened) _fetchLater(run);
+  }
+
+  /// Fetches with the service of [run] in its turn and makes what it got
+  /// active, unless a fetch waits for its turn already.
+  void _fetchLater(_Run run) {
+    if (run.fetchWaits) return;
+    run.fetchWaits = true;
+    unawaited(
+      _inTurn(run, () async {
+        run.fetchWaits = false;
+        await run.service.fetch().timeout(fetchTimeout + fetchGrace);
+        await _activate(run);
+      }),
+    );
+  }
+
+  /// Makes active in its turn what the service of [run] told of, unless an
+  /// activation waits for its turn already.
+  void _activateLater(_Run run) {
+    if (run.activationWaits) return;
+    run.activationWaits = true;
+    unawaited(
+      _inTurn(run, () {
+        run.activationWaits = false;
+        return _activate(run);
+      }),
+    );
+  }
+
+  /// Makes active what the last fetch of the service of [run] got, and takes
+  /// the active values, while the controller has that service.
+  Future<void> _activate(_Run run) async {
+    if (!identical(run, _run)) return;
+    await run.service.activate();
+    if (identical(run, _run)) {
+      _set(RemoteValues.of(run.service.values, onInvalid: _printInvalid));
+    }
+  }
+
+  /// Runs [job] once the calls of [run] made before it are over, unless the
+  /// controller has another service by then. An error of [job] keeps the
+  /// values.
+  Future<void> _inTurn(_Run run, Future<void> Function() job) async {
+    final earlier = run.last;
+    final done = Completer<void>();
+    final own = run.last = done.future;
+    try {
+      if (earlier != null) await earlier;
+      if (identical(run, _run)) await job();
+    } on Object catch (error) {
+      _report(error);
+    } finally {
+      if (identical(run.last, own)) run.last = null;
+      done.complete();
+    }
+  }
+
+  /// Takes [values] as [value], and tells the listeners when that changes
+  /// it.
+  void _set(RemoteValues values) {
+    if (values == _values) return;
+    _values = values;
+    notifyListeners();
+  }
+
+  /// Prints [error] of the service in a debug build, which no caller sees.
+  void _report(Object error) {
+    if (kDebugMode) {
+      debugPrint('Remote config keeps its values; its service failed: $error');
+    }
+  }
+
+  /// Prints once in a debug build that [text], the value that the backend
+  /// gives [parameter], is not of the type of the parameter.
+  void _printInvalid(String parameter, String text) {
+    if (!kDebugMode || !_printed.add('$parameter=$text')) return;
+    final type = switch (RemoteValues.defaults[parameter]) {
+      bool() => 'bool',
+      int() => 'int',
+      double() => 'double',
+      _ => 'String',
+    };
+    debugPrint(
+      'Remote config gives $parameter the value "$text", which is no $type, '
+      'so the app reads its default.',
+    );
+  }
+}
+
+/// What the controller does with the service of one start: the calls of the
+/// service run one after another, and those of a service that the
+/// controller no longer has are dropped.
+final class _Run {
+  _Run(this.service);
+
+  final RemoteConfigService service;
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it.
+  Future<void>? last;
+
+  /// Whether the service opened.
+  bool opened = false;
+
+  /// Whether a fetch waits for its turn, so that a return to the app
+  /// meanwhile needs no other.
+  bool fetchWaits = false;
+
+  /// Whether an activation of what the service told of waits for its turn.
+  bool activationWaits = false;
+
+  /// The values that the service tells of, while the controller follows
+  /// them.
+  StreamSubscription<void>? updates;
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// Returns the service of the provider of remote config, which
+/// [initRemoteConfig] created: `bootstrap()` awaits it before the first
+/// frame, and there is none to return before that.
+///
+/// The code of the app does not call it: it reads the values from
+/// [appRemoteConfig].
+RemoteConfigService createRemoteConfigService() => _remoteConfigService;
+
+late RemoteConfigService _remoteConfigService;
+
+/// Creates the service of the provider of remote config and starts
+/// [appRemoteConfig] with it; `bootstrap()` awaits it before the first
+/// frame, and nothing else in the app calls it. It waits at most
+/// [AppRemoteConfigController.startWait] for the values that the device
+/// kept.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with what the device kept, and starts
+/// [appRemoteConfig] with it.
+Future<void> initRemoteConfig() async {
+  _remoteConfigService = impl0.createFixtureRemoteConfig();
+  await appRemoteConfig.start(_remoteConfigService);
+}
+=== lib/core/remote_config/remote_config_service.dart (role:remote_config) ===
+/// The backend of the values of remote config, which the provider of remote
+/// config implements: it keeps on the device what the last fetch got, and
+/// asks its backend for new values.
+///
+/// The code of the app does not use it: it reads the values from
+/// `appRemoteConfig` of `app_remote_config.dart`, which calls this service,
+/// applies the defaults of the parameters of the app, and makes new values
+/// active once they are fetched.
+///
+/// Every implementation keeps to this:
+/// - The function that creates the service asks the backend nothing. It may
+///   be called again, as at the next launch of the app, and the service that
+///   it returns then has what the device kept.
+/// - [open] comes once, before any other member.
+/// - What was activated stays on the device from one launch of the app to
+///   the next: after [open], [activate] makes what the last fetch got the
+///   active values, also without the network, and [values] has them.
+/// - [values] has the active values that the backend gave, and nothing else:
+///   never a default, and never a value that the provider makes up for a
+///   parameter that the backend lacks.
+/// - [fetch] asks the backend for its values, unless the last fetch that
+///   succeeded is more recent than the fetch interval of [open], also one of
+///   an earlier launch of the app. It fails when the backend cannot be
+///   reached or refuses, and the active values stay as they were.
+/// - [updates] is a broadcast stream, which tells of nothing where
+///   [liveUpdates] is false.
+abstract interface class RemoteConfigService {
+  /// Opens the service for [defaults], the parameters of the app by name,
+  /// each with the value that the app has while the backend gives none, of
+  /// the type of the parameter. [fetchInterval] is how often [fetch] may ask
+  /// the backend at most, also across launches of the app, and
+  /// [fetchTimeout] how long a fetch may take. It takes what the device kept
+  /// and asks the backend nothing.
+  Future<void> open(
+    Map<String, Object> defaults, {
+    required Duration fetchInterval,
+    required Duration fetchTimeout,
+  });
+
+  /// Makes what the last fetch got the active values, without asking the
+  /// backend, and returns whether they changed.
+  Future<bool> activate();
+
+  /// The active values that the backend gave, by parameter, as texts.
+  Map<String, String> get values;
+
+  /// Asks the backend for its values and keeps them for [activate], unless
+  /// the last fetch that succeeded is more recent than the fetch interval:
+  /// then it completes at once.
+  Future<void> fetch();
+
+  /// Whether [updates] tells of the values that the backend publishes while
+  /// the app runs.
+  bool get liveUpdates;
+
+  /// Tells of the values that the backend publishes while the app runs, once
+  /// the provider fetched them, so that [activate] makes them active: a
+  /// broadcast stream, which tells of nothing where [liveUpdates] is false.
+  /// Listening to it may open a connection to the backend.
+  Stream<void> get updates;
+}
+=== lib/core/remote_config/remote_values.dart (role:remote_config) ===
+import 'package:flutter/foundation.dart';
+
+/// The values of remote config that the code of the app reads: a getter for
+/// each parameter of the app, which returns the value that the backend gave
+/// the parameter, or its default while the backend gives none.
+///
+/// Add a parameter: give it a default in [defaults] and a getter, and create
+/// it in the backend of the provider with the same name and type. Every value
+/// reaches every installation that fetches it, where anyone can read it, so
+/// never put a secret into remote config.
+@immutable
+final class RemoteValues {
+  const RemoteValues._(this._values);
+
+  /// Each parameter of the app by name, with the value that the app reads
+  /// while the backend gives none, whose type is the type of the parameter:
+  /// a `String`, a `bool`, an `int` or a `double`.
+  static const Map<String, Object> defaults = {
+    'fake_config_user_greeting': 'Hello',
+    'fake_config_user_enabled': true,
+    'fake_config_user_limit': 3,
+    'fake_config_user_ratio': 0.5,
+  };
+
+  /// The values while the backend gives none: the [defaults].
+  static const initial = RemoteValues._(defaults);
+
+  /// The values of [texts], the active values that the backend gave, by
+  /// parameter: each parameter of the app takes its text as the type of its
+  /// default takes it, and its default when [texts] lacks it or when the type
+  /// does not take the text, which [onInvalid] is told of.
+  ///
+  /// A `bool` takes `true` and `false`, in any case; an `int` what
+  /// [int.tryParse] takes; a `double` a finite number that [double.tryParse]
+  /// takes; and a `String` any text.
+  factory RemoteValues.of(
+    Map<String, String> texts, {
+    void Function(String parameter, String text)? onInvalid,
+  }) {
+    final values = <String, Object>{};
+    for (final MapEntry(key: parameter, value: fallback) in defaults.entries) {
+      final text = texts[parameter];
+      final value = text == null ? fallback : _parsed(text, fallback);
+      if (text != null && value == null) onInvalid?.call(parameter, text);
+      values[parameter] = value ?? fallback;
+    }
+    return RemoteValues._(values);
+  }
+
+  /// [text] as a value of the type of [fallback], or `null` if that type does
+  /// not take it.
+  static Object? _parsed(String text, Object fallback) => switch (fallback) {
+    bool() => switch (text.toLowerCase()) {
+      'true' => true,
+      'false' => false,
+      _ => null,
+    },
+    int() => int.tryParse(text),
+    double() => switch (double.tryParse(text)) {
+      final number? when number.isFinite => number,
+      _ => null,
+    },
+    _ => text,
+  };
+
+  final Map<String, Object> _values;
+
+  /// The greeting of the fixture
+  String get fakeConfigUserGreeting =>
+      _values['fake_config_user_greeting']! as String;
+
+  /// Whether the fixture is on
+  bool get fakeConfigUserEnabled =>
+      _values['fake_config_user_enabled']! as bool;
+
+  /// How many the fixture takes
+  int get fakeConfigUserLimit => _values['fake_config_user_limit']! as int;
+
+  /// The ratio of the fixture
+  double get fakeConfigUserRatio =>
+      _values['fake_config_user_ratio']! as double;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteValues &&
+      defaults.keys.every(
+        (parameter) => _values[parameter] == other._values[parameter],
+      );
+
+  @override
+  int get hashCode => Object.hashAll([
+    for (final parameter in defaults.keys) _values[parameter],
+  ]);
+
+  @override
+  String toString() => 'RemoteValues($_values)';
+}
 === lib/core/rest/app_rest.dart (role:rest) ===
 import 'dart:async';
 import 'dart:convert';
@@ -8091,361 +8643,6 @@ final class SessionRestTokens implements RestTokens {
         AuthFailureReason.userDisabled => RestFailureReason.unauthorized,
         _ => RestFailureReason.unknown,
       };
-}
-=== lib/core/review/app_review.dart (role:review) ===
-import 'package:fixture_app/core/fixture_review/fixture_review.dart' as impl0;
-import 'package:flutter/foundation.dart';
-
-import '../env/app_env.dart';
-import '../preferences/app_preferences.dart';
-import 'review_service.dart';
-
-/// When a review is due. The stores ask an app not to ask on its first
-/// launch, nor too often, and to ask once the user has used it. Change the
-/// numbers here.
-abstract final class ReviewPolicy {
-  /// How many launches of the app, this one included, there are at least
-  /// once a review is due. At least 2, so that the app never asks on its
-  /// first launch.
-  static const int launches = 3;
-
-  /// How long after the first launch of the app a review is due.
-  static const Duration sinceFirstLaunch = Duration(days: 3);
-
-  /// How long after a request the next review is due, also in a new
-  /// version of the app. The app asks at most once a version.
-  static const Duration between = Duration(days: 14);
-}
-
-/// The application id of the app in Google Play: that of the flavor for a
-/// release, also in a build of another flavor, whose own id has no page
-/// there. Change it here if you change the application id of the app.
-const String googlePlayId = 'com.example.fixture_app';
-
-/// The reviews of the app in its store: the review dialog, which the app
-/// asks for when a review is due, and the page of the app in its store.
-final AppReviewController appReview = AppReviewController();
-
-/// Asks the store of the platform for its review dialog when a review is
-/// due, and opens the page of the app in its store. The app has one,
-/// [appReview].
-///
-/// It counts the launches of the app and remembers its last request in the
-/// preferences of the app. It asks for nothing on its own: only a call of
-/// [requestIfDue] asks.
-final class AppReviewController {
-  /// Creates the controller, which reads the time from [now] and the App
-  /// Store ID of the app from [appStoreId], by default the value of
-  /// `REVIEW_APP_STORE_ID` in `.env`. A test creates one with a clock and
-  /// an ID of its own, gives it the preferences with [restore], and starts
-  /// it with a service of its own.
-  AppReviewController({
-    this._now = DateTime.now,
-    this._appStoreId = _appStoreIdOfEnv,
-  });
-
-  /// The keys under which the preferences keep what the controller
-  /// remembers: the launches of the app, the time of its first launch, and
-  /// the time and the version of its last request.
-  static const _launchesKey = 'review.launches';
-  static const _firstLaunchKey = 'review.first_launch';
-  static const _askedAtKey = 'review.asked_at';
-  static const _askedVersionKey = 'review.asked_version';
-
-  /// An App Store ID: digits, and nothing else.
-  static final RegExp _appStoreIdPattern = RegExp(r'^[0-9]+$');
-
-  final DateTime Function() _now;
-  final String? Function() _appStoreId;
-
-  /// The service of the provider, once the controller has started.
-  ReviewService? _service;
-
-  /// The preferences that keep what the controller remembers, once the app
-  /// opened them.
-  AppPreferences? _preferences;
-
-  /// The launches of the app, this one included.
-  int _launches = 0;
-
-  /// The time of the first launch of the app.
-  DateTime? _firstLaunch;
-
-  /// The time of the last request, if the app asked.
-  DateTime? _askedAt;
-
-  /// The version of the app in which it last asked, if it asked.
-  String? _askedVersion;
-
-  /// The request that is on its way, if any.
-  Future<void>? _request;
-
-  /// Whether the controller told in debug mode that the app has no App
-  /// Store ID, or that its version is unknown.
-  bool _toldOfStoreId = false;
-  bool _toldOfVersion = false;
-
-  /// Whether the app has a page in the store of the platform: on Android
-  /// always, and on iOS once `REVIEW_APP_STORE_ID` in `.env` has the App
-  /// Store ID of the app.
-  bool get hasStorePage => storePage() != null;
-
-  /// The page of the app in the store of the platform, or `null` where it
-  /// has none: on Android the Google Play page of [googlePlayId], on iOS
-  /// the App Store page of the App Store ID, which is all digits, and none
-  /// on any other platform. With [review], the page on which the user
-  /// writes a review, which only the App Store has apart.
-  Uri? storePage({bool review = false}) => switch (defaultTargetPlatform) {
-    TargetPlatform.android => Uri.https(
-      'play.google.com',
-      '/store/apps/details',
-      {'id': googlePlayId},
-    ),
-    TargetPlatform.iOS => switch (_appStoreId()) {
-      final id? when _appStoreIdPattern.hasMatch(id) => Uri.https(
-        'apps.apple.com',
-        '/app/id$id',
-        review ? {'action': 'write-review'} : null,
-      ),
-      _ => null,
-    },
-    _ => null,
-  };
-
-  /// Opens the page of the app in its store, outside the app, or with
-  /// [review] the page on which the user writes a review (see
-  /// [storePage]), and returns whether an app of the device opened it:
-  /// `false` where the app has no store page, and before the app started.
-  /// Never throws.
-  Future<bool> openStorePage({bool review = false}) async {
-    final page = storePage(review: review);
-    final service = _service;
-    if (page == null || service == null) return false;
-    try {
-      return await service.openStorePage(page);
-    } on Object catch (error) {
-      _tell('The page of the app in its store did not open: $error');
-      return false;
-    }
-  }
-
-  /// Asks the store for its review dialog when a review is due, and does
-  /// nothing otherwise. Call it at a natural break of the app, such as when
-  /// the user has finished a task:
-  ///
-  /// ```dart
-  /// await saveNote(note);
-  /// unawaited(appReview.requestIfDue());
-  /// ```
-  ///
-  /// Never call it from a button, nor after a question of your own, such
-  /// as whether the user likes the app: the stores forbid both. The app
-  /// shows nothing around the dialog.
-  ///
-  /// A review is due once the app has had [ReviewPolicy.launches] launches,
-  /// this one included, [ReviewPolicy.sinceFirstLaunch] has passed since
-  /// its first launch and [ReviewPolicy.between] since its last request, and
-  /// it did not ask in this version of the app, while the store of the
-  /// device can show the dialog and the user is in no flow of a guard of the
-  /// routes, such as the onboarding or a sign-in.
-  ///
-  /// It completes once the store took the request, and the app then
-  /// remembers it. It returns nothing, since the store tells no app whether
-  /// the dialog showed, so nothing may depend on it. It never throws: an
-  /// error of the store counts as no dialog, and a later call asks again. A
-  /// call while a request is on its way gets that request.
-  Future<void> requestIfDue() =>
-      _request ??= _askIfDue().whenComplete(() => _request = null);
-
-  /// Takes what the controller remembers from [preferences], and keeps it
-  /// as it is for a key that has nothing saved. It keeps [preferences] for
-  /// the writes of the controller.
-  void restore(AppPreferences preferences) {
-    _preferences = preferences;
-    _launches = preferences.getInt(_launchesKey) ?? _launches;
-    _firstLaunch = _timeOf(preferences.getInt(_firstLaunchKey)) ?? _firstLaunch;
-    _askedAt = _timeOf(preferences.getInt(_askedAtKey)) ?? _askedAt;
-    _askedVersion = preferences.getString(_askedVersionKey) ?? _askedVersion;
-  }
-
-  /// Starts with [service]: counts this launch of the app, and the time of
-  /// its first launch if it has none, and saves them.
-  ///
-  /// `initReview()` calls it in `bootstrap()`. It may be called again, with
-  /// the service that the app has from then on: `initReview()` does so in a
-  /// test of the next launch of the app, and a test gives it a service of
-  /// its own. A failed save is told in debug mode and stops nothing.
-  Future<void> start(ReviewService service) async {
-    _service = service;
-    _launches++;
-    final saved = _firstLaunch;
-    final firstLaunch = _firstLaunch ??= _now().toUtc();
-    try {
-      await _preferences?.setInt(_launchesKey, _launches);
-      if (saved == null) {
-        await _preferences?.setInt(
-          _firstLaunchKey,
-          firstLaunch.millisecondsSinceEpoch,
-        );
-      }
-    } on Object catch (error) {
-      _tell('The launch of the app was not saved for the reviews: $error');
-    }
-    if (!_toldOfStoreId &&
-        defaultTargetPlatform == TargetPlatform.iOS &&
-        !hasStorePage) {
-      _toldOfStoreId = true;
-      _tell(
-        'REVIEW_APP_STORE_ID in .env has no App Store ID, so the app has no '
-        'App Store page: appReview.hasStorePage is false on iOS, and '
-        'appReview.openStorePage() opens nothing there. Put the Apple ID of '
-        'the app in App Store Connect there.',
-      );
-    }
-  }
-
-  /// Asks the store for its dialog if a review is due, and remembers the
-  /// request once the store took it. Never throws.
-  Future<void> _askIfDue() async {
-    try {
-      final service = _service;
-      if (service == null || !_dueByTime() || _inAGuardFlow()) return;
-      final version = await _versionOf(service);
-      if (version == null || version == _askedVersion) return;
-      if (!await _isAvailable(service) || _inAGuardFlow()) return;
-      try {
-        await service.requestReview();
-      } on Object catch (error) {
-        _tell('The store did not take the request for a review: $error');
-        return;
-      }
-      final askedAt = _askedAt = _now().toUtc();
-      _askedVersion = version;
-      try {
-        await _preferences?.setInt(_askedAtKey, askedAt.millisecondsSinceEpoch);
-        await _preferences?.setString(_askedVersionKey, version);
-      } on Object catch (error) {
-        _tell('The request for a review was not saved: $error');
-      }
-    } on Object catch (error) {
-      _tell('The request for a review failed: $error');
-    }
-  }
-
-  /// Whether a review is due by the launches and the times that the
-  /// controller remembers. A request whose time is to come, as after the
-  /// clock of the device went back, counts as recent.
-  bool _dueByTime() {
-    final firstLaunch = _firstLaunch;
-    if (_launches < ReviewPolicy.launches || firstLaunch == null) return false;
-    final now = _now();
-    if (now.difference(firstLaunch) < ReviewPolicy.sinceFirstLaunch) {
-      return false;
-    }
-    final askedAt = _askedAt;
-    if (askedAt == null) return true;
-    final since = now.difference(askedAt);
-    return !since.isNegative && since >= ReviewPolicy.between;
-  }
-
-  /// The version of the app that [service] gives, or `null` if it is
-  /// unknown, which makes no review due.
-  Future<String?> _versionOf(ReviewService service) async {
-    String? version;
-    try {
-      version = (await service.appVersion())?.trim();
-    } on Object catch (error) {
-      _tell('The version of the app is unknown: $error');
-    }
-    if (version != null && version.isNotEmpty) return version;
-    if (!_toldOfVersion) {
-      _toldOfVersion = true;
-      _tell(
-        'The version of the app is unknown, so the app asks for no review.',
-      );
-    }
-    return null;
-  }
-
-  /// Whether the store of the device can show the review dialog, as
-  /// [service] tells: `false` if it fails to tell.
-  Future<bool> _isAvailable(ReviewService service) async {
-    try {
-      return await service.isAvailable();
-    } on Object {
-      return false;
-    }
-  }
-
-  /// Prints [message] in debug mode, for the developer of the app.
-  static void _tell(String message) {
-    if (kDebugMode) debugPrint(message);
-  }
-
-  /// The time of [milliseconds] since the epoch, in UTC, or `null`.
-  static DateTime? _timeOf(int? milliseconds) => milliseconds == null
-      ? null
-      : DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
-}
-
-/// The App Store ID of the app, as `REVIEW_APP_STORE_ID` in `.env` has it,
-/// or `null` while it is empty.
-String? _appStoreIdOfEnv() => AppEnv.reviewAppStoreId;
-
-/// Restores from [preferences] what [appReview] remembers, and keeps them
-/// for its writes: a restorer of the preferences, which the app calls
-/// before its first frame.
-void restoreReview(AppPreferences preferences) =>
-    appReview.restore(preferences);
-
-/// Returns the service of the provider of the reviews, which [initReview]
-/// created: `bootstrap()` awaits it before the first frame, and there is
-/// none to return before that.
-///
-/// The code of the app does not call it: it uses [appReview].
-ReviewService createReviewService() => _reviewService;
-
-/// Whether the user is in the flow of a guard of the routes: never, since
-/// the app has no guards.
-bool _inAGuardFlow() => false;
-
-late ReviewService _reviewService;
-
-/// Creates the service of the provider of the reviews and starts
-/// [appReview] with it, which counts this launch of the app; `bootstrap()`
-/// awaits it in its last phase, and nothing else in the app calls it.
-///
-/// It may run again, as a test does to see what the next launch of the app
-/// finds: it creates the service anew and starts [appReview] with it.
-Future<void> initReview() async {
-  _reviewService = impl0.createFixtureReview();
-  await appReview.start(_reviewService);
-}
-=== lib/core/review/review_service.dart (role:review) ===
-/// The store of the platform for the reviews of the app: what the provider
-/// of the review role implements. The code of the app uses `appReview` of
-/// app_review.dart, which decides when a review is due.
-abstract interface class ReviewService {
-  /// Whether the store of this device can show its review dialog, such as
-  /// `false` on Android without Google Play. Never throws: `false` when it
-  /// cannot tell.
-  Future<bool> isAvailable();
-
-  /// Asks the store for its review dialog, and shows nothing of its own
-  /// around it: no question, no text and no screen. Completes once the
-  /// store took the request. Whether the dialog showed, and what the user
-  /// did, the store tells nobody. Throws when the platform refused the
-  /// request.
-  Future<void> requestReview();
-
-  /// Opens [page], a page of the app in its store, outside the app, and
-  /// returns whether an app of the device opened it. Never throws.
-  Future<bool> openStorePage(Uri page);
-
-  /// The version of the app, such as `1.2.0`, without its build number, or
-  /// `null` when the provider cannot tell. The app asks for a review at most
-  /// once a version. Never throws.
-  Future<String?> appVersion();
 }
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/widgets.dart';

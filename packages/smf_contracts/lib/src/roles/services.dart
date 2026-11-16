@@ -11,6 +11,7 @@ import 'package:smf_contracts/bundles/preferences_role_bundle.dart';
 import 'package:smf_contracts/bundles/purchases_role_bundle.dart';
 import 'package:smf_contracts/bundles/purchases_role_setting_bundle.dart';
 import 'package:smf_contracts/bundles/push_role_bundle.dart';
+import 'package:smf_contracts/bundles/remote_config_role_bundle.dart';
 import 'package:smf_contracts/bundles/rest_role_bundle.dart';
 import 'package:smf_contracts/bundles/rest_role_session_bundle.dart';
 import 'package:smf_contracts/bundles/review_role_bundle.dart';
@@ -28,6 +29,7 @@ part 'services/notifications.dart';
 part 'services/preferences.dart';
 part 'services/purchases.dart';
 part 'services/push.dart';
+part 'services/remote_config.dart';
 part 'services/rest.dart';
 part 'services/review.dart';
 
@@ -36,7 +38,7 @@ part 'services/review.dart';
 ///
 /// The service roles are [eventsRole], [preferencesRole], [analyticsRole],
 /// [crashReportingRole], [authRole], [notificationsRole], [pushRole],
-/// [purchasesRole], [restRole] and [reviewRole].
+/// [purchasesRole], [restRole], [remoteConfigRole] and [reviewRole].
 /// Each generates the interface of its service and a factory that returns
 /// the implementation, or, for a role with many providers, one service that
 /// forwards every call to all of them. Every provider contributes exactly
@@ -54,12 +56,13 @@ part 'services/review.dart';
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
 /// is present, but for the [authRole], the [notificationsRole], the
-/// [pushRole], the [purchasesRole], the [restRole] and the [reviewRole],
-/// which register nothing: the code of an app does not use the service of
-/// their provider, only the controller that the role generates over it, the
-/// session of [AuthRole], the notifications of [NotificationsRole], the push
-/// messages of [PushRole], the purchases of [PurchasesRole], the client of
-/// [RestRole] and the reviews of [ReviewRole].
+/// [pushRole], the [purchasesRole], the [restRole], the [remoteConfigRole]
+/// and the [reviewRole], which register nothing: the code of an app does
+/// not use the service of their provider, only the controller that the role
+/// generates over it, the session of [AuthRole], the notifications of
+/// [NotificationsRole], the push messages of [PushRole], the purchases of
+/// [PurchasesRole], the client of [RestRole], the values of remote config of
+/// [RemoteConfigRole] and the reviews of [ReviewRole].
 ///
 /// A role that an app can have several providers of creates each
 /// implementation on its own: one whose factory throws, or whose

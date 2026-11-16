@@ -21,6 +21,7 @@ const List<Role> _roles = [
   pushRole,
   purchasesRole,
   restRole,
+  remoteConfigRole,
   reviewRole,
   settingsScreenRole,
   onboardingScreenRole,
@@ -66,6 +67,7 @@ void main() {
       'push messages role',
       'purchases role',
       'REST API role',
+      'remote config role',
       'store reviews role',
       'settings screen role',
       'onboarding screen role',
@@ -169,6 +171,14 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'env'},
       'uses': {'auth'},
+    });
+    // The values of an app are the same whichever roles the app has: the
+    // template renders the parameters that the modules give it, and the
+    // provider keeps what the backend gave.
+    expect(shape(remoteConfigRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': <String>{},
     });
     // The app counts its launches and remembers its last request for a
     // review in the preferences, and the App Store ID is a value of the
@@ -332,6 +342,7 @@ void main() {
           'push',
           'purchases',
           'rest',
+          'remote_config',
           'review',
           'settings_screen',
           'onboarding_screen',
@@ -552,6 +563,9 @@ void main() {
         'env_release_error',
         'env_no_values_message',
         'rest_tokens',
+        'analytics_collected_from_first_start',
+        'remote_config_defaults',
+        'remote_config_getters',
         'launches_key',
         'first_launch_key',
         'asked_at_key',

@@ -1932,6 +1932,54 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.remoteConfigStaticValues,
+        role: remoteConfigRole,
+        bug: 'Its values give each parameter of the app that the backend '
+            'lacks a value of its type that the provider makes up, an empty '
+            'text, false, 0 or 0.0, as a library does without the defaults, '
+            'so the app reads that value in place of the default of the '
+            'parameter.',
+        // The module that gives the role a parameter of each type, whose
+        // defaults the tests of the role read.
+        app: [FakeConfigUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/remote_config_role/provider_test.dart',
+            'on a first launch, the service has no value of a parameter of '
+                'the app, and each parameter of the app reads its default',
+            'a parameter that the backend lacks read a value of the provider '
+                'in place of its default',
+          ),
+          MatrixExpectedFailure(
+            'test/remote_config_role/next_start_test.dart',
+            'the next start ends within startWait with a new service of the '
+                'provider, and each parameter of the app still reads its '
+                'default',
+            'so after the next start each parameter of the app still reads '
+                'its default',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.remoteConfigForgettingActivated,
+        role: remoteConfigRole,
+        bug: 'Its service forgets what was fetched and activated each time it '
+            'opens, so the next start of the app has none of the values that '
+            'the launch before activated, and reads the defaults until the '
+            'next fetch.',
+        // No module with parameters, so that the tests of the role run in an
+        // app without parameters too, which asks the backend nothing.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/remote_config_role/next_start_test.dart',
+            'the device keeps what was activated from one launch to the next',
+            'The device keeps what was activated from one launch of the app '
+                'to the next',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.purchasesKeptByService,
         role: purchasesRole,
         bug: 'Its service keeps the purchases in a field of its own, for '
@@ -2412,6 +2460,70 @@ List<BrokenProvider> brokenProviders() => const [
             'test/analytics_role_start_test.dart',
             'the other analytics services get each call',
             'The service log gets the call.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.analyticsCollectingAtEachStart,
+        role: analyticsRole,
+        bug: 'Its start sets its platform side up with collection on, as a '
+            'provider does that starts its SDK with collection on at each '
+            'start: an app that collects nothing before its code chose '
+            'collects at its first start, and a collection that the code '
+            'turned off is on again at the next start.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        // The app collects nothing before its code chose, so its first start
+        // shows the bug too.
+        roleOptions: {'analytics-collection': 'off'},
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/first_start_test.dart',
+            'at its first start, the app collects analytics exactly when it '
+                'was generated to collect from its first start',
+            'An app that collects nothing before its code chose collects '
+                'nothing at its first start, not even a session that its SDK '
+                'would record itself.',
+          ),
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.analyticsKeepingOptOutInMemory,
+        role: analyticsRole,
+        bug: 'It keeps the opt-out in Dart memory alone: a call that turns '
+            'collection off never reaches its platform side, which collects '
+            'again at the next start, a session among what it records itself.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+          // The call that turns collection off does not reach its platform
+          // side, nor do the calls after it.
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'the analytics service of the app forwards each call to every '
+                'analytics service once',
+            'Each call reaches every analytics service once, in the order of '
+                'the calls.',
           ),
         ],
       ),

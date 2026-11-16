@@ -14,7 +14,15 @@ abstract interface class AnalyticsService {
     Map<String, Object>? parameters,
   });
 
-  /// Turns the collection of analytics data on or off.
+  /// Turns the collection of analytics data on or off, for every provider of
+  /// the app: the one switch of collection.
+  ///
+  /// Once a call with false completes, no provider sends anything to its
+  /// backend, neither what the app logs nor what its SDK records itself, such
+  /// as a screen, a session or an install, until a call with true completes.
+  /// Every provider keeps the setting on the device, so it holds from the
+  /// first moment of every later start. Until the code first calls it, the
+  /// app collects as [analyticsCollectedFromFirstStart] says.
   Future<void> setAnalyticsCollectionEnabled(bool enabled);
 
   /// Sets the id of the signed-in user, or clears it with `null`.
@@ -23,6 +31,16 @@ abstract interface class AnalyticsService {
   /// Sets the user property [name] to [value], or clears it with `null`.
   Future<void> setUserProperty({required String name, required String? value});
 }
+
+/// Whether the app collects analytics from its first start, before its code
+/// chose with [AnalyticsService.setAnalyticsCollectionEnabled]:
+/// `--analytics-collection` of `smf create`. With false, no provider sends
+/// anything until the code turns collection on, as once the user agreed.
+/// Every provider keeps what the code chose across starts, so this applies
+/// only on a device where the code never chose. A provider whose SDK starts
+/// before Dart follows this value in the native projects too, which its
+/// section of the README names: change both, or generate the app again.
+const bool analyticsCollectedFromFirstStart = {{{analytics_collected_from_first_start}}};
 
 /// Returns the analytics service of the app, which forwards every call to
 /// the analytics services of all modules.

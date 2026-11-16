@@ -527,7 +527,9 @@ Set<ModuleId> _lostOf(List<SmfModule> kept, Set<ModuleId> gone) {
 ///   ([MatrixStartProbe.answer]), only if it has one, so that the checks of
 ///   the repository find an answer that a workflow gives the script that
 ///   starts the apps and that no probe asks for, which the script would
-///   skip in every app.
+///   skip in every app; and with it `verdict`, what gives the verdict on the
+///   answer ([MatrixStartProbe.verdict]), by the name of the
+///   [MatrixAnswerVerdict], `app` or `exitCode`.
 ///
 /// The app tests that a package of modules keeps test its modules, so they
 /// apply only to the apps that have one of them, whichever other modules
@@ -586,7 +588,11 @@ Future<List<Map<String, Object>>> appTestsReport(
         fileSystem,
       ),
       'envKeys': _envKeysGivenBy(test, matrix, env, packages),
-      if (test.startProbe?.answer case final answer?) 'answer': answer,
+      if (test.startProbe
+          case MatrixStartProbe(:final answer?, :final verdict)) ...{
+        'answer': answer,
+        'verdict': verdict.name,
+      },
     });
   }
   return report;
@@ -1182,8 +1188,18 @@ final class MatrixAppTest {
 /// of the app settled (see [MatrixAppTest.startProbe]).
 final class MatrixStartProbe {
   /// Creates the probe that the function [function] of the file at [path]
-  /// is, which asks the script of CI for the [answer] if it has one.
-  const MatrixStartProbe(this.path, this.function, {this.answer});
+  /// is, which asks the script of CI for the [answer] if it has one, with
+  /// the [verdict] on it.
+  const MatrixStartProbe(
+    this.path,
+    this.function, {
+    this.answer,
+    this.verdict = MatrixAnswerVerdict.app,
+  }) : assert(
+          answer != null || verdict == MatrixAnswerVerdict.app,
+          'Only a probe that asks for an answer takes the exit code of the '
+          'answer for the verdict on it.',
+        );
 
   /// The path of the Dart file with the function among the files of the
   /// tests or those that they generate, in their directory
@@ -1210,6 +1226,30 @@ final class MatrixStartProbe {
   /// covering of the providers of a role, whether the provider of the probe
   /// is in the app or not.
   final String? answer;
+
+  /// What gives the verdict on the [answer]: the app, as by default, or the
+  /// exit code of the answer. A probe without an answer keeps the default.
+  final MatrixAnswerVerdict verdict;
+}
+
+/// What gives the verdict on an answer of the script of CI that starts an
+/// app on a device ([MatrixStartProbe.answer]).
+enum MatrixAnswerVerdict {
+  /// The app, for an answer that sends the app something, such as a push
+  /// message: the probe writes its verdict once that came,
+  /// `smf_start_report_<answer>` in the temporary directory of the app. The
+  /// script runs the answer up to three times while no verdict comes, since
+  /// what the answer sent may not have reached the app.
+  app,
+
+  /// The exit code of the answer, for an answer that asks a server whether
+  /// what the app sent has come, such as an event of a crash reporter,
+  /// which the server sees and the app does not: 0 passes, and any other
+  /// code fails. The script runs the answer once, since the app cannot send
+  /// again and the answer waits for the server itself. A verdict that the
+  /// app gives without a request, as when it has nothing to send, still
+  /// counts, and then the answer does not run.
+  exitCode,
 }
 
 /// The path in an app of the list of the probes of its tests, which
@@ -1222,6 +1262,9 @@ const startProbesFile = 'integration_test/start_probes.dart';
 /// for ([MatrixStartProbe.answer]), one on each line in the order of the
 /// tests, which [addAppTests] writes next to [startProbesFile]: the script
 /// of CI that starts the app on a device runs only those of its answers.
+/// The line of an answer is its name, with ` exit-code` after it when the
+/// exit code of the answer is the verdict on it
+/// ([MatrixAnswerVerdict.exitCode]).
 const startAnswersFile = 'integration_test/start_answers';
 
 /// The path in an app of the arguments of the `flutter` tool that build the
@@ -1545,7 +1588,8 @@ final class MatrixAppTests {
 /// the start check that the matrix analyzes in its apps and the one that CI
 /// starts on a device run the probes of the tests that go into the app.
 /// Next to it, it writes what the script of CI that starts the app on a
-/// device needs: the answers that those probes ask for, [startAnswersFile];
+/// device needs: the answers that those probes ask for, each with what gives
+/// the verdict on it, [startAnswersFile];
 /// the [buildArguments], the arguments of the `flutter` tool that build the
 /// app with its values (see [MatrixEnv.toolArguments]),
 /// [startBuildArgumentsFile]; and the [releaseBuildArguments], those that a
@@ -1666,7 +1710,11 @@ List<(String, String, String)> _startFilesOf(
         startAnswersFile,
         _linesOf([
           for (final (_, probe) in probes)
-            if (probe.answer case final answer?) answer,
+            if (probe.answer case final answer?)
+              switch (probe.verdict) {
+                MatrixAnswerVerdict.app => answer,
+                MatrixAnswerVerdict.exitCode => '$answer exit-code',
+              },
         ]),
         'the answers that their probes ask for',
       ),
