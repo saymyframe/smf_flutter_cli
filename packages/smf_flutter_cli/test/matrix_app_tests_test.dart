@@ -250,16 +250,29 @@ class WayOfTestIcon extends StatelessWidget {
 }
 
 /// The apps with every module of the matrix of the CLI: one for each state
-/// manager, and each once more for each other mode of the auth role, which
-/// Firebase Authentication provides there.
+/// manager, and each once more for each other combination of the mode of
+/// the auth role, which Firebase Authentication provides there, and of the
+/// collection of the analytics role.
 const _everyModule = [
   'every module (bloc)',
   'every module (riverpod)',
+  'every module (bloc) --analytics-collection=off',
   'every module (bloc) --auth-mode=guest',
+  'every module (bloc) --auth-mode=guest --analytics-collection=off',
   'every module (bloc) --auth-mode=anonymous',
+  'every module (bloc) --auth-mode=anonymous --analytics-collection=off',
+  'every module (riverpod) --analytics-collection=off',
   'every module (riverpod) --auth-mode=guest',
+  'every module (riverpod) --auth-mode=guest --analytics-collection=off',
   'every module (riverpod) --auth-mode=anonymous',
+  'every module (riverpod) --auth-mode=anonymous --analytics-collection=off',
 ];
+
+/// The app of Firebase Analytics that collects nothing before its code
+/// chose, the other value of the mode option of the analytics role, with the
+/// DI container and the router, since the role uses both.
+const _analyticsOff = 'analytics by firebase_analytics with di, router '
+    '--analytics-collection=off';
 
 /// The apps of Firebase Authentication in the other modes of the auth role,
 /// with the router and the localization, since the role uses both.
@@ -1173,6 +1186,41 @@ void main() {
   });
 
   test(
+      'the test of firebase_analytics applies to the apps with the module, '
+      'whatever else they have, reads the native projects with package:xml, '
+      'and gets whether the app collects from its first start from the '
+      'choice of the analytics role', () {
+    final analytics = named('firebase_analytics');
+
+    expect(
+      {
+        for (final app in apps)
+          if (analytics.appliesTo(app)) app.name: analytics.values!(app),
+      },
+      {
+        for (final name in const [
+          'firebase_analytics with di, router',
+          'firebase_analytics with di',
+          'firebase_analytics with router',
+          'firebase_analytics',
+          _analyticsOff,
+          ..._everyModule,
+        ])
+          name: {
+            'collected_from_first_start':
+                '${!name.contains('--analytics-collection=off')}',
+            'android_manifest': AppEntryRole.androidManifestFile,
+            'info_plist': AppEntryRole.infoPlistFile,
+          },
+      },
+    );
+    expect(analytics.devDependencies, ['xml']);
+    // It reads the choice of the role, not the name or the options of an
+    // app.
+    expect(MatrixAppTests([analytics]).modeProblems(apps), isEmpty);
+  });
+
+  test(
       'the test of the events role applies to the apps with the role, or to '
       'those of them that it is given', () async {
     bool hasEvents(MatrixApp app) =>
@@ -1894,6 +1942,7 @@ void main() {
         'firebase_crashlytics with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
+        _analyticsOff,
         ..._everyModule,
       ],
     );
@@ -3942,6 +3991,7 @@ void main() {
         // start the app.
         'firebase_analytics with di, router': '/',
         'firebase_analytics with router': '/',
+        _analyticsOff: '/',
         // The start screen of home.
         for (final app in _everyModule) app: 'home.home',
       },
@@ -4147,10 +4197,8 @@ void main() {
           name: 'required',
         for (final name in _authModes) name: name.split('--auth-mode=').last,
         for (final name in _everyModule)
-          name: switch (name.split('--auth-mode=')) {
-            [_, final mode] => mode,
-            _ => 'required',
-          },
+          name:
+              RegExp('--auth-mode=([a-z]+)').firstMatch(name)?[1] ?? 'required',
       },
     );
     expect(

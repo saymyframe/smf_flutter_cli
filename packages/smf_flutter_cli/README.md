@@ -52,6 +52,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--start` | The full path of the screen the app starts on, such as `/home`. |
 | `--locales` | The languages of the app among those that the texts of its modules are in, such as `en,uk`. All of them by default. |
 | `--auth-mode` | Who may use the app without an account: nobody (`required`, the default), everyone (`guest`), or everyone as an anonymous user (`anonymous`). |
+| `--analytics-collection` | Whether the app collects analytics from its first start (`on`, the default), or nothing until its code turns collection on, as once the user agreed (`off`). |
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 

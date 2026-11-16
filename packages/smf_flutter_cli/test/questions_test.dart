@@ -1675,6 +1675,7 @@ void main() {
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['No: only once'],
         'Authentication': ['None'],
         'CI': ['None'],
       },
@@ -1696,6 +1697,20 @@ void main() {
     );
     expect(run.asked[analytics].shown, [
       'firebase_analytics — Firebase Analytics with firebase_analytics',
+    ]);
+    // Once the modules of the app are known, the analytics role asks
+    // whether the app collects before the user agrees, with the default
+    // first. This app collects nothing until its code turns collection on,
+    // and Firebase Analytics, which starts before any Dart code runs, has
+    // its collection off by default in the native projects.
+    final collection = run.asked.last;
+    expect(
+      collection.message,
+      'Does the app collect analytics before the user agrees?',
+    );
+    expect(collection.shown, [
+      'Yes, from its first start',
+      'No: only once your code turns it on, as after the user agrees',
     ]);
     // Firebase was not chosen among the infrastructure, but Analytics
     // depends on it.
@@ -1722,6 +1737,25 @@ void main() {
         contains('void logFirebaseScreenView(String? route, String location)'),
       ),
     );
+    expect(
+      app
+          .childFile('lib/core/analytics/analytics_service.dart')
+          .readAsStringSync(),
+      contains('const bool analyticsCollectedFromFirstStart = false;'),
+    );
+    expect(
+      app
+          .childFile('android/app/src/main/AndroidManifest.xml')
+          .readAsStringSync(),
+      contains(
+        'android:name="firebase_analytics_collection_enabled" '
+        'android:value="false"',
+      ),
+    );
+    expect(
+      app.childFile('ios/Runner/Info.plist').readAsStringSync(),
+      contains('<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>'),
+    );
     // The router tells the listener of Firebase Analytics about the screen
     // the user sees, in the main navigation too, and its navigators have no
     // observer.
@@ -1740,7 +1774,8 @@ void main() {
       ),
     );
     // The service starts without waiting, so bootstrap() only initializes
-    // Firebase.
+    // Firebase, after a debug build printed that collection waits for the
+    // code of the app.
     const bootstrap = 'lib/bootstrap.dart';
     final calls = DartFileIndexer.index(
       bootstrap,
@@ -1751,7 +1786,7 @@ void main() {
         for (final call in calls)
           if (call.enclosingDeclaration == 'bootstrap') call.name,
       ],
-      ['initializeApp'],
+      ['debugPrint', 'initializeApp'],
     );
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
@@ -2004,6 +2039,7 @@ void main() {
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['Yes'],
         'Authentication': ['None'],
         'CI': ['None'],
       },
@@ -2532,6 +2568,7 @@ void main() {
         'Events': ['event_bus'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],
         'REST API': ['dio'],
         'CI': ['github_actions'],
@@ -2575,6 +2612,7 @@ void main() {
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
+      'Does the app collect analytics before the user agrees?',
       'Who may use the app without an account?',
       startsWith('Making the app icon from assets/branding ('),
       equals(
