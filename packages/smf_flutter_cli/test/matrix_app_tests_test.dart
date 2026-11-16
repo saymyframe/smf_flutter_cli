@@ -2967,9 +2967,16 @@ void main() {
       );
       expect(
         index.declarations.map((declaration) => declaration.name),
-        ['settingsLocation', 'settingsScreen', 'settingsEntries'],
+        [
+          'settingsLocation',
+          'settingsScreen',
+          'settingsEntries',
+          'hiddenSettingsEntries',
+        ],
         reason: app.name,
       );
+      // No module of the CLI has an entry that shows only at times yet.
+      expect(text, isNot(contains('if (')), reason: app.name);
       expect(
         text,
         allOf(
@@ -2981,13 +2988,14 @@ void main() {
             'screen.${screen.route.screen.className};',
           ),
           contains(
-            'const List<Type> settingsEntries = [\n'
+            'List<Type> get settingsEntries => [\n'
             '${[
               for (final (index, entry) in entries.indexed)
                 '  entry$index.${entry.widget.name},\n',
             ].join()}'
             '];',
           ),
+          contains('List<Type> get hiddenSettingsEntries => [];'),
         ),
         reason: app.name,
       );
@@ -3018,8 +3026,11 @@ void main() {
         ],
       ),
     ]);
-    SettingsEntry entry(String widget, String file) =>
-        SettingsEntry(widget: TypeRef(widget, import: ImportRef.app(file)));
+    SettingsEntry entry(String widget, String file, {FunctionRef? showIf}) =>
+        SettingsEntry(
+          widget: TypeRef(widget, import: ImportRef.app(file)),
+          showIf: showIf,
+        );
     const options = ModuleOrigin(ModuleId('options'));
     const look = ModuleOrigin(ModuleId('look'));
     MatrixApp appOf(List<RoleData<Object>> data) => MatrixApp(
@@ -3031,19 +3042,32 @@ void main() {
             context: ContractHarness.defaultContext,
           ),
         );
+    // Two entries that show only at times: one whose function is in the
+    // file of its widget, and one whose function is in a file of its own.
+    const fontShows = FunctionRef(
+      'fontSettingShows',
+      import: ImportRef.app('core/look/look_shown.dart'),
+    );
+    const servicesShow = FunctionRef(
+      'servicesSettingShows',
+      import: ImportRef.app('core/di/services_setting.dart'),
+    );
     final entries = [
-      for (final (origin, widget, file) in [
-        (look, 'ThemeSetting', 'core/look/look_settings.dart'),
-        (look, 'FontSetting', 'core/look/look_settings.dart'),
+      for (final (origin, widget, file, showIf) in [
+        (look, 'ThemeSetting', 'core/look/look_settings.dart', null),
+        (look, 'FontSetting', 'core/look/look_settings.dart', fontShows),
         // A row of the provider itself, in the file of the screen.
-        (options, 'ResetOptions', 'features/options/all_screen.dart'),
+        (options, 'ResetOptions', 'features/options/all_screen.dart', null),
         (
           const RoleTemplateOrigin(diRole),
           'ServicesSetting',
           'core/di/services_setting.dart',
+          servicesShow,
         ),
       ])
-        settingsScreenRole.data(entry(widget, file)).withOrigin(origin),
+        settingsScreenRole
+            .data(entry(widget, file, showIf: showIf))
+            .withOrigin(origin),
     ];
     final settings = named('settings_screen_role');
 
@@ -3060,26 +3084,37 @@ void main() {
 
     final (:index, :errors) = DartFileIndexer.parse(settingsScreenFile, text);
     expect(errors, isEmpty);
+    // The file of a function has a prefix of its own too, after the file
+    // of the widget of its entry.
     expect(
       [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
       [
-        'package:my_app/core/di/services_setting.dart as entry1',
+        'package:my_app/core/di/services_setting.dart as entry2',
         'package:my_app/core/look/look_settings.dart as entry0',
+        'package:my_app/core/look/look_shown.dart as entry1',
         'package:my_app/core/router/navigation.dart as null',
         'package:my_app/features/options/all_screen.dart as screen',
       ],
     );
+    // The entries that the screen shows and those that it does not are
+    // getters, which ask the functions when a test reads them.
     expect(
       text,
       allOf(
         contains('const AppLocation settingsLocation = OptionsAllLocation();'),
         contains('const Type settingsScreen = screen.AllOptionsScreen;'),
         contains(
-          'const List<Type> settingsEntries = [\n'
+          'List<Type> get settingsEntries => [\n'
           '  entry0.ThemeSetting,\n'
-          '  entry0.FontSetting,\n'
+          '  if (entry1.fontSettingShows()) entry0.FontSetting,\n'
           '  screen.ResetOptions,\n'
-          '  entry1.ServicesSetting,\n'
+          '  if (entry2.servicesSettingShows()) entry2.ServicesSetting,\n'
+          '];\n',
+        ),
+        contains(
+          'List<Type> get hiddenSettingsEntries => [\n'
+          '  if (!entry1.fontSettingShows()) entry0.FontSetting,\n'
+          '  if (!entry2.servicesSettingShows()) entry2.ServicesSetting,\n'
           '];\n',
         ),
       ),
@@ -3647,8 +3682,10 @@ void main() {
         ['settingsEntryCount', 'settingsInMainNavigation'],
         reason: app.name,
       );
+      // No module of the CLI has an entry that shows only at times yet, so
+      // the count is a number.
       final count = RegExp(
-        r'^const int settingsEntryCount = (\d+);$',
+        r'^int get settingsEntryCount => (\d+);$',
         multiLine: true,
       ).firstMatch(text);
       final destination = RegExp(
@@ -3710,6 +3747,81 @@ void main() {
         reason: app.name,
       );
     }
+  });
+
+  test(
+      'the tests of the settings module count an entry that shows only at '
+      'times while its function returns true, through an import of the file '
+      'of the function with a prefix of its own', () {
+    const look = ModuleOrigin(ModuleId('look'));
+    const routes = RoutesData([
+      Route(
+        '/',
+        name: 'options',
+        screen: ScreenRef(
+          'OptionsScreen',
+          import: ImportRef.app('features/options/options_screen.dart'),
+        ),
+      ),
+    ]);
+    const settingsFile = ImportRef.app('core/look/look_settings.dart');
+    final app = MatrixApp(
+      'options',
+      const [ModuleId('options'), ModuleId('look')],
+      hook: RoleHookRequest(
+        data: [
+          routerRole
+              .data(routes)
+              .withOrigin(const ModuleOrigin(ModuleId('options'))),
+          settingsScreenRole
+              .data(const SettingsScreenRoute('options'))
+              .withOrigin(const ModuleOrigin(ModuleId('options'))),
+          for (final entry in const [
+            SettingsEntry(
+              widget: TypeRef('ThemeSetting', import: settingsFile),
+            ),
+            SettingsEntry(
+              widget: TypeRef('FontSetting', import: settingsFile),
+              showIf: FunctionRef(
+                'fontSettingShows',
+                import: ImportRef.app('core/look/look_shown.dart'),
+              ),
+            ),
+            SettingsEntry(
+              widget: TypeRef('SizeSetting', import: settingsFile),
+              showIf: FunctionRef('sizeSettingShows', import: settingsFile),
+            ),
+          ])
+            settingsScreenRole.data(entry).withOrigin(look),
+        ],
+        presentRoles: {routerRole, settingsScreenRole},
+        context: ContractHarness.defaultContext,
+      ),
+    );
+
+    final text =
+        named('settings').generatedFiles!(app, 'my_app')[settingsOfAppFile]!;
+
+    final (:index, :errors) = DartFileIndexer.parse(settingsOfAppFile, text);
+    expect(errors, isEmpty);
+    expect(
+      [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
+      [
+        'package:my_app/core/look/look_settings.dart as entry1',
+        'package:my_app/core/look/look_shown.dart as entry0',
+      ],
+    );
+    expect(
+      text,
+      contains(
+        'int get settingsEntryCount => [\n'
+        "  'ThemeSetting',\n"
+        "  if (entry0.fontSettingShows()) 'FontSetting',\n"
+        "  if (entry1.sizeSettingShows()) 'SizeSetting',\n"
+        '].length;\n',
+      ),
+    );
+    expect(text, contains('const bool settingsInMainNavigation = false;'));
   });
 
   test(
