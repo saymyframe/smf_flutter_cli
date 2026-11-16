@@ -2329,15 +2329,15 @@ void main() {
         tearingOff('lib/core/updates/updates.dart'):
             RoleTemplateOrigin(_otherRole),
         // A file that both calls it and tears it off is reported once.
-        DartFileIndex(
+        const DartFileIndex(
           path: providerFile,
-          imports: const [
+          imports: [
             IndexedImport('package:my_app/core/review/app_review.dart'),
           ],
-          invocations: const [
+          invocations: [
             IndexedInvocation('requestIfDue', target: 'appReview'),
           ],
-          memberAccesses: const [
+          memberAccesses: [
             IndexedMemberAccess('appReview', 'requestIfDue'),
           ],
         ): ofProvider,
