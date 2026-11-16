@@ -677,7 +677,7 @@ late $service $variable;
 
 /// Creates the service of the provider of the reviews and starts
 /// [appReview] with it, which counts this launch of the app; `bootstrap()`
-/// awaits it last, and nothing else in the app calls it.
+/// awaits it in its last phase, and nothing else in the app calls it.
 ///
 /// It may run again, as a test does to see what the next launch of the app
 /// finds: it creates the service anew and starts [appReview] with it.
