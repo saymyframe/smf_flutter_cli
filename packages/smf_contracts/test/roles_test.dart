@@ -539,6 +539,7 @@ void main() {
         'env_release_error',
         'env_no_values_message',
         'rest_tokens',
+        'analytics_collected_from_first_start',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};
