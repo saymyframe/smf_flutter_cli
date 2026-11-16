@@ -1549,8 +1549,9 @@ esac''');
       });
 
       test(
-          'fails before the build when a line of the list of the answers has '
-          'anything but exit-code after the name of an answer', () {
+          'fails before the build on a line of the list of the answers that '
+          'is not the name of an answer, alone or with exit-code after it, '
+          'whether or not the answer is given', () {
         for (final (asked, verdicts, line) in [
           (['events'], {'events': 'app'}, 'events app'),
           (['events'], {'events': 'exitcode'}, 'events exitcode'),
