@@ -26,10 +26,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// for a condition, the fixture gates and the fixture late gate, whose
 /// guards of the routes a test closes and opens, the fixture analytics and
 /// the fixture screen log, whose listeners of the screen note what they
-/// hear, and the platform side of the fixture analytics, which a test
-/// answers as a device, the fixture setting, whose restorers note what they
-/// read, the
-/// fixture theme, whose colour a test changes, the module that uses the
+/// hear, the platform side of the fixture analytics, which a test answers
+/// as a device, the fixture setting, whose restorers note what they read,
+/// the fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
 /// the fixture steps of the onboarding, whose actions note their calls, and
 /// the module that reads values of .env, whose keys a test gives values,
