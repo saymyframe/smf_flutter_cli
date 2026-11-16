@@ -77,7 +77,7 @@ class _WholeWords extends StatelessWidget {
         // The words of the text, between its white spaces, where a line may
         // break: every one but a no-break space, which keeps the words
         // around it together.
-        final words = text.split(RegExp(r'[^\S   ]+'));
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
         // How wide the longest word is in a font of [size].
         double widestAt(double size) {
           var widest = 0.0;
