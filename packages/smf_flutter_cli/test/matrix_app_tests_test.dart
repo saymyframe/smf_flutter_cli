@@ -4361,7 +4361,15 @@ void main() {
     );
     expect(test.generatedFiles, isNull);
     expect(test.mocks, isNull);
-    expect(test.startProbe, isNull);
+    // The probe that the start check runs on a device, a file of the test,
+    // which asks the script of CI for nothing.
+    expect(test.startProbe!.path, 'integration_test/review_role/probe.dart');
+    expect(test.startProbe!.function, 'probeReview');
+    expect(test.startProbe!.answer, isNull);
+    expect(
+      File(p.join(test.directory, test.startProbe!.path)).existsSync(),
+      isTrue,
+    );
     // Every value that its files read is filled in.
     final read = <String>{};
     for (final file in Directory(test.directory)

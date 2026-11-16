@@ -1680,7 +1680,12 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
 /// show its dialog, a request completes at once and shows nothing, and the
 /// version of the app is `1.0.0`. The matrix fills in the keys of the role
 /// and what the ids of the flavors of the app entry add to the id of the
-/// app, which the roles publish.
+/// app, which the roles publish. Its probe, `probeReview()` of
+/// `integration_test/review_role/probe.dart`, only reads, for the start
+/// check on a device: the service of the provider tells within five seconds
+/// whether the store can show its dialog, which it may not, and the launch
+/// counted itself, with the time of the first launch, which is not to come,
+/// and asked for no review on a first launch. The test runs the probe too.
 Future<MatrixAppTest> reviewRoleAppTest({
   bool Function(MatrixApp app)? among,
 }) async =>
@@ -1691,6 +1696,10 @@ Future<MatrixAppTest> reviewRoleAppTest({
           (among?.call(app) ?? true),
       values: _reviewValuesOf,
       roles: {reviewRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/review_role/probe.dart',
+        'probeReview',
+      ),
     );
 
 /// The values of the files of the test of the review role, the same in

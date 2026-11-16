@@ -1159,7 +1159,7 @@ void main() {
       });
       expect(roleTest.generatedFiles, isNull);
       expect(roleTest.mocks, isNull);
-      expect(roleTest.startProbe, isNull);
+      expect(roleTest.startProbe!.function, 'probeReview');
       expect(flowsTest.values, isNull);
     }
   });
