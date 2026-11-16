@@ -82,11 +82,14 @@ void main() {
         activated = service.values;
       });
       Map<String, String>? kept;
-      await inRealTime(tester, 'the next start, with its fetch held', () async {
+      await inRealTime(tester, 'the next start, read before its fetch',
+          () async {
         await initRemoteConfig();
-        // The role fetches no sooner than a turn of the event loop after the
-        // start, so these are the values that the next start made active of
-        // what the device kept: the fetch is held until the test read them.
+        // initRemoteConfig() returns once the start made active what the
+        // device kept, and the role fetches only in a later turn of the event
+        // loop. So the values read here, before that turn, are those that the
+        // next start made active of what the device kept, and no fetch of the
+        // next start has reached the backend yet.
         kept = createRemoteConfigService().values;
       });
 

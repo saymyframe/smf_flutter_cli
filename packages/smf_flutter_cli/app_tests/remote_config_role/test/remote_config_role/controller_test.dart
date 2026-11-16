@@ -54,10 +54,15 @@ void main() {
         await aMoment();
       });
       final activated = valuesOf(appRemoteConfig.value);
-      service.backend = {
-        for (final parameter in appParameters)
-          if (invalidTextOf(parameter) case final text?) parameter.name: text,
-      };
+      // A plain loop: the package that keeps the test reads it with a
+      // language version without null-aware elements, and the app reports a
+      // collection if that could be one.
+      final invalidTexts = <String, String>{};
+      for (final parameter in appParameters) {
+        final text = invalidTextOf(parameter);
+        if (text != null) invalidTexts[parameter.name] = text;
+      }
+      service.backend = invalidTexts;
       await comeBack(tester);
       final invalid = valuesOf(appRemoteConfig.value);
 
@@ -103,7 +108,11 @@ void main() {
       late Duration took;
       await inRealTime(tester, 'a start that hangs', () async {
         final watch = Stopwatch()..start();
-        await appRemoteConfig.start(service);
+        // A start that never returned would end here after three times
+        // startWait, and fail the expectation below with its reason.
+        await appRemoteConfig
+            .start(service)
+            .timeout(AppRemoteConfigController.startWait * 3, onTimeout: () {});
         took = watch.elapsed;
       });
       final whileHanging = valuesOf(appRemoteConfig.value);
