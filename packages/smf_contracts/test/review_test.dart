@@ -459,16 +459,22 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await app.requestIfDue();
   note('another call in the third launch');
 
+  final askedAt = clock;
   clock = clock.add(const Duration(days: 5));
   version = '1.1.0';
   app = await launch();
   await app.requestIfDue();
   note('a new version five days after the request');
 
-  clock = clock.add(const Duration(days: 10));
+  clock = askedAt.add(const Duration(days: 14, seconds: -1));
   app = await launch();
   await app.requestIfDue();
-  note('the new version fifteen days after the request');
+  note('the new version a second before 14 days after the request');
+
+  clock = askedAt.add(const Duration(days: 14));
+  app = await launch();
+  await app.requestIfDue();
+  note('the new version 14 days after the request');
 
   clock = clock.add(const Duration(days: 30));
   app = await launch();
@@ -1480,7 +1486,7 @@ void main() {
           '14 days, also in a new version', () async {
         const start = '2026-01-01T12:00:00.000Z';
         const asked = '2026-01-11T13:00:00.000Z';
-        const askedAgain = '2026-01-26T13:00:00.000Z';
+        const askedAgain = '2026-01-25T13:00:00.000Z';
         expect(await app.run('$_notes$_launches'), {
           'the first launch': {
             'calls': <Object?>[],
@@ -1517,16 +1523,23 @@ void main() {
             'asked at': asked,
             'asked version': '1.0.0',
           },
-          'the new version fifteen days after the request': {
-            'calls': ['appVersion', 'isAvailable', 'requestReview'],
+          'the new version a second before 14 days after the request': {
+            'calls': <Object?>[],
             'launches': 5,
+            'first launch': start,
+            'asked at': asked,
+            'asked version': '1.0.0',
+          },
+          'the new version 14 days after the request': {
+            'calls': ['appVersion', 'isAvailable', 'requestReview'],
+            'launches': 6,
             'first launch': start,
             'asked at': askedAgain,
             'asked version': '1.1.0',
           },
           'the same version thirty days later': {
             'calls': ['appVersion'],
-            'launches': 6,
+            'launches': 7,
             'first launch': start,
             'asked at': askedAgain,
             'asked version': '1.1.0',

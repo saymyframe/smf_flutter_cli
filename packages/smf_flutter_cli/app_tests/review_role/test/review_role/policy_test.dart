@@ -60,11 +60,14 @@ void main() {
       final afterThird = savedReviews;
       await requestIfDue(tester, third);
       requests.add(service.requests);
-      // A new version, five days later, and fifteen days later.
+      // A new version, five days after the request, a second before 14
+      // days have passed since it, and 14 days after it.
       service.version = '1.1.0';
       clock = clock.add(const Duration(days: 5));
       await launch();
-      clock = clock.add(const Duration(days: 10));
+      clock = askedAt.add(const Duration(days: 14, seconds: -1));
+      await launch();
+      clock = askedAt.add(const Duration(days: 14));
       final askedAgain = clock;
       await launch();
       final afterNewVersion = savedReviews;
@@ -101,19 +104,20 @@ void main() {
         reason: 'The app asks at most once a version.',
       );
       expect(
-        requests[4],
-        1,
+        requests.sublist(4, 6),
+        [1, 1],
         reason: 'The app does not ask again within 14 days, also in a new '
-            'version.',
+            'version: neither five days after the request nor a second '
+            'before 14 days have passed since it.',
       );
       expect(
-        (requests[5], afterNewVersion.askedAt, afterNewVersion.version),
+        (requests[6], afterNewVersion.askedAt, afterNewVersion.version),
         (2, askedAgain, '1.1.0'),
         reason: 'In a new version, 14 days after the last request, a review '
             'is due again.',
       );
       expect(
-        requests[6],
+        requests[7],
         2,
         reason: 'The app does not ask twice in a version.',
       );
