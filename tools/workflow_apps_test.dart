@@ -293,6 +293,16 @@ List<(String, String)> scriptStartAnswersOf(
         (file, name),
     ];
 
+/// The names of the answers that the probes of [tests], the MatrixAppTests
+/// of the matrix tools, ask the script that starts the apps for, whatever
+/// gives the verdict on each: the app, or the exit code of the answer. A
+/// workflow gives the script either kind as `<name>=<command>`, and the
+/// list of the answers of the app tells the script which kind it is.
+Set<String> askedAnswersOf(Iterable<ListedAppTest> tests) => {
+      for (final test in tests)
+        if (test.answer case final answer?) answer,
+    };
+
 /// The problems of [answers], each with where it is, that no probe of a
 /// matrix tool asks for, of those that probes ask for, [asked]. The script
 /// skips an answer that the app does not list, with a notice, since an app
@@ -4610,15 +4620,65 @@ flutter build ios --simulator
   });
 
   test(
+      'takes the answers that the probes of a matrix tool ask for, whatever '
+      'gives the verdict on each: the app, or the exit code of the answer', () {
+    final listed = [
+      for (final (directory, answer, verdict) in [
+        ('firebase_messaging', 'firebase_messaging', 'app'),
+        ('events', 'events', 'exitCode'),
+        ('router_walk', null, null),
+      ])
+        ListedAppTest.fromJson({
+          'directory': directory,
+          'modules': const <String>[],
+          'appliesWithout': const <String>[],
+          'uses': const <Object>[],
+          if (answer != null) ...{'answer': answer, 'verdict': verdict},
+        }),
+    ];
+
+    expect(
+      [for (final test in listed) (test.answer, test.verdict)],
+      [('firebase_messaging', 'app'), ('events', 'exitCode'), (null, null)],
+    );
+    final asked = askedAnswersOf(listed);
+    expect(asked, {'firebase_messaging', 'events'});
+    const unknown = 'apps.yml, job a, step "Start" gives start_app.sh the '
+        'answer router_walk, which no probe of a matrix tool asks for '
+        '(MatrixStartProbe.answer), so the script would skip it in every app: '
+        'name the answer as the probe that asks for it does, one of events, '
+        'firebase_messaging.';
+    expect(
+      answerProblemsOf(
+        [
+          for (final name in ['firebase_messaging', 'events', 'router_walk'])
+            ('apps.yml, job a, step "Start"', name),
+        ],
+        asked,
+      ),
+      [unknown],
+    );
+  });
+
+  test(
     'every answer that a workflow or a script of the repository gives '
     'start_app.sh is the answer of a probe of a matrix tool',
     () async {
       final root = repositoryRoot();
-      final asked = {
+      final listed = [
         for (final tool in matrixTools.keys)
-          for (final test in await appTestsListedBy(root, tool))
-            if (test.answer case final answer?) answer,
-      };
+          ...await appTestsListedBy(root, tool),
+      ];
+      // Each answer comes with what gives the verdict on it, which the
+      // script reads from the list of the answers of the app.
+      for (final test in listed) {
+        expect(
+          test.verdict,
+          test.answer == null ? isNull : isIn(['app', 'exitCode']),
+          reason: test.directory,
+        );
+      }
+      final asked = askedAnswersOf(listed);
       final answers = [
         for (final entity in Directory('$root/.github/workflows').listSync())
           if (entity is File && RegExp(r'\.ya?ml$').hasMatch(entity.path))

@@ -2064,14 +2064,19 @@ void main() {
       'starts the app for the answer firebase_messaging, a push message, and '
       'that of RevenueCat for the answer revenuecat, premium access, by the '
       'names with which the jobs give the answers, and no other probe asks '
-      'for one', () {
+      'for one; the app gives the verdict on both, since what each answer '
+      'sends reaches the app', () {
     expect(
       {
         for (final test in appTests.tests)
-          if (test.startProbe?.answer case final answer?)
-            p.basename(test.directory): answer,
+          if (test.startProbe
+              case MatrixStartProbe(:final answer?, :final verdict))
+            p.basename(test.directory): (answer, verdict),
       },
-      {'firebase_messaging': 'firebase_messaging', 'revenuecat': 'revenuecat'},
+      {
+        'firebase_messaging': ('firebase_messaging', MatrixAnswerVerdict.app),
+        'revenuecat': ('revenuecat', MatrixAnswerVerdict.app),
+      },
     );
   });
 
