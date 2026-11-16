@@ -1231,6 +1231,7 @@ void main() {
           );
 
       expect(issuesOf(_data()), isEmpty);
+      expect('$_implementation', 'implementation FakeRemoteConfig');
       final implementation = issuesOf([
         dataOf(
           remoteConfigRole,
@@ -1329,6 +1330,34 @@ void main() {
         'RemoteValues.shop1Size.',
       );
       expect(sameGetter.origin, const ModuleOrigin(ModuleId('shop1')));
+      // The template of the role that clashes with a module leaves the fault
+      // to the module, which lenient mode can leave out.
+      final withTemplate = issuesOf([
+        dataOf(
+          remoteConfigRole,
+          const RemoteConfigKey.text(
+            'remote_config_size',
+            defaultValue: '',
+            description: 'd',
+          ),
+          module: 'remote',
+        ),
+        remoteConfigRole
+            .data(
+              const RemoteConfigKey.text(
+                'remote_config_size',
+                defaultValue: '',
+                description: 'd',
+              ),
+            )
+            .withOrigin(template),
+      ]).single;
+      expect(
+        withTemplate.message,
+        'Both the module remote and the template of the remote config role '
+        'give the remote config role the parameter remote_config_size.',
+      );
+      expect(withTemplate.origin, const ModuleOrigin(ModuleId('remote')));
     });
   });
 
@@ -1712,6 +1741,25 @@ void main() {
           'default empty, from the module `update_gate`: The lowest version\n',
         ),
       );
+      expect(
+        _readmeOf([
+          ..._data(parameters: false),
+          remoteConfigRole
+              .data(
+                const RemoteConfigKey.integer(
+                  'remote_config_retries',
+                  defaultValue: 2,
+                  description: 'How often the role asks again',
+                ),
+              )
+              .withOrigin(const RoleTemplateOrigin(remoteConfigRole)),
+        ]),
+        contains(
+          '- `remote_config_retries`, a whole number read as '
+          '`remoteConfigRetries`, by default `2`, from the remote config '
+          'role: How often the role asks again\n',
+        ),
+      );
     });
 
     test(
@@ -1794,6 +1842,8 @@ void main() {
           defaultValue: '',
           description: 'd',
         ),
+        // A name of another form, which has no prefix or getter to check.
+        RemoteConfigKey.text('Greeting', defaultValue: '', description: 'd'),
         RemoteConfigKey.text(
           'fake_config_user_greeting',
           defaultValue: '',
@@ -1827,10 +1877,14 @@ void main() {
           'RemoteValues.fakeConfigUserShop1Size.';
       const infinite = 'The parameter "fake_config_user_ratio" has the '
           'default Infinity, but a decimal default is a finite number.';
+      const otherForm = 'The parameter "Greeting" needs a name in lower '
+          'snake_case of two words or more that starts with a letter, such as '
+          'update_required_minimum_version.';
       expect(
         [for (final issue in issues) issue.message],
         [
           otherOwner,
+          otherForm,
           'Two parameters are named "fake_config_user_greeting".',
           sameGetter,
           infinite,
@@ -1997,6 +2051,12 @@ void main() {
         _reading('lib/features/outsider/outsider.dart', 'fakeConfigUserLimit'):
             const ModuleOrigin(ModuleId('outsider')),
         _reading('lib/mine.dart', 'fakeConfigUserLimit'): null,
+        // A module that the app does not have, which has no roles to tell
+        // by, and a file of the pipeline, which reads no parameter.
+        _reading('lib/features/ghost/ghost.dart', 'fakeConfigUserLimit'):
+            const ModuleOrigin(ModuleId('ghost')),
+        _reading('lib/generated.dart', 'fakeConfigUserGreeting'):
+            const PipelineOrigin(),
       });
 
       expect(
@@ -2026,11 +2086,41 @@ void main() {
                 'those of the modules it depends on.',
             ofStranger,
           ),
+          (
+            'lib/generated.dart reads '
+                'appRemoteConfig.value.fakeConfigUserGreeting, the parameter '
+                'fake_config_user_greeting of the module fake_config_user, '
+                'but the pipeline may only read its own parameters.',
+            const PipelineOrigin(),
+          ),
         ],
       );
       for (final issue in issues) {
         expect(issue.hint, 'Give the role a parameter of your own.');
       }
+
+      // An app without parameters has no getter to read.
+      expect(
+        remoteConfigRole.checkStructure(
+          StructuralRuleRequest(
+            hook: RoleHookRequest(
+              data: _data(parameters: false),
+              presentRoles: {remoteConfigRole},
+              context: testContext,
+            ),
+            files: {
+              _factoryFile.path: _factoryFile,
+              screen: _reading(screen, 'fakeConfigUserLimit'),
+            },
+            owners: {
+              _factoryFile.path: ModuleOrigin(_provider.id),
+              screen: ofStranger,
+            },
+            modules: const [_provider, _stranger],
+          ),
+        ),
+        isEmpty,
+      );
     });
   });
 }

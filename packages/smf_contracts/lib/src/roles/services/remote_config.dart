@@ -457,10 +457,11 @@ final class RemoteConfigKey extends RemoteConfigData {
   String get getter => SmfNames.lowerCamelCase(name);
 
   /// The default as Dart code: a literal of the [type] of the parameter, such
-  /// as `'Hello'`, `true`, `3` or `0.5`.
+  /// as `'Hello'`, `true`, `3` or `0.5`. A finite `double` writes itself
+  /// with a point or an exponent on the Dart VM, as `1.0` or `1e+21`, never
+  /// as `1`, which Dart would take for an `int`.
   String get defaultCode => switch (defaultValue) {
         final String text => SmfNames.dartString(text),
-        final double number => _doubleLiteral(number),
         final value => '$value',
       };
 
@@ -527,13 +528,6 @@ final class RemoteConfigKey extends RemoteConfigData {
 
   @override
   String toString() => 'parameter $name';
-}
-
-/// [number], a finite double, as a Dart literal of a `double`: `0.5`, `1.0`
-/// or `1e+21`, never `1`, which Dart would take for an `int`.
-String _doubleLiteral(double number) {
-  final text = '$number';
-  return text.contains('.') || text.contains('e') ? text : '$text.0';
 }
 
 /// A parameter of the app: a [RemoteConfigKey] with its owner.
