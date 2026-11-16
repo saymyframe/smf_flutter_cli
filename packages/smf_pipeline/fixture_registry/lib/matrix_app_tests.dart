@@ -487,12 +487,15 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // has once more for each other mode of the auth role.
       await restSessionAppTest(among: (app) => app.everyModuleWith != null),
       // The values of remote config of the apps with the remote config role,
-      // whichever module provides it, the test that the CLI keeps: only in the
-      // apps with every module, which run flutter test for other tests
-      // already. There the fixture remote config provides the role, and the
-      // module that reads parameters gives it one of each type.
+      // whichever module provides it, the test that the CLI keeps: in the apps
+      // with every module, which run flutter test for other tests already,
+      // and where the module that reads parameters gives the role one of each
+      // type, and in the apps whose modules give the role no parameter, which
+      // ask the backend nothing, such as that of the fixture remote config
+      // alone. The test takes them apart by the data of the role.
       await remoteConfigRoleAppTest(
-        among: (app) => app.everyModuleWith != null,
+        among: (app) =>
+            app.everyModuleWith != null || _parametersOf(app).isEmpty,
       ),
       // The module that makes requests through the REST role, fake_rest_user:
       // it loads the notes of a server, a body of another shape is a reason of
@@ -538,6 +541,11 @@ Future<MatrixAppTests> fixtureAppTests() async {
     },
   );
 }
+
+/// The parameters of remote config of [app], an app of the matrix with the
+/// remote config role, in the order of the role ([RemoteConfigRole.keysIn]).
+List<AppRemoteConfigKey> _parametersOf(MatrixApp app) =>
+    remoteConfigRole.keysIn(remoteConfigRole.hookInput(app.hook!));
 
 /// The values that the test of the module that reads values of .env gives
 /// its keys in the file of the values of an app: a value that goes into the

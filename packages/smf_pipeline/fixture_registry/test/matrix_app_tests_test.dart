@@ -1032,8 +1032,9 @@ void main() {
   test(
       'the test of the remote config role applies to the apps with every '
       'module, where the fixture remote config provides the role and the '
-      'module that reads parameters gives it one of each type, and not to the '
-      'apps of the two alone, which the matrix only analyzes', () {
+      'module that reads parameters gives it one of each type, and to the app '
+      'of the fixture remote config alone, which has no parameter, but not to '
+      'that of the module alone, which the matrix only analyzes', () {
     final roleTest = named('remote_config_role');
     final everyModule = [
       for (final app in apps)
@@ -1051,7 +1052,17 @@ void main() {
       ],
       ['fake_remote_config', 'fake_config_user'],
     );
-    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    // The test selects the apps without parameters by the data of the role,
+    // so both sides of an app with parameters and of one without run.
+    expect(appsOf(roleTest), [
+      'fake_remote_config',
+      for (final app in everyModule) app.name,
+    ]);
+    final alone = apps.singleWhere((app) => app.name == 'fake_remote_config');
+    expect(
+      remoteConfigRole.keysIn(remoteConfigRole.hookInput(alone.hook!)),
+      isEmpty,
+    );
     expect(roleTest.startProbe, isNull);
     expect(roleTest.mocks, isNull);
     expect(roleTest.envValues, isNull);
