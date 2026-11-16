@@ -163,9 +163,9 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role, of the push role, of the purchases role, of the env role and of '
-      'the remote config role with every provider of each, which they tell '
-      'apart by the roles of the app only', () {
+      'role, of the push role, of the purchases role, of the env role, of the '
+      'remote config role and of the feedback role with every provider of '
+      'each, which they tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -184,6 +184,7 @@ void main() {
         purchasesRole,
         envRole,
         remoteConfigRole,
+        feedbackRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
@@ -203,6 +204,7 @@ void main() {
     expect(named('purchases_device').roles, {purchasesRole});
     expect(named('env_role').roles, {envRole});
     expect(named('remote_config_role').roles, {remoteConfigRole});
+    expect(named('feedback_role').roles, {feedbackRole});
     // The test of the module that reads values of .env tests a module.
     expect(named('env_variables').roles, isEmpty);
     expect(named('localization_role').roles, {localizationRole});
@@ -1091,6 +1093,43 @@ void main() {
         );
       }
     }
+  });
+
+  test(
+      'the test of the feedback role applies to the apps with every module, '
+      'where the fixture feedback provides the role, but not to those of the '
+      'fixture feedback alone, which the matrix only analyzes', () {
+    final roleTest = named('feedback_role');
+
+    // The role uses the settings screen and the localization role, and the
+    // registry has no settings screen, so the fixture feedback has an app
+    // with the texts of the app and one without them.
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(feedbackRole) &&
+              app.everyModuleWith == null)
+            app.name,
+      ],
+      ['fake_feedback with localization', 'fake_feedback'],
+    );
+    expect(appsOf(roleTest), [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app.name,
+    ]);
+    for (final app in apps) {
+      if (app.everyModuleWith == null) continue;
+      expect(
+        app.modules,
+        contains(FakeFeedbackModule.id),
+        reason: 'The fixture feedback provides the role in ${app.name}.',
+      );
+    }
+    expect(roleTest.startProbe, isNull);
+    expect(roleTest.mocks, isNull);
+    expect(roleTest.envValues, isNull);
+    expect(roleTest.values, isNull);
+    expect(roleTest.generatedFiles, isNull);
   });
 
   test(
