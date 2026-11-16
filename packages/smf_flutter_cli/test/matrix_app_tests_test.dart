@@ -4320,6 +4320,79 @@ void main() {
   });
 
   test(
+      'the test of the review role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and gets the keys of the role and what the ids of the flavors add to '
+      'the id of the app', () async {
+    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'review',
+          const [ModuleId('review')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {role, preferencesRole, envRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await reviewRoleAppTest();
+
+    expect(p.basename(test.directory), 'review_role');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    expect(test.roles, {reviewRole});
+    expect(test.appliesTo(appWith(reviewRole)), isTrue);
+    expect(test.appliesTo(appWith(notificationsRole)), isFalse);
+    // The keys of the role and the suffixes of the flavors that have one, as
+    // the roles publish them, the same in every app; the matrix writes no
+    // file for the test, which has no mocks either.
+    expect(test.values!(appWith(reviewRole)), {
+      'launches_key': ReviewRole.launchesKey,
+      'first_launch_key': ReviewRole.firstLaunchKey,
+      'asked_at_key': ReviewRole.askedAtKey,
+      'asked_version_key': ReviewRole.askedVersionKey,
+      'flavor_suffixes': '.dev,.staging',
+    });
+    expect(
+      test.values!(appWith(reviewRole))['flavor_suffixes']!.split(','),
+      [
+        for (final flavor in AppEntryRole.flavors)
+          if (flavor != AppEntryRole.releaseFlavor) flavor.idSuffix,
+      ],
+    );
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+    // Every value that its files read is filled in.
+    final read = <String>{};
+    for (final file in Directory(test.directory)
+        .listSync(recursive: true)
+        .whereType<File>()) {
+      read.addAll([
+        for (final use
+            in RegExp(r'\{\{(\w+)\}\}').allMatches(file.readAsStringSync()))
+          use[1]!,
+      ]);
+    }
+    expect(read, {'app_name', ...test.values!(appWith(reviewRole)).keys});
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await reviewRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith(reviewRole)), isFalse);
+    expect(
+      everyModule.appliesTo(appWith(reviewRole, everyModuleWith: const [])),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(
+        appWith(notificationsRole, everyModuleWith: const []),
+      ),
+      isFalse,
+    );
+  });
+
+  test(
       'the test of the notifications role applies to the apps with the role, '
       'whichever module provides it, or to those of them that it is given, '
       'gets the key of the role, and has a probe for the start check',
