@@ -157,7 +157,9 @@ final class FakeFeedback implements FeedbackService {
   /// What an open throws at once, before it returns a future, if anything.
   Object? thrown;
 
-  /// What an open waits for, if anything.
+  /// What the next open waits for, if anything. Only that open waits: an
+  /// open after it answers at once, so a script that expects no such open
+  /// still ends and sends what it found.
   Completer<bool>? held;
 
   @override
@@ -171,7 +173,10 @@ final class FakeFeedback implements FeedbackService {
     calls.add('$name: open $context');
     if (thrown case final error?) throw error;
     if (failure case final error?) return Future.error(error);
-    if (held case final completer?) return completer.future;
+    if (held case final completer?) {
+      held = null;
+      return completer.future;
+    }
     return Future.value(answer);
   }
 }
@@ -254,7 +259,6 @@ Future<void> main(List<String> arguments, SendPort port) async {
   result['the first call is done when the second completes'] = firstDone;
   result['asked while the first is on its way'] = takeCalls();
   held.complete(true);
-  provider.held = null;
   result['the first call'] = await first;
   result['a call after it'] = await appFeedback.open(screen);
   result['asked after it'] = takeCalls();

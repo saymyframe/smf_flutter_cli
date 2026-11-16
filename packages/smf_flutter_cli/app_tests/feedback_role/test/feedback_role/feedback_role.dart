@@ -197,8 +197,11 @@ final class ScriptedFeedback implements FeedbackService {
   /// What [available] throws, if anything.
   Object? availableError;
 
-  /// What the opens that come wait for, while a test holds them.
+  /// What the next open waits for, while a test holds it.
   Completer<bool>? _held;
+
+  /// Whether the next open waits for [_held].
+  bool _holdsNext = false;
 
   /// The context of each open that reached the service, in order.
   final List<BuildContext> contexts = [];
@@ -207,13 +210,19 @@ final class ScriptedFeedback implements FeedbackService {
   /// order.
   final List<Reached> reached = [];
 
-  /// Holds the opens that come until [release].
-  void hold() => _held = Completer<bool>();
+  /// Holds the next open until [release]. Only that open waits: an open
+  /// after it answers at once, so a test that expects no such open sees it
+  /// rather than wait for one that nothing lets go.
+  void hold() {
+    _held = Completer<bool>();
+    _holdsNext = true;
+  }
 
-  /// Lets the opens that wait complete with [answer].
+  /// Lets the open that waits complete with [answer].
   void release(bool answer) {
     final held = _held;
     _held = null;
+    _holdsNext = false;
     held?.complete(answer);
   }
 
@@ -234,7 +243,10 @@ final class ScriptedFeedback implements FeedbackService {
       ),
     );
     if (error case final thrown?) return Future<bool>.error(thrown);
-    if (_held case final held?) return held.future;
+    if (_held case final held? when _holdsNext) {
+      _holdsNext = false;
+      return held.future;
+    }
     return Future<bool>.value(answer);
   }
 }

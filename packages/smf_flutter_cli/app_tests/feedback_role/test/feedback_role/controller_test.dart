@@ -99,8 +99,11 @@ void main() {
         ..answer = true
         ..hold();
       final first = appFeedback.open(context);
+      // Within a bound, so that a second call that reaches the service fails
+      // the expectations below rather than wait.
+      final second = await answerWithin(tester, appFeedback.open(context));
       expect(
-        await appFeedback.open(context),
+        second.answer,
         isFalse,
         reason: 'A call while another is on its way completes with false at '
             'once.',
