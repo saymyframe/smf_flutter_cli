@@ -96,7 +96,8 @@ import 'package:yaml/yaml.dart';
 /// probe that apply to the app too, such as the walk of its routes; see
 /// `appTestsFor`. Next to the list of the probes, it writes what
 /// `.github/scripts/start_app.sh`, which starts the app on a device, reads:
-/// the answers of CI that the probes ask for, `startAnswersFile`; the
+/// the answers of CI that the probes ask for, each with what gives the
+/// verdict on it, `startAnswersFile`; the
 /// arguments of the `flutter` tool that build the app with its values, from
 /// the provider of the env role of the app, `startBuildArgumentsFile`; and
 /// those that a build of the app as a release takes too, from the app entry
