@@ -1216,6 +1216,26 @@ final class BrokenModule extends SmfModule {
   static const _fixtureRemoteConfigFile =
       'lib/core/fixture_remote_config/fixture_remote_config.dart';
 
+  /// The fixture feedback whose open first asks the device whether it has an
+  /// app that takes what the user writes, as `canLaunchUrl` of url_launcher
+  /// does, and completes with false on a no without opening. The device of
+  /// the tests has such an app and says no, as Android 11 and later say to an
+  /// app whose manifest names no other app: so the way to write never opens
+  /// there, though it would.
+  static const feedbackCheckingFirst = BrokenModule._(
+    FakeFeedbackModule(),
+    ModuleId('broken_feedback_checks_first'),
+    'Feedback that asks the device first whether it can open (fixture)',
+    'lib/core/fixture_feedback/fixture_feedback.dart',
+    [
+      (
+        '    return FixtureFeedbackDevice.open(message);\n',
+        '    if (!await FixtureFeedbackDevice.canOpen()) return false;\n'
+            '    return FixtureFeedbackDevice.open(message);\n',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 

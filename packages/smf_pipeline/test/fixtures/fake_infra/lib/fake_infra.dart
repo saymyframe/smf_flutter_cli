@@ -10,6 +10,7 @@ import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
+import 'package:fake_infra/bundles/fake_feedback_bundle.dart';
 import 'package:fake_infra/bundles/fake_hiding_setting_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
@@ -1338,6 +1339,49 @@ final class FakeConfigUserModule extends SmfModule {
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(fakeConfigUserBundle),
         for (final key in keys) remoteConfigRole.data(key),
+      ];
+}
+
+/// A provider of the feedback role, which has at most one provider, on the
+/// device of the tests, which has an app that takes what the user writes, as
+/// the role asks of the mocks of every provider. The app of the device takes
+/// a message a turn of the event loop after the open and notes it. Asked
+/// whether it has such an app, the device says no, as Android 11 and later
+/// say to an app whose manifest names no other app; the fixture never asks.
+///
+/// The service has what it needs, and its open reads the language of the
+/// app from the context that it gets before it awaits anything. The template
+/// of the role does the rest in an app with it, whichever module provides
+/// the role: `appFeedback`, and in an app with a settings screen the entry
+/// that opens the way to write.
+final class FakeFeedbackModule extends SmfModule {
+  /// Creates the module.
+  const FakeFeedbackModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_feedback');
+
+  static const _file = ImportRef.app(
+    'core/fixture_feedback/fixture_feedback.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Feedback on the device of the tests (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(feedbackRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeFeedbackBundle),
+        feedbackRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixtureFeedback', import: _file),
+            create: FactoryRef('createFixtureFeedback', import: _file),
+          ),
+        ),
       ];
 }
 
