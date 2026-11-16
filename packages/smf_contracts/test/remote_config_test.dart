@@ -210,7 +210,8 @@ List<String> takeCalls() {
   return taken;
 }
 
-/// The calls that wait until their completer completes, by their names.
+/// The calls that wait until their completer completes, by their names, or
+/// by their names and the number of their service, such as `activate 1`.
 final Map<String, Completer<void>> holds = {};
 
 /// What the calls throw, by their names.
@@ -249,7 +250,7 @@ final class FakeRemoteConfig implements RemoteConfigService {
 
   Future<void> _enter(String call) async {
     calls.add('$call $number');
-    await holds[call]?.future;
+    await (holds['$call $number'] ?? holds[call])?.future;
     if (failures[call] case final failure?) throw failure;
   }
 
@@ -509,6 +510,33 @@ Future<void> main(List<String> arguments, SendPort port) async {
   await pump();
   result['the values once both are done'] = shown(appRemoteConfig.value);
   result['the calls once both are done'] = takeCalls();
+  port.send(result);
+}
+''';
+
+/// An activation of the service of the first start that ends once the
+/// second start took its values: the controller takes nothing of it. The
+/// fetch of the second start waits, so that only the values of the two
+/// activations count.
+const _lateActivation = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  fetchedOnDevice = {'fake_config_user_greeting': 'First'};
+  holds['activate 1'] = Completer<void>();
+  holds['fetch 2'] = Completer<void>();
+  final first = initRemoteConfig();
+  await pump();
+  fetchedOnDevice = {'fake_config_user_greeting': 'Second'};
+  await initRemoteConfig();
+  result['the values of the second start'] = shown(appRemoteConfig.value);
+  // The first service activates late, with values that the second does not
+  // have.
+  fetchedOnDevice = {'fake_config_user_greeting': 'Late'};
+  holds.remove('activate 1')!.complete();
+  await first;
+  await pump();
+  result['the values once the first service activated'] =
+      shown(appRemoteConfig.value);
+  result['the calls'] = takeCalls();
   port.send(result);
 }
 ''';
@@ -1611,6 +1639,32 @@ void main() {
           'activate 2',
           'fetch 2',
           'activate 2',
+        ],
+      });
+    });
+
+    test(
+        'takes nothing of an activation of the service of an earlier start '
+        'that ends once another start took its values', () async {
+      expect(await app.run('$_notes$_withParameters$_lateActivation'), {
+        'the values of the second start': {
+          'greeting': 'Second',
+          'enabled': true,
+          'limit': 3,
+          'ratio': 0.5,
+        },
+        'the values once the first service activated': {
+          'greeting': 'Second',
+          'enabled': true,
+          'limit': 3,
+          'ratio': 0.5,
+        },
+        'the calls': [
+          'open 1',
+          'activate 1',
+          'open 2',
+          'activate 2',
+          'fetch 2',
         ],
       });
     });
