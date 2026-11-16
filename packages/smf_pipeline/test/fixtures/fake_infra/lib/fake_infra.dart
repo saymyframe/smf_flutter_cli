@@ -5,6 +5,7 @@ library;
 import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_auth_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
+import 'package:fake_infra/bundles/fake_config_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_user_bundle.dart';
@@ -18,6 +19,7 @@ import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_purchases_bundle.dart';
 import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
+import 'package:fake_infra/bundles/fake_remote_config_bundle.dart';
 import 'package:fake_infra/bundles/fake_rest_bundle.dart';
 import 'package:fake_infra/bundles/fake_rest_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
@@ -1233,6 +1235,109 @@ final class FakePurchasesModule extends SmfModule {
             init: FactoryRef('openFixturePurchases', import: _file),
           ),
         ),
+      ];
+}
+
+/// A provider of the remote config role, which has at most one provider, in
+/// memory, whose opening and fetches each take a turn of the event loop, as
+/// calls do that ask the system and a backend.
+///
+/// Its backend has no value of a parameter of the app, and the parameter of
+/// the check of the role ([RemoteConfigRole.checkParameter]), which no app
+/// reads, as the role asks of the mocks of every provider. It publishes
+/// nothing while the app runs, so the service tells of no update. What the
+/// service fetched and activated stands for what the device keeps, which
+/// each start of the app finds as the last one left it.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appRemoteConfig`, with the defaults and the
+/// getters of the parameters that the modules of the app give the role.
+final class FakeRemoteConfigModule extends SmfModule {
+  /// Creates the module.
+  const FakeRemoteConfigModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_remote_config');
+
+  static const _file = ImportRef.app(
+    'core/fixture_remote_config/fixture_remote_config.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Remote config in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(remoteConfigRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeRemoteConfigBundle,
+          vars: {
+            'check_parameter':
+                SmfNames.dartString(RemoteConfigRole.checkParameter),
+          },
+        ),
+        remoteConfigRole.data(
+          const RemoteConfigImplementation(
+            type: TypeRef('FixtureRemoteConfig', import: _file),
+            create: FactoryRef('createFixtureRemoteConfig', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module that requires the remote config role and gives it one parameter
+/// of each type, whose defaults the app reads while the backend gives no
+/// value: a text, `fake_config_user_greeting`, a Boolean,
+/// `fake_config_user_enabled`, a whole number, `fake_config_user_limit`, and
+/// a number, `fake_config_user_ratio`. Its brick reads each through the
+/// getter of its parameter, so all four types render and analyze.
+final class FakeConfigUserModule extends SmfModule {
+  /// Creates the module.
+  const FakeConfigUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_config_user');
+
+  /// The parameters of the module, in their order.
+  static const keys = [
+    RemoteConfigKey.text(
+      'fake_config_user_greeting',
+      defaultValue: 'Hello',
+      description: 'The greeting of the fixture',
+    ),
+    RemoteConfigKey.boolean(
+      'fake_config_user_enabled',
+      defaultValue: true,
+      description: 'Whether the fixture is on',
+    ),
+    RemoteConfigKey.integer(
+      'fake_config_user_limit',
+      defaultValue: 3,
+      description: 'How many the fixture takes',
+    ),
+    RemoteConfigKey.decimal(
+      'fake_config_user_ratio',
+      defaultValue: 0.5,
+      description: 'The ratio of the fixture',
+    ),
+  ];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Four parameters of remote config (fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {remoteConfigRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeConfigUserBundle),
+        for (final key in keys) remoteConfigRole.data(key),
       ];
 }
 
