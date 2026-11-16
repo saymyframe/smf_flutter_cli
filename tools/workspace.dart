@@ -40,6 +40,7 @@ final class ListedAppTest {
     this.roleFunctionUses,
     this.envKeys = const [],
     this.answer,
+    this.verdict,
   });
 
   /// Reads the report of a MatrixAppTest.
@@ -72,6 +73,7 @@ final class ListedAppTest {
           _ => const [],
         },
         answer: json['answer'] as String?,
+        verdict: json['verdict'] as String?,
       );
 
   /// The directory of its files, as the tool prints it.
@@ -107,6 +109,11 @@ final class ListedAppTest {
   /// The answer of CI that the probe of the test asks the script that
   /// starts the apps for (`MatrixStartProbe.answer`), or `null`.
   final String? answer;
+
+  /// What gives the verdict on [answer] (`MatrixStartProbe.verdict`): `app`,
+  /// the app, or `exitCode`, the exit code of the answer; `null` without an
+  /// answer.
+  final String? verdict;
 }
 
 /// A key of the values of an app that a MatrixAppTest gives a value of,

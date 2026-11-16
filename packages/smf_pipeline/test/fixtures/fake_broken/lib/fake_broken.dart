@@ -1182,6 +1182,68 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture remote config whose values give each parameter of the app
+  /// that the backend lacks the value of its type that a provider has
+  /// without the defaults, as `getValue()` of a library does without them:
+  /// an empty text, `false`, `0` or `0.0`. So the app reads such a value of
+  /// the provider in place of the default of the parameter.
+  static const remoteConfigStaticValues = BrokenModule._(
+    FakeRemoteConfigModule(),
+    ModuleId('broken_remote_config_static_values'),
+    'Remote config with a value of its own for each parameter (fixture)',
+    _fixtureRemoteConfigFile,
+    [
+      (
+        '  Duration _interval = Duration.zero;\n',
+        '  Duration _interval = Duration.zero;\n'
+            '\n'
+            '  /// The parameters of the app with their defaults.\n'
+            '  Map<String, Object> _defaults = const {};\n',
+      ),
+      (
+        '    _interval = fetchInterval;\n',
+        '    _interval = fetchInterval;\n    _defaults = defaults;\n',
+      ),
+      (
+        '  Map<String, String> get values => Map.unmodifiable(_active);\n',
+        '  Map<String, String> get values => Map.unmodifiable({\n'
+            '    for (final MapEntry(:key, :value) in _defaults.entries)\n'
+            '      key: switch (value) {\n'
+            "        bool() => 'false',\n"
+            "        int() => '0',\n"
+            "        double() => '0.0',\n"
+            "        _ => '',\n"
+            '      },\n'
+            '    ..._active,\n'
+            '  });\n',
+      ),
+    ],
+  );
+
+  /// The fixture remote config whose service forgets what was fetched and
+  /// activated each time it opens, as a provider does that keeps the values
+  /// only in memory: the next start of the app has none of them, and reads
+  /// the defaults until the next fetch.
+  static const remoteConfigForgettingActivated = BrokenModule._(
+    FakeRemoteConfigModule(),
+    ModuleId('broken_remote_config_forgets_activated'),
+    'Remote config that forgets its values at each start (fixture)',
+    _fixtureRemoteConfigFile,
+    [
+      (
+        '    _interval = fetchInterval;\n',
+        '    _interval = fetchInterval;\n'
+            '    _fetched = const {};\n'
+            '    _active = const {};\n'
+            '    _lastFetch = null;\n',
+      ),
+    ],
+  );
+
+  /// The file of the fixture remote config.
+  static const _fixtureRemoteConfigFile =
+      'lib/core/fixture_remote_config/fixture_remote_config.dart';
+
   /// The module with the bug.
   final SmfModule of;
 

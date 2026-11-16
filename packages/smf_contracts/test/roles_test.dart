@@ -21,6 +21,7 @@ const List<Role> _roles = [
   pushRole,
   purchasesRole,
   restRole,
+  remoteConfigRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -65,6 +66,7 @@ void main() {
       'push messages role',
       'purchases role',
       'REST API role',
+      'remote config role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -167,6 +169,14 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'env'},
       'uses': {'auth'},
+    });
+    // The values of an app are the same whichever roles the app has: the
+    // template renders the parameters that the modules give it, and the
+    // provider keeps what the backend gave.
+    expect(shape(remoteConfigRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': <String>{},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -320,6 +330,7 @@ void main() {
           'push',
           'purchases',
           'rest',
+          'remote_config',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -540,6 +551,8 @@ void main() {
         'env_no_values_message',
         'rest_tokens',
         'analytics_collected_from_first_start',
+        'remote_config_defaults',
+        'remote_config_getters',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};

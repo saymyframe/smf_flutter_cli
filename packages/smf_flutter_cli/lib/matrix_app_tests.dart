@@ -1743,6 +1743,111 @@ final bool envSupplied = AppEnv.supplied;
   };
 }
 
+/// The test of the remote config role that the CLI keeps in its
+/// `app_tests/remote_config_role`, for the apps with the role, whichever
+/// module provides it, that [among] accepts, or all of them:
+/// - `appRemoteConfig`, over a service of remote config of the test that
+///   scripts what a provider answers: the parameters of the app read their
+///   defaults until the service activated values, then those values as their
+///   types take them, and the default for a text that the type does not
+///   take; the start waits at most `startWait` for a service that hangs, and
+///   takes the values that come later; an app with parameters fetches at the
+///   start and each time the user comes back to it, and follows the values
+///   that the backend publishes where the service tells of them, while an app
+///   without parameters asks the backend nothing; and the listeners hear only
+///   of a change, from the service of the last start alone;
+/// - `appRemoteConfig` over the service of the provider: on a first launch
+///   the service has no value of a parameter of the app, and each parameter
+///   reads its default; `activate()` and `fetch()` end within their bounds;
+///   and the service tells of the values that the backend publishes on a
+///   broadcast stream;
+/// - the next start, `initRemoteConfig()` again, ends within `startWait` with
+///   a new service of the provider, after which each parameter still reads
+///   its default; and the device keeps what was activated: the parameter
+///   outside the app that the mocks of every provider have
+///   ([RemoteConfigRole.checkParameter]), which the test fetches and
+///   activates, is among the values of the service right after the next
+///   start, before any fetch.
+///
+/// The test knows only the role. It relies on the convention that the mocks
+/// of every provider keep to, as the role says, and selects its expectations
+/// by the parameters of the app, which the matrix writes for it into
+/// [remoteConfigKeysFile], from the data of the role. It has no probe for the
+/// start check: on a device, the provider of the app checks itself with a
+/// probe of its own module.
+Future<MatrixAppTest> remoteConfigRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/remote_config_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(remoteConfigRole) &&
+          (among?.call(app) ?? true),
+      generatedFiles: _remoteConfigKeysFileOf,
+      roles: {remoteConfigRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the remote
+/// config role: `checkParameter`, the parameter outside the app that the
+/// mocks of every provider have ([RemoteConfigRole.checkParameter]), and
+/// `appParameters`, the parameters of the app in the order of the role
+/// ([RemoteConfigRole.keysIn]), each an `AppParameter` with its name, its
+/// type, its default and a function that reads its getter.
+const remoteConfigKeysFile = 'test/remote_config_role/keys.dart';
+
+/// The file at [remoteConfigKeysFile] of [app], an app of the matrix with
+/// the remote config role, whose package is [packageName].
+Map<String, String> _remoteConfigKeysFileOf(
+  MatrixApp app,
+  String packageName,
+) {
+  final hook = app.hook!;
+  final keys = remoteConfigRole.keysIn(remoteConfigRole.hookInput(hook));
+  final parameters = StringBuffer();
+  for (final key in keys) {
+    parameters
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString(key.name)},')
+      ..writeln("    type: '${key.type.name}',")
+      ..writeln('    defaultValue: ${key.key.defaultCode},')
+      ..writeln('    read: (values) => values.${key.getter},')
+      ..writeln('  ),');
+  }
+  // A list of functions is no constant, and an empty one is.
+  final declaration = keys.isEmpty
+      ? 'const List<AppParameter> appParameters = [];'
+      : 'final List<AppParameter> appParameters = [\n$parameters];';
+  final controller = ImportRef.app(
+    RemoteConfigRole.controllerFile.substring('lib/'.length),
+  );
+  return {
+    remoteConfigKeysFile: '''
+// The parameters of remote config of the app, which the matrix of SMF writes
+// from the data of the remote config role of the app for the test of the
+// role.
+import '${controller.resolveUri(packageName)}';
+
+/// The parameter that the backend of the mocks of every provider has, which
+/// is no parameter of the app.
+const String checkParameter =
+    ${SmfNames.dartString(RemoteConfigRole.checkParameter)};
+
+/// A parameter of the app: its name, its type (`text`, `boolean`, `integer`
+/// or `decimal`), its default, and a function that reads its getter from the
+/// values of the app.
+typedef AppParameter = ({
+  String name,
+  String type,
+  Object defaultValue,
+  Object Function(RemoteValues values) read,
+});
+
+/// The parameters of the app, in the order of the remote config role.
+$declaration
+''',
+  };
+}
+
 /// The test of the entry that restores purchases on the settings screen,
 /// which the template of the purchases role contributes, that the CLI keeps
 /// in its `app_tests/purchases_setting`, for the apps with the purchases

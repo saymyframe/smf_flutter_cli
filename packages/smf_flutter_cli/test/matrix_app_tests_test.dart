@@ -2113,14 +2113,19 @@ void main() {
       'starts the app for the answer firebase_messaging, a push message, and '
       'that of RevenueCat for the answer revenuecat, premium access, by the '
       'names with which the jobs give the answers, and no other probe asks '
-      'for one', () {
+      'for one; the app gives the verdict on both, since what each answer '
+      'sends reaches the app', () {
     expect(
       {
         for (final test in appTests.tests)
-          if (test.startProbe?.answer case final answer?)
-            p.basename(test.directory): answer,
+          if (test.startProbe
+              case MatrixStartProbe(:final answer?, :final verdict))
+            p.basename(test.directory): (answer, verdict),
       },
-      {'firebase_messaging': 'firebase_messaging', 'revenuecat': 'revenuecat'},
+      {
+        'firebase_messaging': ('firebase_messaging', MatrixAnswerVerdict.app),
+        'revenuecat': ('revenuecat', MatrixAnswerVerdict.app),
+      },
     );
   });
 
@@ -5908,6 +5913,213 @@ void main() {
         p.posix.dirname(envKeysFile),
         p.posix.dirname('test/env_role/env_role_test.dart'),
       );
+    });
+  });
+
+  group('the test of the remote config role', () {
+    const greeting = RemoteConfigKey.text(
+      'shop_greeting',
+      defaultValue: "It's open",
+      description: 'The greeting of the shop',
+    );
+    const open = RemoteConfigKey.boolean(
+      'shop_open',
+      defaultValue: true,
+      description: 'Whether the shop is open',
+    );
+    const limit = RemoteConfigKey.integer(
+      'feed_limit',
+      defaultValue: 3,
+      description: 'How many items the feed shows',
+    );
+    const ratio = RemoteConfigKey.decimal(
+      'feed_ratio',
+      defaultValue: 1,
+      description: 'The ratio of the feed',
+    );
+
+    /// An app with [roles] whose modules give the remote config role
+    /// [parameters], each with its module.
+    MatrixApp appWith(
+      Set<Role> roles, {
+      List<(ModuleId, RemoteConfigKey)> parameters = const [],
+      List<ModuleId>? everyModuleWith,
+    }) =>
+        MatrixApp(
+          'remote config',
+          const [ModuleId('shop')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: [
+              remoteConfigRole
+                  .data(
+                    const RemoteConfigImplementation(
+                      type: TypeRef(
+                        'BackendRemoteConfig',
+                        import: ImportRef.app('core/backend/backend.dart'),
+                      ),
+                      create: FactoryRef(
+                        'createBackendRemoteConfig',
+                        import: ImportRef.app('core/backend/backend.dart'),
+                      ),
+                    ),
+                  )
+                  .withOrigin(const ModuleOrigin(ModuleId('backend'))),
+              for (final (module, key) in parameters)
+                remoteConfigRole.data(key).withOrigin(ModuleOrigin(module)),
+            ],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    const shop = ModuleId('shop');
+    const feed = ModuleId('feed');
+    final withParameters = appWith(
+      {remoteConfigRole},
+      parameters: [
+        (shop, greeting),
+        (shop, open),
+        (feed, limit),
+        (feed, ratio),
+      ],
+    );
+
+    test(
+        'applies to the apps with the role, with parameters and without, '
+        'whichever module provides it, or to those of them that it is given; '
+        'no app of the CLI has the role yet', () async {
+      final test = await remoteConfigRoleAppTest();
+
+      expect(p.basename(test.directory), 'remote_config_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(test.roles, {remoteConfigRole});
+      // The test checks both sides of an app with parameters and of one
+      // without, which asks the backend nothing.
+      expect(test.appliesTo(withParameters), isTrue);
+      expect(test.appliesTo(appWith({remoteConfigRole})), isTrue);
+      expect(test.appliesTo(appWith(const {})), isFalse);
+      // It gives no value, has no mocks, and no probe: on a device the
+      // provider of the app checks itself with a probe of its own module.
+      expect(test.envValues, isNull);
+      expect(test.values, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      expect(
+        [
+          for (final app in apps)
+            if (test.appliesTo(app)) app.name,
+        ],
+        isEmpty,
+      );
+      expect(
+        appTests.tests.map((test) => p.basename(test.directory)),
+        isNot(contains('remote_config_role')),
+      );
+
+      // As the fixtures take it, only in the apps with every module.
+      final everyModule = await remoteConfigRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      );
+      expect(everyModule.appliesTo(withParameters), isFalse);
+      expect(
+        everyModule.appliesTo(
+          appWith({remoteConfigRole}, everyModuleWith: const []),
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+        'gets the parameters of the app, each with its type, its default and '
+        'its getter, in the order of the role, and the parameter outside the '
+        'app of the mocks, from the data of the role', () async {
+      final test = await remoteConfigRoleAppTest();
+
+      final files = test.generatedFiles!(withParameters, 'my_app');
+
+      expect(files.keys, [remoteConfigKeysFile]);
+      final text = files[remoteConfigKeysFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(
+        remoteConfigKeysFile,
+        text,
+      );
+      expect(errors, isEmpty);
+      expect(
+        [for (final import in index.imports) import.uri],
+        ['package:my_app/core/remote_config/app_remote_config.dart'],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['checkParameter', 'AppParameter', 'appParameters'],
+      );
+      expect(
+        text,
+        contains(
+          "const String checkParameter =\n    'remote_config_role_check';",
+        ),
+      );
+      expect(
+        text,
+        contains(
+          'final List<AppParameter> appParameters = [\n'
+          '  (\n'
+          "    name: 'shop_greeting',\n"
+          "    type: 'text',\n"
+          "    defaultValue: 'It\\'s open',\n"
+          '    read: (values) => values.shopGreeting,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'shop_open',\n"
+          "    type: 'boolean',\n"
+          '    defaultValue: true,\n'
+          '    read: (values) => values.shopOpen,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'feed_limit',\n"
+          "    type: 'integer',\n"
+          '    defaultValue: 3,\n'
+          '    read: (values) => values.feedLimit,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'feed_ratio',\n"
+          "    type: 'decimal',\n"
+          '    defaultValue: 1.0,\n'
+          '    read: (values) => values.feedRatio,\n'
+          '  ),\n'
+          '];\n',
+        ),
+      );
+      expect(RemoteConfigRole.checkParameter, 'remote_config_role_check');
+
+      // An app without parameters has an empty list, which is a constant.
+      final without = test.generatedFiles!(
+        appWith({remoteConfigRole}),
+        'my_app',
+      )[remoteConfigKeysFile]!;
+      expect(
+        DartFileIndexer.parse(remoteConfigKeysFile, without).errors,
+        isEmpty,
+      );
+      expect(
+        without,
+        contains('const List<AppParameter> appParameters = [];\n'),
+      );
+
+      // Its tests import the file that the matrix writes next to them.
+      for (final name in [
+        'controller_test.dart',
+        'provider_test.dart',
+        'next_start_test.dart',
+        'remote_config_role.dart',
+      ]) {
+        final source = File(
+          p.join(test.directory, 'test', 'remote_config_role', name),
+        ).readAsStringSync();
+        expect(source, contains("import 'keys.dart';"), reason: name);
+      }
+      expect(p.posix.basename(remoteConfigKeysFile), 'keys.dart');
+      expect(p.posix.dirname(remoteConfigKeysFile), 'test/remote_config_role');
     });
   });
 

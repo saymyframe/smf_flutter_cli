@@ -17,8 +17,8 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode and shows the screen of a failed start, the auth role,
 /// the onboarding screen role, the notifications role, the push role, the
-/// purchases role, the env role, the REST role and the analytics role,
-/// whose providers keep the setting of collection.
+/// purchases role, the env role, the REST role, the remote config role and
+/// the analytics role, whose providers keep the setting of collection.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -488,6 +488,17 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the CLI keeps: only in the apps with every module, which the matrix
       // has once more for each other mode of the auth role.
       await restSessionAppTest(among: (app) => app.everyModuleWith != null),
+      // The values of remote config of the apps with the remote config role,
+      // whichever module provides it, the test that the CLI keeps: in the apps
+      // with every module, which run flutter test for other tests already,
+      // and where the module that reads parameters gives the role one of each
+      // type, and in the apps whose modules give the role no parameter, which
+      // ask the backend nothing, such as that of the fixture remote config
+      // alone. The test takes them apart by the data of the role.
+      await remoteConfigRoleAppTest(
+        among: (app) =>
+            app.everyModuleWith != null || _parametersOf(app).isEmpty,
+      ),
       // The module that makes requests through the REST role, fake_rest_user:
       // it loads the notes of a server, a body of another shape is a reason of
       // the role, and it cancels its call when it is disposed of, whichever
@@ -544,10 +555,16 @@ Future<MatrixAppTests> fixtureAppTests() async {
       purchasesRole,
       envRole,
       restRole,
+      remoteConfigRole,
       analyticsRole,
     },
   );
 }
+
+/// The parameters of remote config of [app], an app of the matrix with the
+/// remote config role, in the order of the role ([RemoteConfigRole.keysIn]).
+List<AppRemoteConfigKey> _parametersOf(MatrixApp app) =>
+    remoteConfigRole.keysIn(remoteConfigRole.hookInput(app.hook!));
 
 /// Whether [app], an app with the analytics role, collects analytics from
 /// its first start, as the role chose (`--analytics-collection`): from the

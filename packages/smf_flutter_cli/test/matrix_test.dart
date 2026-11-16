@@ -1293,7 +1293,8 @@ void main() {
 
   test(
       'the report of the app tests names the answer of CI that the probe of '
-      'each asks for, if it asks for one', () async {
+      'each asks for, if it asks for one, and what gives the verdict on it',
+      () async {
     final cli = await _appTestsOf('smf_flutter_cli');
     const probe = 'integration_test/probe.dart';
 
@@ -1306,6 +1307,16 @@ void main() {
             probe,
             'probeMessages',
             answer: 'messages',
+          ),
+        ),
+        MatrixAppTest(
+          '$cli/events',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(
+            probe,
+            'probeEvents',
+            answer: 'events',
+            verdict: MatrixAnswerVerdict.exitCode,
           ),
         ),
         MatrixAppTest(
@@ -1323,10 +1334,13 @@ void main() {
     );
 
     expect(
-      [for (final test in report) test['answer']],
-      ['messages', null, null],
+      [for (final test in report) (test['answer'], test['verdict'])],
+      [('messages', 'app'), ('events', 'exitCode'), (null, null), (null, null)],
     );
-    expect(report[1].containsKey('answer'), isFalse);
+    for (final test in report.sublist(2)) {
+      expect(test.containsKey('answer'), isFalse);
+      expect(test.containsKey('verdict'), isFalse);
+    }
   });
 
   test(
@@ -3724,8 +3738,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
     /// The tests of [directory] with a probe in a file of their own in
     /// `integration_test/`, named after the directory, that asks for
-    /// [answer].
-    MatrixAppTest asking(String directory, String answer) {
+    /// [answer], with the [verdict] on it.
+    MatrixAppTest asking(
+      String directory,
+      String answer, {
+      MatrixAnswerVerdict verdict = MatrixAnswerVerdict.app,
+    }) {
       final probe = 'integration_test/${directory.split('/').last}.dart';
       fileSystem.file('$directory/$probe')
         ..createSync(recursive: true)
@@ -3733,7 +3751,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       return MatrixAppTest(
         directory,
         appliesTo: (_) => true,
-        startProbe: MatrixStartProbe(probe, 'probe', answer: answer),
+        startProbe: MatrixStartProbe(
+          probe,
+          'probe',
+          answer: answer,
+          verdict: verdict,
+        ),
       );
     }
 
@@ -3744,7 +3767,9 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
     test(
         'go into the app with the answers of CI that they ask for and the '
         'arguments that build the app, next to the list, each on a line of '
-        'its own, for the script that starts the app on a device', () {
+        'its own, for the script that starts the app on a device: an answer '
+        'by its name, with exit-code after it when its exit code is the '
+        'verdict on it', () {
       expect(startAnswersFile, 'integration_test/start_answers');
       expect(startBuildArgumentsFile, 'integration_test/start_build_arguments');
       expect(
@@ -3764,6 +3789,11 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           asking('/tests/messages', 'messages'),
           start,
           walk(),
+          asking(
+            '/tests/events',
+            'events',
+            verdict: MatrixAnswerVerdict.exitCode,
+          ),
           asking('/tests/access', 'access_2'),
         ],
         buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
@@ -3780,7 +3810,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           startReleaseArgumentsFile,
         ]),
       );
-      expect(read(startAnswersFile), 'messages\naccess_2\n');
+      expect(read(startAnswersFile), 'messages\nevents exit-code\naccess_2\n');
       expect(
         read(startBuildArgumentsFile),
         '--dart-define-from-file=.env\n--flavor=ci\n',
@@ -3890,6 +3920,32 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         );
       }
       expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+
+    test(
+        'take the exit code of their answer for the verdict on it only with '
+        'an answer, and the verdict of the app by default', () {
+      MatrixStartProbe probe({String? answer, MatrixAnswerVerdict? verdict}) =>
+          verdict == null
+              ? MatrixStartProbe('integration_test/p.dart', 'p', answer: answer)
+              : MatrixStartProbe(
+                  'integration_test/p.dart',
+                  'p',
+                  answer: answer,
+                  verdict: verdict,
+                );
+
+      expect(probe().verdict, MatrixAnswerVerdict.app);
+      expect(probe(answer: 'messages').verdict, MatrixAnswerVerdict.app);
+      expect(
+        probe(answer: 'events', verdict: MatrixAnswerVerdict.exitCode).verdict,
+        MatrixAnswerVerdict.exitCode,
+      );
+      expect(
+        () => probe(verdict: MatrixAnswerVerdict.exitCode),
+        throwsA(isA<AssertionError>()),
+        reason: 'Without an answer, no command has an exit code.',
+      );
     });
 
     test('the answers and the build arguments are no files of a test', () {
