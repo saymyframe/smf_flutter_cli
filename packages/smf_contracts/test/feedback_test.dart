@@ -735,6 +735,37 @@ void main() {
           ),
         ],
       );
+
+      // Validation stops such an app, so nothing else reads what its render
+      // hook gives: bootstrap() of the app gets nothing either way.
+      final rendered = feedbackRole.template.render(
+        inputOf(
+          feedbackRole,
+          data: [
+            dataOf(
+              feedbackRole,
+              _implementation(async: true),
+              module: 'fake_feedback',
+            ),
+          ],
+        ),
+      );
+      final fragments = rendered.fragments.whereType<SocketContribution>();
+      expect(
+        fragments.where(
+          (entry) => entry.socket == AppEntryRole.bootstrapPlatform,
+        ),
+        isEmpty,
+      );
+      expect(
+        fragments
+            .singleWhere(
+              (entry) => entry.socket == FeedbackRole.implementations,
+            )
+            .fragment!
+            .code,
+        contains('initFeedback'),
+      );
       expect(
         feedbackRole.template.validate(
           inputOf(
