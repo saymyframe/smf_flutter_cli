@@ -192,6 +192,13 @@ Map<String, String> activeOnDevice = {};
 /// Whether the services tell of the values that the backend publishes.
 bool live = false;
 
+/// What `liveUpdates` of the services throws, if anything.
+Object? liveUpdatesFails;
+
+/// What `updates` of the services throws, if anything, as a provider whose
+/// stream cannot open.
+Object? updatesFails;
+
 /// The calls that reached the services, in order, each with the number of
 /// its service.
 final List<String> calls = [];
@@ -278,10 +285,16 @@ final class FakeRemoteConfig implements RemoteConfigService {
   }
 
   @override
-  bool get liveUpdates => live;
+  bool get liveUpdates {
+    if (liveUpdatesFails case final failure?) throw failure;
+    return live;
+  }
 
   @override
-  Stream<void> get updates => _updates.stream;
+  Stream<void> get updates {
+    if (updatesFails case final failure?) throw failure;
+    return _updates.stream;
+  }
 }
 ''';
 
@@ -538,6 +551,42 @@ Future<void> main(List<String> arguments, SendPort port) async {
       result['the calls of a service that did not open'] = takeCalls();
       result['the values of a service that did not open'] =
           shown(appRemoteConfig.value);
+      done.complete();
+    },
+    (error, stackTrace) => uncaught.add('$error'),
+  );
+  await done.future;
+  result['printed'] = debugPrinted;
+  result['uncaught'] = uncaught;
+  port.send(result);
+}
+''';
+
+/// A service that throws when the controller follows the values that it
+/// tells of: its `updates`, and then its `liveUpdates`. The controller
+/// prints the error, leaves it to no handler of the uncaught errors, and
+/// still fetches.
+const _followErrors = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final uncaught = <String>[];
+  final done = Completer<void>();
+  runZonedGuarded(
+    () async {
+      backend = {'fake_config_user_greeting': 'Fetched'};
+      live = true;
+      updatesFails = StateError('The updates did not open.');
+      await initRemoteConfig();
+      await pump();
+      result['the values when updates throws'] = shown(appRemoteConfig.value);
+      result['the calls when updates throws'] = takeCalls();
+      updatesFails = null;
+      liveUpdatesFails = StateError('The service cannot tell.');
+      backend = {'fake_config_user_greeting': 'Fetched again'};
+      await initRemoteConfig();
+      await pump();
+      result['the values when liveUpdates throws'] =
+          shown(appRemoteConfig.value);
+      result['the calls when liveUpdates throws'] = takeCalls();
       done.complete();
     },
     (error, stackTrace) => uncaught.add('$error'),
@@ -1601,6 +1650,42 @@ void main() {
           _failurePrinted('Bad state: The activation broke.'),
           _failurePrinted('Bad state: The updates broke.'),
           _failurePrinted('Bad state: The opening broke.'),
+        ],
+        'uncaught': <Object?>[],
+      });
+    });
+    test(
+        'prints an error that the service throws when the controller follows '
+        'the values that it tells of, leaves it to no handler of the uncaught '
+        'errors, and still fetches', () async {
+      expect(await app.run('$_notes$_withParameters$_followErrors'), {
+        'the values when updates throws': {
+          'greeting': 'Fetched',
+          'enabled': true,
+          'limit': 3,
+          'ratio': 0.5,
+        },
+        'the calls when updates throws': [
+          'open 1',
+          'activate 1',
+          'fetch 1',
+          'activate 1',
+        ],
+        'the values when liveUpdates throws': {
+          'greeting': 'Fetched again',
+          'enabled': true,
+          'limit': 3,
+          'ratio': 0.5,
+        },
+        'the calls when liveUpdates throws': [
+          'open 2',
+          'activate 2',
+          'fetch 2',
+          'activate 2',
+        ],
+        'printed': [
+          _failurePrinted('Bad state: The updates did not open.'),
+          _failurePrinted('Bad state: The service cannot tell.'),
         ],
         'uncaught': <Object?>[],
       });
