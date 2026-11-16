@@ -1125,6 +1125,21 @@ void main() {
         ).single,
         contains('has a backslash in its description'),
       );
+      // The description is the doc of the getter, where an angle bracket
+      // reads as HTML.
+      for (final description in ['Below <5', 'Above 5>']) {
+        expect(
+          problemsOf(
+            RemoteConfigKey.integer(
+              'a_b',
+              defaultValue: 1,
+              description: description,
+            ),
+          ).single,
+          contains('has an angle bracket in its description'),
+          reason: description,
+        );
+      }
     });
   });
 

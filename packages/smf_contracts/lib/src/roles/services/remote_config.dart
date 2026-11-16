@@ -219,7 +219,8 @@ final class RemoteConfigRole extends Role<RemoteConfigData> {
               'once and each with a getter of its own that no Dart object '
               'has; a default of their type, finite for a decimal and of one '
               'line without a backtick for a text; and a description of one '
-              'line of at most 100 characters without a backslash.',
+              'line of at most 100 characters without a backslash or an angle '
+              'bracket.',
           check: _checkRemoteConfigKeys,
         ),
       ];
@@ -438,8 +439,8 @@ final class RemoteConfigKey extends RemoteConfigData {
   final Object defaultValue;
 
   /// What the parameter is for, as one line of at most 100 characters
-  /// without a backslash, such as `The lowest version of the app that may
-  /// run, such as 1.4.0; empty for none`.
+  /// without a backslash or an angle bracket, such as `The lowest version of
+  /// the app that may run, such as 1.4.0; empty for none`.
   ///
   /// It is the doc of the getter, the line of the parameter in the README of
   /// the app, and what a developer gives the parameter as its description in
@@ -521,6 +522,12 @@ final class RemoteConfigKey extends RemoteConfigData {
       problems.add(
         '$what has a backslash in its description, which mason removes '
         'before a line break and Markdown reads as an escape.',
+      );
+    }
+    if (description.contains('<') || description.contains('>')) {
+      problems.add(
+        '$what has an angle bracket in its description, which the doc of its '
+        'getter in the app would read as HTML.',
       );
     }
     return problems;
