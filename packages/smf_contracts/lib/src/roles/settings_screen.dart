@@ -29,17 +29,28 @@ const settingsScreenRole = SettingsScreenRole._();
 /// puts no limit on its height, so an entry is as tall as it takes. The
 /// entries need not reach the edges of the list, which may inset them.
 ///
+/// An entry may show only at times, such as on one platform: its
+/// [SettingsEntry.showIf] says whether the screen shows it. The screen
+/// asks the function of each such entry each time it builds, and shows the
+/// entry only while it returns `true`, as if the app had no such entry:
+/// nothing of the entry stays in its place. A screen with no entry to show
+/// shows what it shows in an app whose modules have no setting.
+///
 /// The provider creates the widget of each entry in a file other than
 /// that of the widget, through an import of that file with a prefix that
 /// no import of another file has, such as `entry0` for the first. So
 /// widgets of the same name in the files of different contributors never
 /// clash with each other or with the names of the file of the provider.
-/// The contract harness checks those imports and creations (the rule
-/// `settings_screen.entries_rendered`), so the tests of a module that
-/// contributes an entry check it through [entriesIn], not in the files of
-/// a provider. What only a running app shows is for a test of the role in
+/// It calls the function of an entry through an import of its file with a
+/// prefix of its own as well, for functions of the same name. The contract
+/// harness checks the imports and creations of the widgets (the rule
+/// `settings_screen.entries_rendered`) and the functions themselves (the
+/// rule `settings_screen.entry_widgets`), so the tests of a module that
+/// contributes an entry check it through [entriesIn], not in the files of a
+/// provider. What only a running app shows is for a test of the role in
 /// running apps: each entry once, their order, the list that scrolls, the
-/// `Material`, the width and the height of each.
+/// `Material`, the width and the height of each, and no entry whose
+/// function returns `false`.
 ///
 /// How the user gets to the screen is up to the provider and the rest of
 /// the app: a provider may make its route a destination of the main
@@ -68,7 +79,9 @@ final class SettingsScreenRole extends Role<SettingsData> {
           id: 'settings_screen.entries',
           description: 'The bricks of a module generate the file of the '
               'widget of each of its settings entries, and only in an app '
-              'with a settings screen if the module only uses the role.',
+              'with a settings screen if the module only uses the role, and '
+              'the file of the function that says whether the entry shows, '
+              'if it has one.',
           check: _checkEntries,
         ),
         ModuleRule(
@@ -86,7 +99,9 @@ final class SettingsScreenRole extends Role<SettingsData> {
           id: 'settings_screen.entry_widgets',
           description: 'The widget of every settings entry is a class in a '
               'file of the contributor of the entry, with a const unnamed '
-              'constructor that requires no arguments.',
+              'constructor that requires no arguments, and its showIf, if it '
+              'has one, is a top-level function in a file of the contributor: '
+              'showIf requires no arguments and returns a bool.',
           check: _checkEntryWidgets,
         ),
         StructuralRule(
@@ -174,10 +189,23 @@ sealed class SettingsData {
 /// without a settings screen does not get it; the module rule
 /// `settings_screen.entries` reports a brick without it. The template of a
 /// role that uses this role does the same for the widget of its entry.
+///
+/// An entry that the screen shows only at times names the function that
+/// says so, its [showIf]:
+///
+/// ```dart
+/// settingsScreenRole.data(
+///   const SettingsEntry(
+///     widget: TypeRef('RateSetting', import: rateSettingFile),
+///     showIf: FunctionRef('rateSettingShows', import: rateSettingFile),
+///   ),
+/// )
+/// ```
 @immutable
 final class SettingsEntry extends SettingsData {
-  /// Creates the entry that shows [widget].
-  const SettingsEntry({required this.widget});
+  /// Creates the entry that shows [widget], always or while [showIf]
+  /// returns `true`.
+  const SettingsEntry({required this.widget, this.showIf});
 
   /// The class of the widget, with the import of its file, a file of the
   /// app such as `ImportRef.app('core/theme/theme_mode_setting.dart')`.
@@ -190,6 +218,22 @@ final class SettingsEntry extends SettingsData {
   /// The provider imports the file with a prefix of its own, so
   /// [ImportRef.prefix] and [ImportRef.show] do not apply.
   final TypeRef widget;
+
+  /// The function that says whether the screen shows the entry, or `null`
+  /// for an entry that it always shows: a top-level function of a file of
+  /// the app that the contributor generates, which requires no arguments,
+  /// returns a `bool` at once and has no side effects, such as whether the
+  /// app has the value that the setting needs on the platform that it runs
+  /// on.
+  ///
+  /// The screen asks it each time it builds, and shows the entry only while
+  /// it returns `true`. So it reads what the app knows already, such as
+  /// what the start-up of the app restored, and the screen follows a change
+  /// of its answer the next time it builds.
+  ///
+  /// The provider imports the file with a prefix of its own, so
+  /// [ImportRef.prefix] and [ImportRef.show] do not apply.
+  final FunctionRef? showIf;
 
   /// The path of the file of [widget] relative to the project root, such
   /// as `lib/core/theme/theme_mode_setting.dart`, or `null` if [widget] is
@@ -204,7 +248,18 @@ final class SettingsEntry extends SettingsData {
   List<String> problems() {
     final outside = 'The widget ${widget.name} of a settings entry must be a '
         'class of a file of the app, imported with ImportRef.app.';
-    return [...widget.problems(), if (file == null) outside];
+    final function = showIf;
+    final functionOutside = 'The function ${function?.name} of the settings '
+        'entry ${widget.name} must be a function of a file of the app, '
+        'imported with ImportRef.app.';
+    return [
+      ...widget.problems(),
+      if (file == null) outside,
+      if (function != null) ...[
+        ...function.problems(),
+        if (!function.import.isAppFile) functionOutside,
+      ],
+    ];
   }
 
   @override
@@ -316,33 +371,59 @@ final class _SettingsScreenTemplate extends RoleTemplate<SettingsData> {
   }
 }
 
-/// The problems of the files of the widgets of the entries of the module
-/// of [input]: a file that the bricks of the module, those that apply in
-/// the app, do not generate, and a file that an app without a settings
-/// screen gets too.
+/// The problems of the files of the entries of the module of [input]: a
+/// file of a widget that the bricks of the module, those that apply in the
+/// app, do not generate, and one that an app without a settings screen gets
+/// too, and a file of a function that says whether an entry shows which
+/// those bricks do not generate.
 ///
-/// The template of the role reports an entry outside the app.
+/// The file of such a function needs no condition, since the function may
+/// be of use without a settings screen too. The template of the role
+/// reports an entry outside the app, and a function outside it.
 List<SmfIssue> _checkEntries(ModuleRuleInput<SettingsData> input) {
   final module = input.module;
+  final origin = ModuleOrigin(module.id);
   final bricks = input.contributions.whereType<BrickContribution>();
+  final generated = textTemplatesOf(input.contributions);
   // A module that provides or requires the role is only in apps with a
   // settings screen, so its bricks need no condition.
   final onlyUses = !module.provides.contains(settingsScreenRole) &&
       !module.requires.contains(settingsScreenRole);
   return [
     for (final data in input.data)
-      if (data.value case final SettingsEntry entry when entry.file != null)
-        ..._fileIssues(
-          entry,
-          ModuleOrigin(module.id),
-          [
-            for (final brick in bricks)
-              if (textTemplatesOf([brick]).containsKey(entry.file)) brick,
-          ],
-          conditional: onlyUses,
-        ),
+      if (data.value case final SettingsEntry entry) ...[
+        if (entry.file != null)
+          ..._fileIssues(
+            entry,
+            origin,
+            [
+              for (final brick in bricks)
+                if (textTemplatesOf([brick]).containsKey(entry.file)) brick,
+            ],
+            conditional: onlyUses,
+          ),
+        if (_functionFileOf(entry) case final path?
+            when !generated.containsKey(path))
+          SmfIssue(
+            'The function ${entry.showIf!.name} of the settings entry '
+            '${entry.widget.name} is in $path, which the bricks of the module '
+            'do not generate.',
+            hint: 'Generate the file of the function in a brick of the module.',
+            origin: origin,
+            path: path,
+          ),
+      ],
   ];
 }
+
+/// The path of the file of the [SettingsEntry.showIf] of [entry] relative
+/// to the project root, such as `lib/core/review/review_setting.dart`, or
+/// `null` if the entry has no function or its function is not of a file of
+/// the app.
+String? _functionFileOf(SettingsEntry entry) => switch (entry.showIf) {
+      FunctionRef(:final import) when import.isAppFile => 'lib/${import.uri}',
+      _ => null,
+    };
 
 /// The problems of the file of the widget of [entry], an entry of the
 /// module [origin] in a file of the app, which [bricks] of the module
@@ -401,49 +482,100 @@ List<SmfIssue> _checkRoute(ModuleRuleInput<SettingsData> input) =>
       routeClass: 'SettingsScreenRoute',
     );
 
-/// The problems with the widgets that the entries of [input] name: a widget
-/// in a file of another contributor, a class missing from its file, and one
-/// that the provider cannot create as a constant without arguments.
+/// The problems with the widgets and the functions that the entries of
+/// [input] name: a widget or a function in a file of another contributor,
+/// a class missing from its file, and one that the provider cannot create
+/// as a constant without arguments, and a function missing from its file,
+/// one that requires arguments, and one that does not return a `bool`.
 ///
-/// The template of the role reports an entry outside the app.
-List<SmfIssue> _checkEntryWidgets(StructuralRuleInput<SettingsData> input) {
-  final issues = <SmfIssue>[];
-  for (final data in input.roleInput.data) {
-    final origin = data.origin;
-    if (data.value case SettingsEntry(:final widget, file: final path?)) {
-      final owner = input.owners[path];
-      if (owner != null && !isContributor(owner, origin)) {
-        issues.add(
-          SmfIssue(
-            'The widget ${widget.name} of a settings entry of $origin is in '
-            '$path, a file of $owner; an entry shows a widget of its own '
-            'contributor.',
-            origin: origin,
-            path: path,
-          ),
-        );
-        continue;
-      }
-      final symbol = RequiredClass(
-        widget.name,
+/// The template of the role reports an entry outside the app, and a
+/// function outside it.
+List<SmfIssue> _checkEntryWidgets(StructuralRuleInput<SettingsData> input) => [
+      for (final data in input.roleInput.data)
+        if (data.value case final SettingsEntry entry) ...[
+          ..._widgetIssues(input, data.origin, entry),
+          ..._functionIssues(input, data.origin, entry),
+        ],
+    ];
+
+/// The problems with the widget of [entry], which [origin] contributed: a
+/// widget in a file of another contributor, which has that problem alone,
+/// a class missing from its file, and one that the provider cannot create
+/// as a constant without arguments.
+List<SmfIssue> _widgetIssues(
+  StructuralRuleInput<SettingsData> input,
+  ContributionOrigin? origin,
+  SettingsEntry entry,
+) {
+  final SettingsEntry(:widget, file: path) = entry;
+  if (path == null) return const [];
+  final owner = input.owners[path];
+  if (owner != null && !isContributor(owner, origin)) {
+    return [
+      SmfIssue(
+        'The widget ${widget.name} of a settings entry of $origin is in '
+        '$path, a file of $owner; an entry shows a widget of its own '
+        'contributor.',
+        origin: origin,
         path: path,
-        constConstructor: true,
-      );
-      for (final issue in symbol.checkIn(input.files)) {
-        issues.add(
-          SmfIssue(
-            issue.message,
-            hint: 'The provider of the $settingsScreenRole knows nothing '
-                'of the widget of an entry but its class, so the widget '
-                'requires no arguments and can be a constant.',
-            origin: origin,
-            path: path,
-          ),
-        );
-      }
-    }
+      ),
+    ];
   }
-  return issues;
+  final symbol = RequiredClass(
+    widget.name,
+    path: path,
+    constConstructor: true,
+  );
+  return [
+    for (final issue in symbol.checkIn(input.files))
+      SmfIssue(
+        issue.message,
+        hint: 'The provider of the $settingsScreenRole knows nothing of the '
+            'widget of an entry but its class, so the widget requires no '
+            'arguments and can be a constant.',
+        origin: origin,
+        path: path,
+      ),
+  ];
+}
+
+/// The problems with the [SettingsEntry.showIf] of [entry], which [origin]
+/// contributed: a function in a file of another contributor, which has that
+/// problem alone, a function missing from its file, one that requires
+/// arguments, and one that does not return a `bool`.
+List<SmfIssue> _functionIssues(
+  StructuralRuleInput<SettingsData> input,
+  ContributionOrigin? origin,
+  SettingsEntry entry,
+) {
+  final path = _functionFileOf(entry);
+  if (path == null) return const [];
+  final function = entry.showIf!;
+  final owner = input.owners[path];
+  if (owner != null && !isContributor(owner, origin)) {
+    return [
+      SmfIssue(
+        'The function ${function.name} of the settings entry '
+        '${entry.widget.name} of $origin is in $path, a file of $owner; an '
+        'entry asks a function of its own contributor.',
+        origin: origin,
+        path: path,
+      ),
+    ];
+  }
+  final symbol =
+      RequiredFunction(function.name, path: path, returnType: 'bool');
+  return [
+    for (final issue in symbol.checkIn(input.files))
+      SmfIssue(
+        issue.message,
+        hint: 'The settings screen asks showIf without arguments whether it '
+            'shows the entry, each time it builds, and takes the answer at '
+            'once.',
+        origin: origin,
+        path: path,
+      ),
+  ];
 }
 
 /// The entries that the provider of the role does not render: those whose

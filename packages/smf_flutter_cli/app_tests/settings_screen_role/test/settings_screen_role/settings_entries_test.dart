@@ -8,6 +8,13 @@
 // and the list scrolls to its last entry on a surface too short for the
 // entries.
 //
+// An entry with a function that says whether it shows
+// (SettingsEntry.showIf) shows only while the function returns true, and
+// the screen asks the function each time it builds. So the test looks at
+// the screen on the platform of the tests and once more on iOS, after
+// every widget of the app built again: there the screen shows the entries
+// whose function returns true on iOS, as above, and none of the others.
+//
 // It knows only the role, and starts the app once, since the start-up of
 // an app may not run twice. Each expectation gives its reason, which a
 // provider of the role with a known bug fails the test with
@@ -66,6 +73,70 @@ Future<void> _expectScrollsTo(
   );
 }
 
+/// Checks that [screen], the settings screen, shows the entries that show
+/// now ([settingsEntries]) once each, one below the other in the order of
+/// the role, each on a Material, in a list of the screen, with the width
+/// that the screen sets, the same for every entry, and no limit on its
+/// height; and returns them.
+List<Finder> _expectEntries(WidgetTester tester, Finder screen) {
+  final entries = [
+    for (final entry in settingsEntries)
+      find.descendant(of: screen, matching: find.byType(entry)),
+  ];
+  for (final entry in entries) {
+    expect(
+      entry,
+      findsOneWidget,
+      reason: 'Every entry of the modules is on the settings screen once.',
+    );
+  }
+
+  final rects = [for (final entry in entries) tester.getRect(entry)];
+  for (var index = 1; index < rects.length; index++) {
+    expect(
+      rects[index].top,
+      greaterThanOrEqualTo(rects[index - 1].bottom),
+      reason: 'Each entry is below the one before it, in the order of the '
+          'role.',
+    );
+  }
+
+  for (final (index, entry) in entries.indexed) {
+    expect(
+      find.ancestor(of: entry, matching: find.byType(Material)),
+      findsWidgets,
+      reason: 'Every entry is on a Material.',
+    );
+    expect(
+      _listsOf(entry, screen),
+      findsWidgets,
+      reason: 'Every entry is in a list of the settings screen that scrolls: '
+          'a Scrollable of the screen is above it.',
+    );
+    // The constraints that the screen laid the entry out with.
+    final constraints = tester.renderObject<RenderBox>(entry).constraints;
+    expect(
+      constraints.minWidth,
+      constraints.maxWidth,
+      reason: 'The screen sets the width of each entry: the least width that '
+          'it allows the entry is the greatest one.',
+    );
+    expect(
+      (rects[index].left, rects[index].right),
+      (rects.first.left, rects.first.right),
+      reason: 'Every entry has the same width, between the same left and '
+          'right edges as the first entry.',
+    );
+    expect(
+      constraints.maxHeight,
+      double.infinity,
+      reason: 'The screen puts no limit on the height of an entry, so the '
+          'entry is as tall as it takes.',
+    );
+  }
+  return entries;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -73,65 +144,30 @@ void main() {
   // fails sooner.
   testWidgets(
     'the settings screen shows every entry of the modules once, one below '
-    'the other in the order of the role',
+    'the other in the order of the role, and no entry whose function says '
+    'that it does not show',
     (tester) async {
       await openSettings(tester);
 
       final screen = find.byType(settingsScreen);
-      final entries = [
-        for (final entry in settingsEntries)
-          find.descendant(of: screen, matching: find.byType(entry)),
-      ];
-      for (final entry in entries) {
-        expect(
-          entry,
-          findsOneWidget,
-          reason: 'Every entry of the modules is on the settings screen once.',
-        );
-      }
+      final entries = _expectEntries(tester, screen);
 
-      final rects = [for (final entry in entries) tester.getRect(entry)];
-      for (var index = 1; index < rects.length; index++) {
-        expect(
-          rects[index].top,
-          greaterThanOrEqualTo(rects[index - 1].bottom),
-          reason: 'Each entry is below the one before it, in the order of '
-              'the role.',
-        );
-      }
-
-      for (final (index, entry) in entries.indexed) {
-        expect(
-          find.ancestor(of: entry, matching: find.byType(Material)),
-          findsWidgets,
-          reason: 'Every entry is on a Material.',
-        );
-        expect(
-          _listsOf(entry, screen),
-          findsWidgets,
-          reason: 'Every entry is in a list of the settings screen that '
-              'scrolls: a Scrollable of the screen is above it.',
-        );
-        // The constraints that the screen laid the entry out with.
-        final constraints = tester.renderObject<RenderBox>(entry).constraints;
-        expect(
-          constraints.minWidth,
-          constraints.maxWidth,
-          reason: 'The screen sets the width of each entry: the least width '
-              'that it allows the entry is the greatest one.',
-        );
-        expect(
-          (rects[index].left, rects[index].right),
-          (rects.first.left, rects.first.right),
-          reason: 'Every entry has the same width, between the same left and '
-              'right edges as the first entry.',
-        );
-        expect(
-          constraints.maxHeight,
-          double.infinity,
-          reason: 'The screen puts no limit on the height of an entry, so '
-              'the entry is as tall as it takes.',
-        );
+      // On iOS, where an entry of the app may not show, as after any change
+      // of what its function reads: the screen asks the functions again
+      // when it builds.
+      await usePlatform(tester, TargetPlatform.iOS);
+      try {
+        _expectEntries(tester, screen);
+        for (final entry in hiddenSettingsEntries) {
+          expect(
+            find.descendant(of: screen, matching: find.byType(entry)),
+            findsNothing,
+            reason: 'An entry whose function says that it does not show is '
+                'not on the settings screen.',
+          );
+        }
+      } finally {
+        await usePlatform(tester, null);
       }
 
       if (entries.isNotEmpty) {

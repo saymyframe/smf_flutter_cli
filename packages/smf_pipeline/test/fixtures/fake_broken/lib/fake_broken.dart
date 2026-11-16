@@ -16,6 +16,7 @@ import 'package:fake_broken/bundles/broken_layout_bundle.dart';
 import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
 import 'package:fake_broken/bundles/broken_onboarding_bundle.dart';
 import 'package:fake_broken/bundles/broken_settings_bundle.dart';
+import 'package:fake_broken/bundles/broken_settings_shows_hidden_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
@@ -1667,8 +1668,9 @@ final class _BrokenEnvSuppliedProvider extends RoleProvider<EnvData> {
 /// its file, but shows them all but the last one.
 ///
 /// The file of the screen still creates the widget of every entry, as the
-/// rule `settings_screen.entries_rendered` of the role wants, and the app
-/// analyzes: only a running app shows the bug.
+/// rule `settings_screen.entries_rendered` of the role wants, and asks the
+/// function of an entry that has one, as the role wants of a screen, and
+/// the app analyzes: only a running app shows the bug.
 final class BrokenSettingsModule extends SmfModule {
   /// Creates the module.
   const BrokenSettingsModule();
@@ -1676,44 +1678,88 @@ final class BrokenSettingsModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('broken_settings_hides_last_entry');
 
-  /// The name of the route of the screen.
-  static const _route = 'settings';
-
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
         description: 'A settings screen that hides its last entry (fixture)',
         kind: ModuleKinds.feature,
-        providers: [_BrokenSettingsProvider()],
+        providers: [_BrokenSettingsProvider(asksFunctions: true)],
       );
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(brokenSettingsBundle),
-        routerRole.data(
-          const RoutesData([
-            Route(
-              '/',
-              name: _route,
-              screen: ScreenRef(
-                'BrokenSettingsScreen',
-                import: ImportRef.app(
-                  'features/broken_settings_hides_last_entry/'
-                  'broken_settings_screen.dart',
-                ),
-              ),
-            ),
-          ]),
+        ..._screenOf(
+          'features/broken_settings_hides_last_entry/'
+          'broken_settings_screen.dart',
         ),
-        settingsScreenRole.data(const SettingsScreenRoute(_route)),
       ];
 }
 
+/// A provider of the settings screen role with one known bug: a feature
+/// whose screen shows every entry of the role, also one whose function says
+/// that it does not show ([SettingsEntry.showIf]), which it never asks.
+///
+/// The file of the screen still creates the widget of every entry, as the
+/// rule `settings_screen.entries_rendered` of the role wants, and the app
+/// analyzes: only a running app shows the bug, once the function of an
+/// entry returns `false`.
+final class BrokenSettingsShowingHiddenModule extends SmfModule {
+  /// Creates the module.
+  const BrokenSettingsShowingHiddenModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_settings_shows_hidden');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A settings screen that shows the entries that hide '
+            '(fixture)',
+        kind: ModuleKinds.feature,
+        providers: [_BrokenSettingsProvider(asksFunctions: false)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenSettingsShowsHiddenBundle),
+        ..._screenOf(
+          'features/broken_settings_shows_hidden/broken_settings_screen.dart',
+        ),
+      ];
+}
+
+/// The route of a broken settings screen, `/` of its feature, which shows
+/// `BrokenSettingsScreen` of the file at [file] below `lib/`, and names the
+/// route as the settings screen of the role.
+List<Contribution> _screenOf(String file) => [
+      routerRole.data(
+        RoutesData([
+          Route(
+            '/',
+            name: 'settings',
+            screen: ScreenRef(
+              'BrokenSettingsScreen',
+              import: ImportRef.app(file),
+            ),
+          ),
+        ]),
+      ),
+      settingsScreenRole.data(const SettingsScreenRoute('settings')),
+    ];
+
 /// Renders the widgets of the entries of the settings screen role as the
 /// items of the list of the file of the screen, in the order of the role,
-/// each through an import of its file with a prefix of its own.
+/// each through an import of its file with a prefix of its own, and, if
+/// [asksFunctions], the function of each entry that has one through an
+/// import of its file with a prefix of its own as well, as
+/// `if (entry1.settingShows()) const entry0.Setting(),`, for a list that is
+/// no constant. Otherwise the items are those of a constant list.
 final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
-  const _BrokenSettingsProvider();
+  const _BrokenSettingsProvider({required this.asksFunctions});
+
+  /// Whether the screen asks the function of an entry that has one.
+  final bool asksFunctions;
 
   @override
   Role<SettingsData> get role => settingsScreenRole;
@@ -1721,18 +1767,26 @@ final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
   @override
   RoleOutput render(RoleHookInput<SettingsData> input) {
     final files = <String, ImportRef>{};
+    String? prefixOf(ImportRef import) => files
+        .putIfAbsent(
+          import.uri,
+          () => import.withPrefix('entry${files.length}'),
+        )
+        .prefix;
     final items = <String>[];
     for (final entry in settingsScreenRole.entriesIn(input)) {
       // The template of the role rejects an entry outside the app, so each
-      // has an import.
-      final import = entry.widget.import!;
-      final prefix = files
-          .putIfAbsent(
-            import.uri,
-            () => import.withPrefix('entry${files.length}'),
-          )
-          .prefix;
-      items.add('  ${entry.widget.codeWith(prefix)}(),');
+      // has an import, and so has its function.
+      final widget = entry.widget.codeWith(prefixOf(entry.widget.import!));
+      if (!asksFunctions) {
+        items.add('  $widget(),');
+        continue;
+      }
+      final condition = switch (entry.showIf) {
+        final showIf? => 'if (${showIf.codeWith(prefixOf(showIf.import))}()) ',
+        null => '',
+      };
+      items.add('  ${condition}const $widget(),');
     }
     return RoleOutput(
       vars: {

@@ -1523,8 +1523,7 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/settings_screen_role/settings_entries_test.dart',
-            'the settings screen shows every entry of the modules once, one '
-                'below the other in the order of the role',
+            _settingsEntriesTest,
             'Every entry of the modules is on the settings screen once.',
           ),
           MatrixExpectedFailure(
@@ -1533,6 +1532,24 @@ List<BrokenProvider> brokenProviders() => const [
                 'shows the mode of the app and chooses the mode that the '
                 'user taps',
             'The settings screen shows the entry of the theme mode once.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenSettingsShowingHiddenModule(),
+        role: settingsScreenRole,
+        bug: 'Its screen shows every entry of the role, also one whose '
+            'function says that it does not show, which it never asks.',
+        // A module without screens whose only setting the screen leaves out
+        // on iOS, where the test of the entries looks at the screen once
+        // more.
+        app: [FakeRouterModule.id, FakeHidingSettingModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/settings_screen_role/settings_entries_test.dart',
+            _settingsEntriesTest,
+            'An entry whose function says that it does not show is not on '
+                'the settings screen.',
           ),
         ],
       ),
@@ -2560,6 +2577,12 @@ const _retryAfterOnFailure =
 const _connectionCloses =
     'When RestExchange.stop completes, a provider closes the connection at '
     'once.';
+
+/// The name of the test of the entries of the settings screen.
+const _settingsEntriesTest =
+    'the settings screen shows every entry of the modules once, one below '
+    'the other in the order of the role, and no entry whose function says '
+    'that it does not show';
 
 /// The other modules of the app of a broken layout: a router, the two
 /// fixture features, whose destinations the main navigation shows, and what

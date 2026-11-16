@@ -22,6 +22,19 @@ const _accountPath = 'lib/features/account/account_settings.dart';
 const _account =
     SettingsEntry(widget: TypeRef('AccountSettings', import: _accountFile));
 
+const _rateFile = ImportRef.app('core/rating/rate_setting.dart');
+const _ratePath = 'lib/core/rating/rate_setting.dart';
+const _rateShows = FunctionRef('rateSettingShows', import: _rateFile);
+
+/// An entry that the screen shows only while its function says so, which
+/// is in the file of its widget.
+const _rate = SettingsEntry(
+  widget: TypeRef('RateSetting', import: _rateFile),
+  showIf: _rateShows,
+);
+
+const _rating = ModuleOrigin(ModuleId('rating'));
+
 const _screenPath = 'lib/features/settings/settings_screen.dart';
 
 const _settings = ModuleOrigin(ModuleId('settings'));
@@ -247,6 +260,48 @@ void main() {
         contains('The app import "lib/a.dart" must be a .dart path below lib/'),
       ]);
     });
+
+    test(
+        'shows always, or while a function of a file of the app says that it '
+        'shows', () {
+      expect(_theme.showIf, isNull);
+      expect(_rate.showIf, same(_rateShows));
+      expect(_rate.problems(), isEmpty);
+      expect('$_rate', 'settings entry RateSetting');
+    });
+
+    test(
+        'reports a function that is no public function of a file of the '
+        'app', () {
+      const private = SettingsEntry(
+        widget: TypeRef('RateSetting', import: _rateFile),
+        showIf: FunctionRef('_shows', import: _rateFile),
+      );
+      const ofPackage = SettingsEntry(
+        widget: TypeRef('RateSetting', import: _rateFile),
+        showIf: FunctionRef(
+          'isPhysicalDevice',
+          import: ImportRef('package:device_checks/device_checks.dart'),
+        ),
+      );
+      const outsideTheApp = SettingsEntry(
+        widget: TypeRef('RateSetting', import: _rateFile),
+        showIf: FunctionRef('rateShows', import: ImportRef.app('/a.dart')),
+      );
+
+      expect(private.problems(), [
+        'The function "_shows" is not a public Dart function name.',
+      ]);
+      expect(
+        ofPackage.problems().single,
+        'The function isPhysicalDevice of the settings entry RateSetting must '
+        'be a function of a file of the app, imported with ImportRef.app.',
+      );
+      expect(
+        outsideTheApp.problems().single,
+        contains('The app import "/a.dart" must be a .dart path below lib/'),
+      );
+    });
   });
 
   test('SettingsScreenRoute names a route of the provider', () {
@@ -301,6 +356,15 @@ void main() {
       ]) {
         expect(description, endsWith('.'));
       }
+      // The rules of the entries tell of the function of an entry too.
+      expect(
+        settingsScreenRole.moduleRules.first.description,
+        contains('the function that says whether the entry shows'),
+      );
+      expect(
+        settingsScreenRole.structuralRules.first.description,
+        contains('showIf requires no arguments and returns a bool'),
+      );
     });
   });
 
@@ -587,6 +651,44 @@ void main() {
       );
     });
 
+    test(
+        'reports a function of an entry outside the app with its '
+        'contributor, and accepts one of a file of the app', () {
+      final issues = template.validate(
+        _input([
+          _entryOf(_rate, module: 'rating'),
+          _entryOf(
+            const SettingsEntry(
+              widget: TypeRef('ThemeSetting', import: _themeFile),
+              showIf: FunctionRef(
+                'isPhysicalDevice',
+                import: ImportRef('package:device_checks/device_checks.dart'),
+              ),
+            ),
+            module: 'appearance',
+          ),
+          _entryOfRole(
+            const SettingsEntry(
+              widget: TypeRef('LanguageSetting', import: _languageFile),
+              showIf: FunctionRef('_shows', import: _languageFile),
+            ),
+            _languageRole,
+          ),
+        ]),
+      );
+
+      const ofPackage = 'The function isPhysicalDevice of the settings entry '
+          'ThemeSetting must be a function of a file of the app, imported '
+          'with ImportRef.app.';
+      const private =
+          'The function "_shows" is not a public Dart function name.';
+      expect([for (final issue in issues) issue.message], [ofPackage, private]);
+      expect(
+        [for (final issue in issues) issue.origin],
+        [_appearance, RoleTemplateOrigin(_languageRole)],
+      );
+    });
+
     test('rejects an entry that two contributors give, or one twice', () {
       final issues = template.validate(
         _input([
@@ -840,6 +942,97 @@ void main() {
               ),
             ),
           ),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test(
+        'accepts the function of an entry in the file of its widget, or in '
+        'another file that the bricks of the module generate, which needs no '
+        'condition', () {
+      const policyPath = 'lib/core/rating/rating_policy.dart';
+      expect(
+        _moduleIssues(_contributor, [
+          settingsScreenRole.data(_rate),
+          _brick([_ratePath], when: {settingsScreenRole}),
+        ]),
+        isEmpty,
+      );
+      expect(
+        _moduleIssues(_contributor, [
+          settingsScreenRole.data(
+            const SettingsEntry(
+              widget: TypeRef('RateSetting', import: _rateFile),
+              showIf: FunctionRef(
+                'ratingDue',
+                import: ImportRef.app('core/rating/rating_policy.dart'),
+              ),
+            ),
+          ),
+          _brick([_ratePath], when: {settingsScreenRole}),
+          // The function is of use without a settings screen too.
+          _brick([policyPath], name: 'rating'),
+        ]),
+        isEmpty,
+      );
+    });
+
+    test(
+        'rejects a function of an entry whose file the bricks that apply in '
+        'the app do not generate', () {
+      const policyPath = 'lib/core/rating/rating_policy.dart';
+      const module = ModuleDescriptor(
+        id: ModuleId('rating'),
+        description: 'Rating',
+        kind: ModuleKinds.infrastructure,
+        uses: {settingsScreenRole, diRole},
+      );
+      final contributions = [
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef('RateSetting', import: _rateFile),
+            showIf: FunctionRef(
+              'ratingDue',
+              import: ImportRef.app('core/rating/rating_policy.dart'),
+            ),
+          ),
+        ),
+        _brick([_ratePath], when: {settingsScreenRole}),
+        // The brick applies only in an app with the DI role.
+        _brick([policyPath], name: 'rating_policy', when: {diRole}),
+      ];
+
+      final issue = _moduleIssues(module, contributions).single;
+      expect(
+        issue.message,
+        'The function ratingDue of the settings entry RateSetting is in '
+        '$policyPath, which the bricks of the module do not generate.',
+      );
+      expect(
+          issue.hint,
+          'Generate the file of the function in a brick of '
+          'the module.');
+      expect(issue.origin, _rating);
+      expect(issue.path, policyPath);
+      expect(_moduleIssues(module, contributions, present: {diRole}), isEmpty);
+    });
+
+    test(
+        'leaves a function of an entry outside the app to the template of '
+        'the role', () {
+      expect(
+        _moduleIssues(_contributor, [
+          settingsScreenRole.data(
+            const SettingsEntry(
+              widget: TypeRef('RateSetting', import: _rateFile),
+              showIf: FunctionRef(
+                'isPhysicalDevice',
+                import: ImportRef('package:device_checks/device_checks.dart'),
+              ),
+            ),
+          ),
+          _brick([_ratePath], when: {settingsScreenRole}),
         ]),
         isEmpty,
       );
@@ -1137,6 +1330,259 @@ void main() {
         ),
         isEmpty,
       );
+    });
+
+    group('with the function of an entry', () {
+      /// The declaration of the function of [_rate] as [kind], returning
+      /// [type], with [parameters].
+      IndexedDeclaration shows(
+        String? type, {
+        List<IndexedParameter> parameters = const [],
+        DeclarationKind kind = DeclarationKind.function,
+      }) =>
+          IndexedDeclaration(
+            name: 'rateSettingShows',
+            kind: kind,
+            type: type,
+            parameters: parameters,
+          );
+
+      /// The file of [_rate], with its widget and [declarations].
+      DartFileIndex rateFile(List<IndexedDeclaration> declarations) =>
+          DartFileIndex(
+            path: _ratePath,
+            declarations: [
+              ..._widgetFile(_ratePath, 'RateSetting').declarations,
+              ...declarations,
+            ],
+          );
+
+      /// The issues for [_rate], an entry of the module `rating`, in an app
+      /// with [files], which `rating` generated unless [owners] say
+      /// otherwise.
+      List<SmfIssue> issuesOf(
+        List<DartFileIndex> files, {
+        Map<String, ContributionOrigin>? owners,
+      }) =>
+          _structureIssues(
+            [_entryOf(_rate, module: 'rating')],
+            files: files,
+            owners: owners ?? {for (final file in files) file.path: _rating},
+          );
+
+      const function = 'function rateSettingShows() in $_ratePath';
+
+      test(
+          'accepts a top-level function of the contributor that requires '
+          'no arguments and returns a bool', () {
+        final declared = rateFile([shows('bool')]);
+        expect(issuesOf([declared]), isEmpty);
+        // An optional parameter takes nothing from the screen.
+        expect(
+          issuesOf([
+            rateFile([
+              shows(
+                'bool',
+                parameters: const [
+                  IndexedParameter('again', kind: ParameterKind.optionalNamed),
+                  IndexedParameter(
+                    'platform',
+                    kind: ParameterKind.optionalPositional,
+                  ),
+                ],
+              ),
+            ]),
+          ]),
+          isEmpty,
+        );
+        // In another file of the contributor, of a variant of the module.
+        const policyPath = 'lib/core/rating/rating_policy.dart';
+        expect(
+          _structureIssues(
+            [
+              _entryOf(
+                const SettingsEntry(
+                  widget: TypeRef('RateSetting', import: _rateFile),
+                  showIf: FunctionRef(
+                    'rateSettingShows',
+                    import: ImportRef.app('core/rating/rating_policy.dart'),
+                  ),
+                ),
+                module: 'rating',
+              ),
+            ],
+            files: [
+              _widgetFile(_ratePath, 'RateSetting'),
+              DartFileIndex(path: policyPath, declarations: [shows('bool')]),
+            ],
+            owners: const {
+              _ratePath: _rating,
+              policyPath: ModuleOrigin(
+                ModuleId('rating'),
+                variant: ModuleId('bloc'),
+              ),
+            },
+          ),
+          isEmpty,
+        );
+      });
+
+      test('rejects a missing function and a missing file', () {
+        final missing = issuesOf([rateFile(const [])]).single;
+        expect(
+          missing.message,
+          '$_ratePath does not declare function rateSettingShows().',
+        );
+        expect(
+          missing.hint,
+          'The settings screen asks showIf without arguments whether it shows '
+          'the entry, each time it builds, and takes the answer at once.',
+        );
+        expect(missing.origin, _rating);
+        expect(missing.path, _ratePath);
+        const missingFile = '$_ratePath is missing, so it cannot declare';
+        expect(
+          [for (final issue in issuesOf(const [])) issue.message],
+          [
+            '$missingFile class RateSetting.',
+            '$missingFile function rateSettingShows().',
+          ],
+        );
+      });
+
+      test('rejects a function that takes an argument', () {
+        expect(
+          [
+            for (final issue in issuesOf([
+              rateFile([
+                shows(
+                  'bool',
+                  parameters: const [
+                    IndexedParameter(
+                      'context',
+                      kind: ParameterKind.requiredPositional,
+                      type: 'BuildContext',
+                    ),
+                    IndexedParameter(
+                      'platform',
+                      kind: ParameterKind.requiredNamed,
+                    ),
+                  ],
+                ),
+              ]),
+            ]))
+              issue.message,
+          ],
+          [
+            '$function must not require more than 0 positional arguments.',
+            '$function must not require the parameter platform.',
+          ],
+        );
+      });
+
+      test('rejects a function that does not return a bool, or no function',
+          () {
+        for (final type in [
+          'Future<bool>',
+          'bool?',
+          'void',
+          'Object',
+          null,
+        ]) {
+          expect(
+            issuesOf([
+              rateFile([shows(type)]),
+            ]).single.message,
+            '$function must return bool, not ${type ?? 'an undeclared type'}.',
+            reason: type,
+          );
+        }
+        for (final kind in [DeclarationKind.variable, DeclarationKind.getter]) {
+          expect(
+            issuesOf([
+              rateFile([shows('bool', kind: kind)]),
+            ]).single.message,
+            '$function must be a function, not a ${kind.name}.',
+            reason: kind.name,
+          );
+        }
+      });
+
+      test('rejects a function in a file of another contributor', () {
+        const policyPath = 'lib/core/rating/rating_policy.dart';
+        final issues = _structureIssues(
+          [
+            _entryOf(
+              const SettingsEntry(
+                widget: TypeRef('RateSetting', import: _rateFile),
+                showIf: FunctionRef(
+                  'rateSettingShows',
+                  import: ImportRef.app('core/rating/rating_policy.dart'),
+                ),
+              ),
+              module: 'rating',
+            ),
+            _entryOfRole(
+              const SettingsEntry(
+                widget: TypeRef('LanguageSetting', import: _languageFile),
+                showIf: _rateShows,
+              ),
+              _languageRole,
+            ),
+          ],
+          files: [
+            rateFile([shows('bool')]),
+            _widgetFile(_languagePath, 'LanguageSetting'),
+            DartFileIndex(path: policyPath, declarations: [shows('bool')]),
+          ],
+          owners: {
+            _ratePath: _rating,
+            _languagePath: RoleTemplateOrigin(_languageRole),
+            policyPath: _appearance,
+          },
+        );
+
+        const own = 'an entry asks a function of its own contributor.';
+        const rate = 'The function rateSettingShows of the settings entry '
+            'RateSetting of rating is in $policyPath, a file of appearance; '
+            '$own';
+        const language = 'The function rateSettingShows of the settings '
+            'entry LanguageSetting of role:language is in $_ratePath, a file '
+            'of rating; $own';
+        expect([for (final issue in issues) issue.message], [rate, language]);
+        expect(
+          [for (final issue in issues) issue.origin],
+          [_rating, RoleTemplateOrigin(_languageRole)],
+        );
+        expect(
+          [for (final issue in issues) issue.path],
+          [policyPath, _ratePath],
+        );
+      });
+
+      test('leaves a function outside the app to the template of the role', () {
+        expect(
+          _structureIssues(
+            [
+              _entryOf(
+                const SettingsEntry(
+                  widget: TypeRef('RateSetting', import: _rateFile),
+                  showIf: FunctionRef(
+                    'isPhysicalDevice',
+                    import: ImportRef(
+                      'package:device_checks/device_checks.dart',
+                    ),
+                  ),
+                ),
+                module: 'rating',
+              ),
+            ],
+            files: [rateFile(const [])],
+            owners: const {_ratePath: _rating},
+          ),
+          isEmpty,
+        );
+      });
     });
   });
 

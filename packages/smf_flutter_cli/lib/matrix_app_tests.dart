@@ -322,18 +322,19 @@ Future<MatrixAppTests> smfAppTests() async {
       // module has its title in, which the matrix writes from the
       // localization role of the app, English alone for an app without the
       // role. Below the title it shows the entries of the app in one
-      // group, or, in an app without settings, a note for its developer
-      // with the path of the file of the screen, which a tap copies. And
-      // it has a back button only on top of another screen, where the
-      // button leads back. For these, the matrix writes how many entries
-      // the screen has and whether it is a destination of the main
-      // navigation, where code cannot push it (see _settingsOfAppOf).
+      // group, also on iOS, where an entry may not show, or, while it has
+      // none to show, a note for its developer with the path of the file
+      // of the screen, which a tap copies. And it has a back button only on
+      // top of another screen, where the button leads back. For these, the
+      // matrix writes how many entries the screen shows and whether it is a
+      // destination of the main navigation, where code cannot push it (see
+      // _settingsOfAppOf).
       MatrixAppTest(
         '$settings/settings',
         appliesTo: _has(SettingsModule.id),
         generatedFiles: (app, packageName) => {
           ..._settingsLanguagesOf(app, packageName),
-          ..._settingsOfAppOf(app),
+          ..._settingsOfAppOf(app, packageName),
         },
       ),
       // The preferences of the module reach shared_preferences, and read
@@ -584,7 +585,8 @@ Future<MatrixAppTests> smfAppTests() async {
       // whichever module provides it: the route that the provider names
       // shows the screen, and the screen shows every entry that the
       // modules of the app give the role once, one below the other in the
-      // order of the role.
+      // order of the role, also on iOS, where it shows no entry whose
+      // function says that it does not show there.
       MatrixAppTest(
         '$cli/settings_screen_role',
         appliesTo: (app) => app.hook!.presentRoles.contains(settingsScreenRole),
@@ -2441,9 +2443,12 @@ List<String> closedGuards() => [
 /// route that the provider of the role names as the settings screen
 /// ([SettingsScreenRole.screenIn]), created as `const` from its class of
 /// the navigation of the router role, `settingsScreen`, the type of the
-/// screen that the route shows, and `settingsEntries`, the types of the
-/// widgets of the entries of the screen, in the order of the role
-/// ([SettingsScreenRole.entriesIn]).
+/// screen that the route shows, `settingsEntries`, the types of the
+/// widgets of the entries that the screen shows when a test reads it, in
+/// the order of the role ([SettingsScreenRole.entriesIn]), and
+/// `hiddenSettingsEntries`, those of the entries that it does not show
+/// then. The two are getters, which ask the function of each entry that
+/// has one ([SettingsEntry.showIf]).
 const settingsScreenFile = 'test/settings_screen_role/settings.dart';
 
 /// The file at [settingsScreenFile] of [app], an app of the matrix with
@@ -2451,25 +2456,34 @@ const settingsScreenFile = 'test/settings_screen_role/settings.dart';
 ///
 /// It imports the navigation of the router role without a prefix, since the
 /// names of its classes differ from those of the file, the file of the
-/// screen with the prefix `screen`, and the file of every entry once, with a
-/// prefix of its own, `entry0`, `entry1`, ..., so that no name clashes.
-/// Throws a [StateError] if the provider of the role names no route of its
-/// own, which the rules of the role report in an app of the matrix.
+/// screen with the prefix `screen`, and the file of every entry and of every
+/// function of an entry once, with a prefix of its own, `entry0`, `entry1`,
+/// ..., so that no name clashes. Throws a [StateError] if the provider of
+/// the role names no route of its own, which the rules of the role report
+/// in an app of the matrix.
 Map<String, String> _settingsOf(MatrixApp app, String packageName) {
   final input = settingsScreenRole.hookInput(app.hook!);
   final route = _settingsRouteOf(app, input);
   final screen = route.route.screen;
   final prefixes = {screen.import.resolveUri(packageName): 'screen'};
-  final entries = StringBuffer();
+  String prefixOf(ImportRef import) => prefixes.putIfAbsent(
+        import.resolveUri(packageName),
+        () => 'entry${prefixes.length - 1}',
+      );
+  final shown = StringBuffer();
+  final hidden = StringBuffer();
   for (final entry in settingsScreenRole.entriesIn(input)) {
-    final widget = entry.widget;
-    // The template of the role rejects an entry whose widget is not in a
-    // file of the app, so each has an import.
-    final prefix = prefixes.putIfAbsent(
-      widget.import!.resolveUri(packageName),
-      () => 'entry${prefixes.length - 1}',
-    );
-    entries.writeln('  ${widget.codeWith(prefix)},');
+    // The template of the role rejects an entry whose widget or whose
+    // function is not in a file of the app, so each has an import.
+    final widget = entry.widget.codeWith(prefixOf(entry.widget.import!));
+    final showIf = entry.showIf;
+    if (showIf == null) {
+      shown.writeln('  $widget,');
+      continue;
+    }
+    final asked = '${showIf.codeWith(prefixOf(showIf.import))}()';
+    shown.writeln('  if ($asked) $widget,');
+    hidden.writeln('  if (!$asked) $widget,');
   }
   final imports = [
     "import '${_navigationOf(packageName)}';",
@@ -2490,10 +2504,15 @@ const AppLocation settingsLocation = ${route.locationClass}();
 /// The type of the settings screen.
 const Type settingsScreen = screen.${screen.className};
 
-/// The types of the widgets of the entries of the settings screen, in the
-/// order in which the screen shows them.
-const List<Type> settingsEntries = [
-$entries];
+/// The types of the widgets of the entries that the settings screen shows
+/// now, in the order in which it shows them: an entry with a function that
+/// says whether it shows only while the function returns true.
+List<Type> get settingsEntries => [
+$shown];
+
+/// The types of the widgets of the entries that the settings screen does
+/// not show now: those whose function returns false.
+List<Type> get hiddenSettingsEntries => [${hidden.isEmpty ? '' : '\n$hidden'}];
 ''',
   };
 }
@@ -2621,35 +2640,61 @@ $texts};
 /// The path in an app of what the matrix writes for the tests of the group
 /// and of the back button of the settings screen that the settings module
 /// keeps in its `app_tests/settings`: `settingsEntryCount`, how many
-/// entries the screen has, and `settingsInMainNavigation`, whether the
-/// screen is a destination of the main navigation of the app.
+/// entries the screen shows when a test reads it, and
+/// `settingsInMainNavigation`, whether the screen is a destination of the
+/// main navigation of the app.
 const settingsOfAppFile = 'test/settings_of_app.dart';
 
 /// The file at [settingsOfAppFile] of [app], an app of the matrix with the
-/// settings screen role.
+/// settings screen role, whose package is [packageName].
 ///
 /// The entries are those of the role ([SettingsScreenRole.entriesIn]). An
-/// app without any has the note of the module for its developer on the
-/// screen. The screen is a destination when the app has the layout role and
-/// the route of the settings screen ([SettingsScreenRole.screenIn]) is one
-/// of the destinations of that role ([LayoutRole.destinationsIn]). The
-/// router role refuses to push a location of the main navigation over it,
-/// so the test of the back button pushes the screen only where it is no
+/// entry with a function that says whether it shows
+/// ([SettingsEntry.showIf]) counts only while the function returns true,
+/// so the count is a getter, which asks the functions through an import of
+/// the file of each with a prefix of its own. While the screen has no entry
+/// to show, it has the note of the module for the developer of the app.
+/// The screen is a destination when the app has the layout role and the
+/// route of the settings screen ([SettingsScreenRole.screenIn]) is one of
+/// the destinations of that role ([LayoutRole.destinationsIn]). The router
+/// role refuses to push a location of the main navigation over it, so the
+/// test of the back button pushes the screen only where it is no
 /// destination.
-Map<String, String> _settingsOfAppOf(MatrixApp app) {
+Map<String, String> _settingsOfAppOf(MatrixApp app, String packageName) {
   final input = settingsScreenRole.hookInput(app.hook!);
   final destination = _settingsInMainNavigationOf(app);
+  final entries = settingsScreenRole.entriesIn(input);
+  final prefixes = <String, String>{};
+  final counted = StringBuffer();
+  for (final entry in entries) {
+    final name = SmfNames.dartString(entry.widget.name);
+    if (entry.showIf case final showIf?) {
+      final prefix = prefixes.putIfAbsent(
+        showIf.import.resolveUri(packageName),
+        () => 'entry${prefixes.length}',
+      );
+      counted.writeln('  if (${showIf.codeWith(prefix)}()) $name,');
+    } else {
+      counted.writeln('  $name,');
+    }
+  }
+  final imports = [
+    for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
+      "import '$uri' as $prefix;",
+  ]..sort();
+  final count = prefixes.isEmpty ? '${entries.length}' : '[\n$counted].length';
   return {
     settingsOfAppFile: '''
 // What the settings screen has in the app and where it is, which the matrix
 // of SMF writes from the settings screen role and the layout role of the
 // app for the tests of the settings module, settings_group_test.dart and
 // settings_back_test.dart.
-
-/// How many entries the settings screen has: the settings of the modules
-/// of the app. Without any, the screen has a note for the developer of the
-/// app.
-const int settingsEntryCount = ${settingsScreenRole.entriesIn(input).length};
+${imports.isEmpty ? '' : '${imports.join('\n')}\n'}
+/// How many entries the settings screen shows now: the settings of the
+/// modules of the app, an entry with a function that says whether it shows
+/// only while the function returns true. Without any, the screen has a note
+/// for the developer of the app.
+int get settingsEntryCount => $count;
 
 /// Whether the settings screen is a destination of the main navigation of
 /// the app. Code cannot push such a screen on top of another one.

@@ -186,9 +186,10 @@ void main() {
 
     test(
         'has contributors of settings entries next to the settings module of '
-        'the CLI, two of them with a widget of one name, so that the tests of '
-        'the settings screen role check a screen with entries on a provider '
-        'that must work', () async {
+        'the CLI, two of them with a widget of one name and one with an entry '
+        'that shows only at times, so that the tests of the settings screen '
+        'role check a screen with entries on a provider that must work',
+        () async {
       final (:apps, :failed) = await everyModuleAppsOf(
         severalProvidersModules(),
       );
@@ -219,6 +220,21 @@ void main() {
             'analyzes only if the screen imports the file of each entry with '
             'a prefix of its own.',
       );
+      // The fixture setting that the screen leaves out on iOS, where the
+      // tests of the role and of the module look at the screen once more,
+      // next to entries that always show.
+      expect(
+        [
+          for (final entry in entries)
+            if (entry.showIf case final showIf?)
+              '${entry.widget.name} if ${showIf.name}()',
+        ],
+        ['FixtureHidingSetting if fixtureHidingSettingShows()'],
+        reason: 'Without an entry that shows only at times, the tests of the '
+            'settings screen role do not show that a screen leaves it out: '
+            'add a module with such an entry to severalProvidersModules().',
+      );
+      expect(entries.where((entry) => entry.showIf == null), isNotEmpty);
     });
   });
 

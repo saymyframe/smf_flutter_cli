@@ -180,6 +180,25 @@ _Creations _builtBy(RenderedApp app) => _Creations.of(
 ListLiteral _rowsOf(RenderedApp app) =>
     _argument(_builtBy(app).only('_Group'), 'children') as ListLiteral;
 
+/// The list of the entries that the settings screen of [app] shows, in an
+/// app with an entry that shows only at times: the value of the local
+/// variable `entries` of the method `build` of the screen, which lists them
+/// anew each time the screen builds.
+ListLiteral _shownEntriesOf(RenderedApp app) {
+  final build = _classOf(_parsed(app, _screen), 'SettingsScreen')
+      .body
+      .members
+      .whereType<MethodDeclaration>()
+      .singleWhere((method) => method.name.lexeme == 'build');
+  final variable = (build.body as BlockFunctionBody)
+      .block
+      .statements
+      .whereType<VariableDeclarationStatement>()
+      .expand((statement) => statement.variables.variables)
+      .singleWhere((variable) => variable.name.lexeme == 'entries');
+  return variable.initializer! as ListLiteral;
+}
+
 /// The names of what the file of the settings screen of [app] declares at
 /// its top level.
 List<String> _declaredBy(RenderedApp app) => [
@@ -1067,6 +1086,128 @@ void main() {
           expect(declared, contains('_Group'), reason: name);
         }
       }
+    });
+  });
+
+  group('the entries that the screen shows only at times', () {
+    // A library with a setting that always shows and one that shows only
+    // at times, whose function is in the file of the widgets; and a library
+    // whose only setting shows only at times, whose function is in a file
+    // of its own.
+    const fonts = SettingsInfrastructure(
+      'fonts',
+      settings: ['SizeSetting', 'FontSetting'],
+      hiding: {'FontSetting'},
+    );
+    const alerts = SettingsInfrastructure(
+      'alerts',
+      settings: ['AlertSetting'],
+      hiding: {'AlertSetting'},
+      functionsApart: true,
+    );
+    const registry = [..._modules, fonts, alerts];
+
+    /// The app of [modules], with the settings module, among [registry].
+    Future<RenderedApp> appOf(List<ModuleId> modules) async => (await _rendered(
+          [SettingsModule.id, ...modules],
+          registry: registry,
+        ))
+            .app!;
+
+    test(
+        'are asked each time the screen builds, through an import of the '
+        'file of each function with a prefix of its own, and the screen '
+        'creates each entry that shows as a constant, in the order of the '
+        'role', () async {
+      final app = await appOf([fonts.id, alerts.id]);
+
+      expect(
+        _rowsOf(app).elements.map((entry) => entry.toSource()),
+        [
+          'const entry0.SizeSetting()',
+          'if (entry0.fontSettingShows()) const entry0.FontSetting()',
+          'if (entry1.alertSettingShows()) const entry2.AlertSetting()',
+        ],
+      );
+      expect(_importsOf(app), {
+        'package:contract_app/${fonts.settingsFile}': 'entry0',
+        'package:contract_app/${alerts.functionsFile}': 'entry1',
+        'package:contract_app/${alerts.settingsFile}': 'entry2',
+        'package:flutter/material.dart': null,
+      });
+    });
+
+    test(
+        'are the rows of the group while they show, so the group draws a '
+        'line only between two entries that show', () async {
+      final app = await appOf([fonts.id]);
+      final built = _builtBy(app);
+
+      // The rows of the group are the entries that show, which the screen
+      // asks each time it builds, so the group is no constant.
+      final list = _argument(built.only('ListView'), 'children') as ListLiteral;
+      const group = '_Group(children: [const entry0.SizeSetting(), if '
+          '(entry0.fontSettingShows()) const entry0.FontSetting()])';
+      expect(
+        [for (final item in list.elements) item.toSource()],
+        ['title', 'const SizedBox(height: 20)', group],
+      );
+      // The group draws a line between each two of its rows, and an entry
+      // that does not show is no row.
+      expect(
+        _argument(
+          _Creations.of(_classOf(_parsed(app, _screen), '_Group'))
+              .only('Column'),
+          'children',
+        ).toSource(),
+        '[for (final (index, child) in children.indexed) ...[if (index > 0) '
+        'const Divider(height: 1, indent: 56), child]]',
+      );
+      // An entry always shows, so the screen never shows the note of an
+      // app without settings, and the app has none of its code.
+      expect(_declaredBy(app), ['SettingsScreen', '_Group']);
+      expect(
+        _argument(built.only('SafeArea'), 'child'),
+        isA<MethodInvocation>().having(
+          (child) => child.methodName.name,
+          'name',
+          'ListView',
+        ),
+      );
+      expect(app.files[_screen]!.text, isNot(contains('\n\n\n')));
+    });
+
+    test(
+        'leave the screen with the note for the developer of the app while '
+        'none of them shows, where each entry shows only at times', () async {
+      final app = await appOf([alerts.id]);
+      final child = _argument(_builtBy(app).only('SafeArea'), 'child');
+
+      expect(
+        _declaredBy(app),
+        ['_file', 'SettingsScreen', '_Group', '_NoSettings'],
+      );
+      // The screen lists the entries that show before it decides.
+      expect(
+        _shownEntriesOf(app).elements.map((entry) => entry.toSource()),
+        ['if (entry0.alertSettingShows()) const entry1.AlertSetting()'],
+      );
+      expect(child, isA<ConditionalExpression>());
+      final choice = child as ConditionalExpression;
+      expect(choice.condition.toSource(), 'entries.isEmpty');
+      // The note of an app without settings, below the title.
+      final note = _Creations.of(choice.thenExpression);
+      expect(note.byName.keys, containsAll(['LayoutBuilder', '_NoSettings']));
+      expect(note.byName.keys, isNot(contains('_Group')));
+      // The group of the entries that show, below the title.
+      final group = _Creations.of(choice.elseExpression);
+      expect(group.byName.keys, containsAll(['ListView', '_Group']));
+      expect(group.byName.keys, isNot(contains('_NoSettings')));
+      expect(
+        _argument(group.only('_Group'), 'children').toSource(),
+        'entries',
+      );
+      expect(app.files[_screen]!.text, isNot(contains('\n\n\n')));
     });
   });
 
