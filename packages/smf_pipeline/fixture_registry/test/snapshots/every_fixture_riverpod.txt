@@ -8131,7 +8131,7 @@ final AppReviewController appReview = AppReviewController();
 /// [appReview].
 ///
 /// It counts the launches of the app and remembers its last request in the
-/// preferences of the app. It asks for nothing by itself: only a call of
+/// preferences of the app. It asks for nothing on its own: only a call of
 /// [requestIfDue] asks.
 final class AppReviewController {
   /// Creates the controller, which reads the time from [now] and the App

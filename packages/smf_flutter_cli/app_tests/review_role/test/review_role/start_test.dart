@@ -1,6 +1,6 @@
 // A test that continuous integration runs in the apps with the review role,
 // whichever module provides it: a launch of the app counts itself, and asks
-// for no review by itself. The app asks only where its code calls
+// for no review on its own. The app asks only where its code calls
 // appReview.requestIfDue(), at a natural break, since the App Store asks
 // apps not to request a review when the user launches them. A first launch
 // saves one launch and the time of the first launch, and a later launch on
@@ -30,7 +30,7 @@ void main() {
 
   testWidgets(
     'a first launch counts itself and saves the time of the first launch, '
-    'and asks for no review by itself once its first screen is shown',
+    'and asks for no review on its own once its first screen is shown',
     (tester) async {
       final before = DateTime.now().toUtc();
       await startApp(tester);
@@ -57,7 +57,7 @@ void main() {
       expect(
         (saved.askedAt, saved.version),
         (null, null),
-        reason: 'A launch asks for no review by itself: the app asks only '
+        reason: 'A launch asks for no review on its own: the app asks only '
             'where its code calls appReview.requestIfDue().',
       );
     },
@@ -66,7 +66,7 @@ void main() {
 
   testWidgets(
     'a later launch on which a review is due counts itself, keeps the first '
-    'launch, and asks for no review by itself either',
+    'launch, and asks for no review on its own either',
     (tester) async {
       final now = DateTime.now().toUtc();
       await inRealTime(tester, 'the next launch', () async {

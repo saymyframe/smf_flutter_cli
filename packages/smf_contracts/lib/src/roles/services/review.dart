@@ -34,7 +34,7 @@ const reviewRole = ReviewRole._();
 ///
 /// The app asks for a review only where its code calls
 /// `appReview.requestIfDue()`, at a natural break, such as when the user
-/// has finished a task. The role asks for nothing by itself: the App Store
+/// has finished a task. The role asks for nothing on its own: the App Store
 /// asks apps not to request a review when the user launches them. When a
 /// review is due, the call asks the store for its own review dialog, and
 /// the app shows nothing around it, as the stores ask: no question of its

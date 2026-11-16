@@ -1664,7 +1664,7 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
 ///   flavor, and on iOS the App Store page of an App Store ID of digits,
 ///   which `appReview` reads from `.env`, and none without one; opening a
 ///   page gives the service exactly that page;
-/// - a launch of the app counts itself, and asks for no review by itself,
+/// - a launch of the app counts itself, and asks for no review on its own,
 ///   also on a launch on which a review is due: the app asks only where its
 ///   code calls `appReview.requestIfDue()`;
 /// - `appReview.requestIfDue()` over the service of the provider, on a
