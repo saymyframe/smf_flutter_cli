@@ -316,6 +316,14 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - On a 401 it gets a new token once and repeats once, for any method. Then it fails with `unauthorized`, which signs nobody out: decide in the app what that means.
 - A request made while the app starts, before `initAuth()` is over, waits for the start at most `anonymousWait`, and goes without a token if there is still no session. So make a request that needs the user after `bootstrap()`.
 
+## Remote config
+
+- `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart` holds the values of remote config, which a backend changes without a new version of the app. Its `value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave or the default of the parameter. It is a `ValueListenable`: a widget that follows a value reads it in `build` under a `ValueListenableBuilder`, and code that must not change on the screen reads it once, such as in `initState`. The app has one controller, so create no other `AppRemoteConfigController`.
+- The values never hold the start. The start makes active what the device kept from the last fetch, and an app with parameters fetches new values in the background, also each time the user comes back to it, which take effect at once. While the app has no parameter, it asks the backend nothing.
+- A parameter has a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and the same name and type in the backend of the provider. The code of a module reads only its own parameters.
+- Every value reaches every installation that fetches it, where anyone can read it: never put a secret into remote config, such as a key or a password.
+- A new provider implements `RemoteConfigService` of `lib/core/remote_config/remote_config_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/remote_config/app_remote_config.dart`, which exports `RemoteValues`, and calls neither `initRemoteConfig()` nor `createRemoteConfigService()` nor `appRemoteConfig.start()`. A test gives `appRemoteConfig.start()` a service of its own.
+
 ## Router
 
 - Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
@@ -532,6 +540,23 @@ A message that arrives while the app is in the foreground reaches `appPush.messa
 `appPush.taps` tells of each tap on a message while the app runs, and `appPush.launchMessage` is the message whose tap launched the app. Read both once the first screen is shown, and navigate as the rest of the app does. A tap on a message does not reach `appNotifications.taps`, so the code of the app sees each tap once.
 
 A message with data and no title or body reaches the app only while it is in the foreground. In the background, or when the app is closed, it runs no code of the app. Images in a message do not show on iOS, which needs an extension of the app for them.
+
+## Remote config
+
+The app reads values of remote config through `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart`. A backend of the provider changes them without a new version of the app. `appRemoteConfig.value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave the parameter, or its default while the backend gives none or gives a value that the type of the parameter does not take.
+
+The values never hold the start of the app. The start makes active what the last fetch got, which the device keeps, also without the network, and waits for that at most a second. In an app with parameters, the app then asks the backend for new values in the background, at the start and each time the user comes back to the app, and makes them active at once, also while a screen shows. Where the provider tells of values that the backend publishes while the app runs, they come the same way. While the app has no parameter, it asks the backend nothing: it starts asking with its first parameter. A widget that follows a value reads it in `build` under a `ValueListenableBuilder` of `appRemoteConfig`, and code that must not change on the screen reads it once, such as in `initState`.
+
+The parameters of the app:
+
+- `fake_config_user_greeting`, a text read as `fakeConfigUserGreeting`, by default `Hello`, from the module `fake_config_user`: The greeting of the fixture
+- `fake_config_user_enabled`, a Boolean read as `fakeConfigUserEnabled`, by default `true`, from the module `fake_config_user`: Whether the fixture is on
+- `fake_config_user_limit`, a whole number read as `fakeConfigUserLimit`, by default `3`, from the module `fake_config_user`: How many the fixture takes
+- `fake_config_user_ratio`, a number read as `fakeConfigUserRatio`, by default `0.5`, from the module `fake_config_user`: The ratio of the fixture
+
+To add a parameter of your own, give it a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and create it in the backend of the provider with the same name and type. The section of the module that provides remote config tells where its backend is.
+
+Every value reaches every installation of the app that fetches it, where anyone can read it. So never put a secret into remote config, such as a key or a password.
 
 ## REST API
 
@@ -964,6 +989,7 @@ import 'package:fixture_app/core/notifications/app_notifications.dart';
 import 'package:fixture_app/core/preferences/app_preferences.dart';
 import 'package:fixture_app/core/purchases/app_purchases.dart';
 import 'package:fixture_app/core/push/app_push.dart';
+import 'package:fixture_app/core/remote_config/app_remote_config.dart';
 import 'package:flutter/foundation.dart';
 
 @pragma('vm:entry-point')
@@ -985,6 +1011,7 @@ Future<void> bootstrap() async {
   await initNotifications();
   await initPurchases();
   await initPush();
+  await initRemoteConfig();
   debugPrint('di');
   await registerDependencies();
   debugPrint(createBadge().labels.join());
@@ -3410,6 +3437,25 @@ final class FixtureModel {
   /// The model as JSON.
   Map<String, dynamic> toJson() => _$FixtureModelToJson(this);
 }
+=== lib/core/fixture_config_user/fixture_config_user.dart (fake_config_user) ===
+import '../remote_config/app_remote_config.dart';
+
+/// What the fixture reads of remote config (fixture): the value of each of
+/// its parameters, one of each type, which the app has from the backend of
+/// the provider, or as the default of the parameter.
+abstract final class FixtureRemoteValues {
+  /// The greeting of the fixture.
+  static String get greeting => appRemoteConfig.value.fakeConfigUserGreeting;
+
+  /// Whether the fixture is on.
+  static bool get enabled => appRemoteConfig.value.fakeConfigUserEnabled;
+
+  /// How many the fixture takes.
+  static int get limit => appRemoteConfig.value.fakeConfigUserLimit;
+
+  /// The ratio of the fixture.
+  static double get ratio => appRemoteConfig.value.fakeConfigUserRatio;
+}
 === lib/core/fixture_crash/fixture_crash.dart (fake_crash) ===
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -4211,6 +4257,86 @@ final class FixturePush implements PushService {
     return null;
   }
 }
+=== lib/core/fixture_remote_config/fixture_remote_config.dart (fake_remote_config) ===
+import '../remote_config/remote_config_service.dart';
+
+/// What the backend of the fixture has, by parameter: no value of a
+/// parameter of the app, and the parameter of the check of the remote config
+/// role, which no app reads, as the role asks of the mocks of every provider.
+const Map<String, String> _backend = {
+  'remote_config_role_check': 'On the backend of the fixture',
+};
+
+/// What the last fetch got, by parameter. It stands for what the device
+/// keeps, which every start of the app finds as the last one left it.
+Map<String, String> _fetched = const {};
+
+/// The active values, by parameter, which the device keeps too.
+Map<String, String> _active = const {};
+
+/// When the last fetch that succeeded was, which the device keeps too.
+DateTime? _lastFetch;
+
+/// Waits for the answer of the system, which takes a moment, as with a
+/// provider that asks it: a turn of the event loop. So a test makes the
+/// calls of remote config in real time, as it runs the start-up of the app.
+Future<void> _answer() => Future<void>.delayed(Duration.zero);
+
+/// Creates the remote config of the fixture, as a start of the app does: it
+/// asks the backend nothing. Nothing outlives the process of the app, so
+/// each run of the tests of a file starts as on a first launch.
+RemoteConfigService createFixtureRemoteConfig() => FixtureRemoteConfig._();
+
+/// Remote config in memory: a backend with no value of a parameter of the
+/// app, which publishes nothing while the app runs, and a device that keeps
+/// what was fetched and activated from one start of the app to the next.
+final class FixtureRemoteConfig implements RemoteConfigService {
+  FixtureRemoteConfig._();
+
+  /// How often [fetch] may ask the backend at most.
+  Duration _interval = Duration.zero;
+
+  @override
+  Future<void> open(
+    Map<String, Object> defaults, {
+    required Duration fetchInterval,
+    required Duration fetchTimeout,
+  }) async {
+    await _answer();
+    _interval = fetchInterval;
+  }
+
+  @override
+  Future<bool> activate() async {
+    final changed = !_same(_fetched, _active);
+    _active = _fetched;
+    return changed;
+  }
+
+  @override
+  Map<String, String> get values => Map.unmodifiable(_active);
+
+  @override
+  Future<void> fetch() async {
+    await _answer();
+    final last = _lastFetch;
+    final now = DateTime.now();
+    if (last != null && now.difference(last) < _interval) return;
+    _fetched = Map.unmodifiable(_backend);
+    _lastFetch = now;
+  }
+
+  @override
+  bool get liveUpdates => false;
+
+  @override
+  Stream<void> get updates => const Stream<void>.empty();
+}
+
+/// Whether [one] and [other] have the same values of the same parameters.
+bool _same(Map<String, String> one, Map<String, String> other) =>
+    one.length == other.length &&
+    one.entries.every((entry) => other[entry.key] == entry.value);
 === lib/core/fixture_rest/fixture_rest_transport.dart (fake_rest) ===
 import 'dart:async';
 import 'dart:io';
@@ -6845,6 +6971,465 @@ abstract interface class PushService {
   /// The message whose tap launched the app, or `null` if the app was
   /// launched in another way.
   Future<PushMessage?> launchMessage();
+}
+=== lib/core/remote_config/app_remote_config.dart (role:remote_config) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/fixture_remote_config/fixture_remote_config.dart'
+    as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'remote_config_service.dart';
+import 'remote_values.dart';
+
+export 'remote_values.dart';
+
+/// The values of remote config of the app: `appRemoteConfig.value` has a
+/// getter for each parameter of the app.
+///
+/// It tells its listeners when the value of a parameter changes. A widget
+/// follows it with a `ValueListenableBuilder`, and code that must not change
+/// on the screen reads it once, such as in `initState`.
+final appRemoteConfig = AppRemoteConfigController._();
+
+/// Keeps the values of remote config of the app up to date with the service
+/// of the provider of remote config. The app has one, [appRemoteConfig].
+///
+/// The values never hold the start of the app: [start] makes active what
+/// the last fetch got, which the device keeps, and waits for that at most
+/// [startWait]. In an app with parameters, the controller then asks the
+/// backend for new values in the background, in a later turn of the event
+/// loop, and again each time the user comes back to the app, and makes them
+/// active at once. Where the service tells of values that the backend
+/// publishes while the app runs, the controller makes each active as it
+/// comes. While the app has no parameter, it asks the backend nothing and
+/// listens to nothing.
+///
+/// The calls of the service run one after another, and the controller drops
+/// those of a service that it no longer has. An error of the service keeps
+/// the values, reaches no handler of the uncaught errors of the app, and
+/// prints in a debug build. So does a value that the type of its parameter
+/// does not take, once, and the parameter reads its default.
+///
+/// It tells its listeners of a change only when the values of the
+/// parameters of the app change: from the completion of a call of the
+/// service, from the values that the service tells of, and from [start],
+/// which takes the defaults back. Never while a widget builds.
+final class AppRemoteConfigController extends ChangeNotifier
+    implements ValueListenable<RemoteValues> {
+  AppRemoteConfigController._();
+
+  /// How long [start] waits at most for the values that the device kept.
+  static const startWait = Duration(seconds: 1);
+
+  /// How often the service may ask the backend at most, also across
+  /// launches of the app: every 12 hours in a release build, which keeps the
+  /// app within the quotas of a backend, and at each fetch in a debug build,
+  /// so that a value that a developer changed shows at the next start.
+  static const fetchInterval = kDebugMode ? Duration.zero : Duration(hours: 12);
+
+  /// How long a fetch may take.
+  static const fetchTimeout = Duration(seconds: 10);
+
+  /// How much longer than [fetchTimeout] the controller waits for a fetch of
+  /// a provider that does not stop, before it goes on with the other calls
+  /// of the service.
+  static const fetchGrace = Duration(seconds: 5);
+
+  /// Whether the app has a parameter: an app without one asks the backend
+  /// nothing.
+  static bool get _asks => RemoteValues.defaults.isNotEmpty;
+
+  RemoteValues _values = RemoteValues.initial;
+
+  /// What the controller does with the service of the last start, if any.
+  _Run? _run;
+
+  /// Tells when the user comes back to the app.
+  _ResumeObserver? _observer;
+
+  /// The values of parameters that their types do not take, which the
+  /// controller printed.
+  final Set<String> _printed = {};
+
+  /// The values of the parameters of the app.
+  @override
+  RemoteValues get value => _values;
+
+  /// Starts with [service]: opens it, makes active what the last fetch got,
+  /// which the device keeps, and takes those values. In an app with
+  /// parameters, it then fetches new values in the background, in a later
+  /// turn of the event loop, and follows those that the service tells of.
+  ///
+  /// `initRemoteConfig()` calls it in `bootstrap()`. It waits at most
+  /// [startWait]: values that come later still become [value], and the app
+  /// starts without waiting for them.
+  ///
+  /// It may be called again, with the service that the app has from then
+  /// on: `initRemoteConfig()` does so in a test of the next launch of the
+  /// app, and a test gives it a service of its own. The controller then drops
+  /// the calls of the service before, and [value] has the defaults until the
+  /// new service gives its values.
+  Future<void> start(RemoteConfigService service) {
+    unawaited(_run?.updates?.cancel());
+    final run = _run = _Run(service);
+    _set(RemoteValues.initial);
+    if (_observer == null) {
+      final observer = _observer = _ResumeObserver(_onResume);
+      WidgetsBinding.instance.addObserver(observer);
+    }
+    final ready = _inTurn(run, () => _open(run));
+    // In a later turn of the event loop, so that the code that runs right
+    // after the start reads what the start made active, and the first frame
+    // does not wait for the backend.
+    if (_asks) unawaited(ready.then((_) => Timer.run(() => _follow(run))));
+    return ready.timeout(startWait, onTimeout: () {});
+  }
+
+  /// Opens the service of [run], and makes active what the device kept.
+  Future<void> _open(_Run run) async {
+    await run.service.open(
+      RemoteValues.defaults,
+      fetchInterval: fetchInterval,
+      fetchTimeout: fetchTimeout,
+    );
+    run.opened = true;
+    await _activate(run);
+  }
+
+  /// Follows the backend with the service of [run], once it opened: listens
+  /// to the values that the service tells of, if it tells of any, and
+  /// fetches.
+  void _follow(_Run run) {
+    if (!identical(run, _run) || !run.opened) return;
+    final service = run.service;
+    if (service.liveUpdates) {
+      run.updates = service.updates.listen(
+        (_) => _activateLater(run),
+        onError: (Object error) => _report(error),
+      );
+    }
+    _fetchLater(run);
+  }
+
+  /// The user came back to the app: in an app with parameters, the
+  /// controller fetches again, which the provider throttles to
+  /// [fetchInterval].
+  void _onResume() {
+    final run = _run;
+    if (run != null && _asks && run.opened) _fetchLater(run);
+  }
+
+  /// Fetches with the service of [run] in its turn and makes what it got
+  /// active, unless a fetch waits for its turn already.
+  void _fetchLater(_Run run) {
+    if (run.fetchWaits) return;
+    run.fetchWaits = true;
+    unawaited(
+      _inTurn(run, () async {
+        run.fetchWaits = false;
+        await run.service.fetch().timeout(fetchTimeout + fetchGrace);
+        await _activate(run);
+      }),
+    );
+  }
+
+  /// Makes active in its turn what the service of [run] told of, unless an
+  /// activation waits for its turn already.
+  void _activateLater(_Run run) {
+    if (run.activationWaits) return;
+    run.activationWaits = true;
+    unawaited(
+      _inTurn(run, () {
+        run.activationWaits = false;
+        return _activate(run);
+      }),
+    );
+  }
+
+  /// Makes active what the last fetch of the service of [run] got, and takes
+  /// the active values, while the controller has that service.
+  Future<void> _activate(_Run run) async {
+    if (!identical(run, _run)) return;
+    await run.service.activate();
+    if (identical(run, _run)) {
+      _set(RemoteValues.of(run.service.values, onInvalid: _printInvalid));
+    }
+  }
+
+  /// Runs [job] once the calls of [run] made before it are over, unless the
+  /// controller has another service by then. An error of [job] keeps the
+  /// values.
+  Future<void> _inTurn(_Run run, Future<void> Function() job) async {
+    final earlier = run.last;
+    final done = Completer<void>();
+    final own = run.last = done.future;
+    try {
+      if (earlier != null) await earlier;
+      if (identical(run, _run)) await job();
+    } on Object catch (error) {
+      _report(error);
+    } finally {
+      if (identical(run.last, own)) run.last = null;
+      done.complete();
+    }
+  }
+
+  /// Takes [values] as [value], and tells the listeners when that changes
+  /// it.
+  void _set(RemoteValues values) {
+    if (values == _values) return;
+    _values = values;
+    notifyListeners();
+  }
+
+  /// Prints [error] of the service in a debug build, which no caller sees.
+  void _report(Object error) {
+    if (kDebugMode) {
+      debugPrint('Remote config keeps its values; its service failed: $error');
+    }
+  }
+
+  /// Prints once in a debug build that [text], the value that the backend
+  /// gives [parameter], is not of the type of the parameter.
+  void _printInvalid(String parameter, String text) {
+    if (!kDebugMode || !_printed.add('$parameter=$text')) return;
+    final type = switch (RemoteValues.defaults[parameter]) {
+      bool() => 'bool',
+      int() => 'int',
+      double() => 'double',
+      _ => 'String',
+    };
+    debugPrint(
+      'Remote config gives $parameter the value "$text", which is no $type, '
+      'so the app reads its default.',
+    );
+  }
+}
+
+/// What the controller does with the service of one start: the calls of the
+/// service run one after another, and those of a service that the
+/// controller no longer has are dropped.
+final class _Run {
+  _Run(this.service);
+
+  final RemoteConfigService service;
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it.
+  Future<void>? last;
+
+  /// Whether the service opened.
+  bool opened = false;
+
+  /// Whether a fetch waits for its turn, so that a return to the app
+  /// meanwhile needs no other.
+  bool fetchWaits = false;
+
+  /// Whether an activation of what the service told of waits for its turn.
+  bool activationWaits = false;
+
+  /// The values that the service tells of, while the controller follows
+  /// them.
+  StreamSubscription<void>? updates;
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// Returns the service of the provider of remote config, which
+/// [initRemoteConfig] created: `bootstrap()` awaits it before the first
+/// frame, and there is none to return before that.
+///
+/// The code of the app does not call it: it reads the values from
+/// [appRemoteConfig].
+RemoteConfigService createRemoteConfigService() => _remoteConfigService;
+
+late RemoteConfigService _remoteConfigService;
+
+/// Creates the service of the provider of remote config and starts
+/// [appRemoteConfig] with it; `bootstrap()` awaits it before the first
+/// frame, and nothing else in the app calls it. It waits at most
+/// [AppRemoteConfigController.startWait] for the values that the device
+/// kept.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with what the device kept, and starts
+/// [appRemoteConfig] with it.
+Future<void> initRemoteConfig() async {
+  _remoteConfigService = impl0.createFixtureRemoteConfig();
+  await appRemoteConfig.start(_remoteConfigService);
+}
+=== lib/core/remote_config/remote_config_service.dart (role:remote_config) ===
+/// The backend of the values of remote config, which the provider of remote
+/// config implements: it keeps on the device what the last fetch got, and
+/// asks its backend for new values.
+///
+/// The code of the app does not use it: it reads the values from
+/// `appRemoteConfig` of `app_remote_config.dart`, which calls this service,
+/// applies the defaults of the parameters of the app, and makes new values
+/// active once they are fetched.
+///
+/// Every implementation keeps to this:
+/// - The function that creates the service asks the backend nothing. It may
+///   be called again, as at the next launch of the app, and the service that
+///   it returns then has what the device kept.
+/// - [open] comes once, before any other member.
+/// - What was activated stays on the device from one launch of the app to
+///   the next: after [open], [activate] makes what the last fetch got the
+///   active values, also without the network, and [values] has them.
+/// - [values] has the active values that the backend gave, and nothing else:
+///   never a default, and never a value that the provider makes up for a
+///   parameter that the backend lacks.
+/// - [fetch] asks the backend for its values, unless the last fetch that
+///   succeeded is more recent than the fetch interval of [open], also one of
+///   an earlier launch of the app. It fails when the backend cannot be
+///   reached or refuses, and the active values stay as they were.
+/// - [updates] is a broadcast stream, which tells of nothing where
+///   [liveUpdates] is false.
+abstract interface class RemoteConfigService {
+  /// Opens the service for [defaults], the parameters of the app by name,
+  /// each with the value that the app has while the backend gives none, of
+  /// the type of the parameter. [fetchInterval] is how often [fetch] may ask
+  /// the backend at most, also across launches of the app, and
+  /// [fetchTimeout] how long a fetch may take. It takes what the device kept
+  /// and asks the backend nothing.
+  Future<void> open(
+    Map<String, Object> defaults, {
+    required Duration fetchInterval,
+    required Duration fetchTimeout,
+  });
+
+  /// Makes what the last fetch got the active values, without asking the
+  /// backend, and returns whether they changed.
+  Future<bool> activate();
+
+  /// The active values that the backend gave, by parameter, as texts.
+  Map<String, String> get values;
+
+  /// Asks the backend for its values and keeps them for [activate], unless
+  /// the last fetch that succeeded is more recent than the fetch interval:
+  /// then it completes at once.
+  Future<void> fetch();
+
+  /// Whether [updates] tells of the values that the backend publishes while
+  /// the app runs.
+  bool get liveUpdates;
+
+  /// Tells of the values that the backend publishes while the app runs, once
+  /// the provider fetched them, so that [activate] makes them active: a
+  /// broadcast stream, which tells of nothing where [liveUpdates] is false.
+  /// Listening to it may open a connection to the backend.
+  Stream<void> get updates;
+}
+=== lib/core/remote_config/remote_values.dart (role:remote_config) ===
+import 'package:flutter/foundation.dart';
+
+/// The values of remote config that the code of the app reads: a getter for
+/// each parameter of the app, which returns the value that the backend gave
+/// the parameter, or its default while the backend gives none.
+///
+/// Add a parameter: give it a default in [defaults] and a getter, and create
+/// it in the backend of the provider with the same name and type. Every value
+/// reaches every installation that fetches it, where anyone can read it, so
+/// never put a secret into remote config.
+@immutable
+final class RemoteValues {
+  const RemoteValues._(this._values);
+
+  /// Each parameter of the app by name, with the value that the app reads
+  /// while the backend gives none, whose type is the type of the parameter:
+  /// a `String`, a `bool`, an `int` or a `double`.
+  static const Map<String, Object> defaults = {
+    'fake_config_user_greeting': 'Hello',
+    'fake_config_user_enabled': true,
+    'fake_config_user_limit': 3,
+    'fake_config_user_ratio': 0.5,
+  };
+
+  /// The values while the backend gives none: the [defaults].
+  static const initial = RemoteValues._(defaults);
+
+  /// The values of [texts], the active values that the backend gave, by
+  /// parameter: each parameter of the app takes its text as the type of its
+  /// default takes it, and its default when [texts] lacks it or when the type
+  /// does not take the text, which [onInvalid] is told of.
+  ///
+  /// A `bool` takes `true` and `false`, in any case; an `int` what
+  /// [int.tryParse] takes; a `double` a finite number that [double.tryParse]
+  /// takes; and a `String` any text.
+  factory RemoteValues.of(
+    Map<String, String> texts, {
+    void Function(String parameter, String text)? onInvalid,
+  }) {
+    final values = <String, Object>{};
+    for (final MapEntry(key: parameter, value: fallback) in defaults.entries) {
+      final text = texts[parameter];
+      final value = text == null ? fallback : _parsed(text, fallback);
+      if (text != null && value == null) onInvalid?.call(parameter, text);
+      values[parameter] = value ?? fallback;
+    }
+    return RemoteValues._(values);
+  }
+
+  /// [text] as a value of the type of [fallback], or `null` if that type does
+  /// not take it.
+  static Object? _parsed(String text, Object fallback) => switch (fallback) {
+    bool() => switch (text.toLowerCase()) {
+      'true' => true,
+      'false' => false,
+      _ => null,
+    },
+    int() => int.tryParse(text),
+    double() => switch (double.tryParse(text)) {
+      final number? when number.isFinite => number,
+      _ => null,
+    },
+    _ => text,
+  };
+
+  final Map<String, Object> _values;
+
+  /// The greeting of the fixture
+  String get fakeConfigUserGreeting =>
+      _values['fake_config_user_greeting']! as String;
+
+  /// Whether the fixture is on
+  bool get fakeConfigUserEnabled =>
+      _values['fake_config_user_enabled']! as bool;
+
+  /// How many the fixture takes
+  int get fakeConfigUserLimit => _values['fake_config_user_limit']! as int;
+
+  /// The ratio of the fixture
+  double get fakeConfigUserRatio =>
+      _values['fake_config_user_ratio']! as double;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteValues &&
+      defaults.keys.every(
+        (parameter) => _values[parameter] == other._values[parameter],
+      );
+
+  @override
+  int get hashCode => Object.hashAll([
+    for (final parameter in defaults.keys) _values[parameter],
+  ]);
+
+  @override
+  String toString() => 'RemoteValues($_values)';
 }
 === lib/core/rest/app_rest.dart (role:rest) ===
 import 'dart:async';

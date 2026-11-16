@@ -2604,6 +2604,10 @@ const _cases = [
   'fake_rest with auth',
   'fake_rest',
   'fake_rest_user',
+  // The fixture remote config, whose role neither requires nor uses a role,
+  // so its provider has one case, and the module that requires the role.
+  'fake_remote_config',
+  'fake_config_user',
   'fake_ci with env',
   'fake_ci',
   'fake_registrations (fake_di)',
