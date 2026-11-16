@@ -1915,6 +1915,54 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.remoteConfigStaticValues,
+        role: remoteConfigRole,
+        bug: 'Its values give each parameter of the app that the backend '
+            'lacks a value of its type that the provider makes up, an empty '
+            'text, false, 0 or 0.0, as a library does without the defaults, '
+            'so the app reads that value in place of the default of the '
+            'parameter.',
+        // The module that gives the role a parameter of each type, whose
+        // defaults the tests of the role read.
+        app: [FakeConfigUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/remote_config_role/provider_test.dart',
+            'on a first launch, the service has no value of a parameter of '
+                'the app, and each parameter of the app reads its default',
+            'a parameter that the backend lacks read a value of the provider '
+                'in place of its default',
+          ),
+          MatrixExpectedFailure(
+            'test/remote_config_role/next_start_test.dart',
+            'the next start ends within startWait with a new service of the '
+                'provider, and each parameter of the app still reads its '
+                'default',
+            'so after the next start each parameter of the app still reads '
+                'its default',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.remoteConfigForgettingActivated,
+        role: remoteConfigRole,
+        bug: 'Its service forgets what was fetched and activated each time it '
+            'opens, so the next start of the app has none of the values that '
+            'the launch before activated, and reads the defaults until the '
+            'next fetch.',
+        // No module with parameters, so that the tests of the role run in an
+        // app without parameters too, which asks the backend nothing.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/remote_config_role/next_start_test.dart',
+            'the device keeps what was activated from one launch to the next',
+            'The device keeps what was activated from one launch of the app '
+                'to the next',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.purchasesKeptByService,
         role: purchasesRole,
         bug: 'Its service keeps the purchases in a field of its own, for '
