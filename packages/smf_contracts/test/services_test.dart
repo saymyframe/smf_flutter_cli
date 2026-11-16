@@ -217,22 +217,59 @@ void main() {
         isNot(contains(contains('implementation'))),
       );
     });
+
+    test(
+        'lets each provider of the remote config role contribute one '
+        'implementation, whatever parameters it gives the role too', () {
+      RemoteConfigImplementation implementation(String name) =>
+          RemoteConfigImplementation(
+            type: TypeRef(name, import: const ImportRef.app('fakes/a.dart')),
+            create: FactoryRef(
+              'create$name',
+              import: const ImportRef.app('fakes/a.dart'),
+            ),
+          );
+      const parameter = RemoteConfigKey.boolean(
+        'vendor_verbose',
+        defaultValue: false,
+        description: 'Whether the vendor prints more',
+      );
+
+      expectOneImplementation<RemoteConfigData>(
+        remoteConfigRole,
+        implementation('A'),
+        implementation('B'),
+      );
+      // A parameter is no implementation.
+      for (final provides in [true, false]) {
+        expect(
+          _moduleIssues<RemoteConfigData>(
+            remoteConfigRole,
+            provides: provides,
+            implementations: [if (provides) implementation('A'), parameter],
+          ).map((issue) => issue.message),
+          isNot(contains(contains('implementation'))),
+        );
+      }
+    });
   });
 
   group('the templates of the service roles', () {
     test(
         'register the service in the DI container, but for the auth role, '
-        'the notifications role, the push role, the purchases role and the '
-        'REST role, whose services are not for the code of the app', () {
+        'the notifications role, the push role, the purchases role, the REST '
+        'role and the remote config role, whose services are not for the '
+        'code of the app', () {
       expect(
         authRole.template.contribute(testContext).whereType<RoleData<Object>>(),
         isEmpty,
       );
-      for (final role in [
+      for (final role in <Role>[
         notificationsRole,
         pushRole,
         purchasesRole,
         restRole,
+        remoteConfigRole,
       ]) {
         expect(
           role.template!
