@@ -17,8 +17,6 @@
 // module of the app, which the matrix sets up before the tests of each test
 // file (flutter_test_config.dart). Then each test starts appRemoteConfig with
 // a service of its own, as the role lets a test do.
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/remote_config/app_remote_config.dart';
 
@@ -32,9 +30,9 @@ void main() {
   // fails sooner.
   const timeout = Timeout(Duration(minutes: 2));
 
-  // The tests of typed values need a parameter of the app.
-  final withoutParameters =
-      appParameters.isEmpty ? 'The app has no parameter.' : null;
+  // The tests of typed values need a parameter of the app, and are skipped
+  // in an app without one.
+  final withoutParameters = appParameters.isEmpty;
 
   testWidgets(
     'the parameters of the app read their defaults until the service '
@@ -47,7 +45,8 @@ void main() {
           for (final parameter in appParameters)
             parameter.name: validTextOf(parameter).$1,
         },
-      )..holds['open'] = Completer<void>();
+      );
+      await holdInRealTime(tester, service, 'open');
       await startWith(tester, service);
       final beforeActivation = valuesOf(appRemoteConfig.value);
       await inRealTime(tester, 'the service opens', () async {
@@ -57,14 +56,14 @@ void main() {
       final activated = valuesOf(appRemoteConfig.value);
       service.backend = {
         for (final parameter in appParameters)
-          if (invalidTextOf(parameter) case final text?) parameter.name: text,
+          parameter.name: ?invalidTextOf(parameter),
       };
       await comeBack(tester);
       final invalid = valuesOf(appRemoteConfig.value);
 
       expect(
-        (beforeActivation, valuesOf(RemoteValues.initial)),
-        (defaultsOfApp, defaultsOfApp),
+        [beforeActivation, valuesOf(RemoteValues.initial)],
+        [defaultsOfApp, defaultsOfApp],
         reason: 'Until the service activated values, each parameter of the '
             'app reads its default.',
       );
@@ -99,7 +98,8 @@ void main() {
           for (final parameter in appParameters)
             parameter.name: validTextOf(parameter).$1,
         },
-      )..holds['open'] = Completer<void>();
+      );
+      await holdInRealTime(tester, service, 'open');
       late Duration took;
       await inRealTime(tester, 'a start that hangs', () async {
         final watch = Stopwatch()..start();
@@ -119,14 +119,14 @@ void main() {
             'for a service that hangs, but it took $took.',
       );
       expect(
-        (whileHanging, valuesOf(appRemoteConfig.value)),
-        (
+        [whileHanging, valuesOf(appRemoteConfig.value)],
+        [
           defaultsOfApp,
           {
             for (final parameter in appParameters)
               parameter.name: validTextOf(parameter).$2,
           },
-        ),
+        ],
         reason: 'While the service hangs, the parameters read their defaults, '
             'and the values that come later still become the values of the '
             'app.',
@@ -154,13 +154,13 @@ void main() {
 
       if (appParameters.isEmpty) {
         expect(
-          (atStart, afterComingBack, followed, quiet.calls),
-          (
+          [atStart, afterComingBack, followed, quiet.calls],
+          [
             ['open', 'activate'],
             ['open', 'activate'],
             false,
             ['open', 'activate'],
-          ),
+          ],
           reason: 'An app without parameters asks the backend nothing: its '
               'start opens the service and makes active what the device '
               'kept, and it fetches nothing, neither at the start nor when the '
@@ -215,10 +215,14 @@ void main() {
       });
 
       expect(
-        (parameter.read(appRemoteConfig.value), live.calls),
-        (value, [...before, 'activate']),
+        [parameter.read(appRemoteConfig.value), live.calls],
+        [
+          value,
+          [...before, 'activate'],
+        ],
         reason: 'A value that the backend publishes while the app runs, '
-            'which the service tells of, becomes active at once.',
+            'which the service tells of, becomes active at once, without a '
+            'fetch.',
       );
     },
     skip: withoutParameters,

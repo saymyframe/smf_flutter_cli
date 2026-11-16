@@ -105,11 +105,14 @@ Map<String, Object> get defaultsOfApp => {
 /// reads of it, which differs from the default of the parameter.
 (String, Object) validTextOf(AppParameter parameter) =>
     switch ((parameter.type, parameter.defaultValue)) {
-      ('boolean', final bool value) => value ? ('FALSE', false) : ('True', true),
+      ('boolean', final bool value) =>
+        value ? ('FALSE', false) : ('True', true),
       ('integer', final int value) => ('${value + 1}', value + 1),
       ('decimal', final double value) => ('${value + 0.25}', value + 0.25),
-      (_, final Object value) => ('$value, from the backend',
-          '$value, from the backend'),
+      (_, final Object value) => (
+          '$value, from the backend',
+          '$value, from the backend'
+        ),
     };
 
 /// A text that the type of [parameter] does not take, or `null` for a text,
@@ -127,18 +130,21 @@ String? invalidTextOf(AppParameter parameter) => switch (parameter.type) {
 /// of the values that the backend publishes. It notes each call that reaches
 /// it, and holds a call until a test lets it go.
 final class ScriptedRemoteConfig implements RemoteConfigService {
-  /// Creates the service on a device that kept [kept] of the last fetch,
-  /// which tells of the values that the backend publishes if [liveUpdates].
+  /// Creates the service on a device that kept [kept] of the last fetch, of
+  /// a backend that has what it kept, which tells of the values that the
+  /// backend publishes if [liveUpdates].
   ScriptedRemoteConfig({
     this.liveUpdates = false,
     Map<String, String> kept = const {},
-  }) : _fetched = {...kept};
+  })  : _fetched = {...kept},
+        backend = {...kept};
 
   @override
   final bool liveUpdates;
 
-  /// What the backend has, by parameter, which a fetch gets.
-  Map<String, String> backend = {};
+  /// What the backend has, by parameter, which a fetch gets: at first what
+  /// the device kept, so that the fetch of a start changes nothing.
+  Map<String, String> backend;
 
   /// The calls that reached the service, in their order: `open`,
   /// `activate` and `fetch`.
@@ -196,6 +202,18 @@ final class ScriptedRemoteConfig implements RemoteConfigService {
   @override
   Stream<void> get updates => _updates.stream;
 }
+
+/// Holds the next [call] of [service] until a test completes its completer.
+/// The completer is made in real time: one made in the fake time of the body
+/// of a widget test would let the call go only once that time runs.
+Future<void> holdInRealTime(
+  WidgetTester tester,
+  ScriptedRemoteConfig service,
+  String call,
+) =>
+    inRealTime(tester, 'holding $call', () async {
+      service.holds[call] = Completer<void>();
+    });
 
 /// Starts appRemoteConfig with [service], as the start-up of the app does
 /// with the service of the provider, and waits a moment for what the start
