@@ -17,7 +17,7 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode and shows the screen of a failed start, the auth role,
 /// the onboarding screen role, the notifications role, the push role, the
-/// purchases role, the env role and the REST role.
+/// purchases role, the env role, the REST role and the remote config role.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -486,6 +486,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // the CLI keeps: only in the apps with every module, which the matrix
       // has once more for each other mode of the auth role.
       await restSessionAppTest(among: (app) => app.everyModuleWith != null),
+      // The values of remote config of the apps with the remote config role,
+      // whichever module provides it, the test that the CLI keeps: only in the
+      // apps with every module, which run flutter test for other tests
+      // already. There the fixture remote config provides the role, and the
+      // module that reads parameters gives it one of each type.
+      await remoteConfigRoleAppTest(
+        among: (app) => app.everyModuleWith != null,
+      ),
       // The module that makes requests through the REST role, fake_rest_user:
       // it loads the notes of a server, a body of another shape is a reason of
       // the role, and it cancels its call when it is disposed of, whichever
@@ -526,6 +534,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       purchasesRole,
       envRole,
       restRole,
+      remoteConfigRole,
     },
   );
 }

@@ -163,9 +163,9 @@ void main() {
       'role, of the DI role, of the events role, of the preferences role, '
       'of the localization role, of the theme role, of the app entry role, '
       'of the auth role, of the onboarding screen role, of the notifications '
-      'role, of the push role, of the purchases role and of the env role with '
-      'every provider of each, which they tell apart by the roles of the app '
-      'only', () {
+      'role, of the push role, of the purchases role, of the env role and of '
+      'the remote config role with every provider of each, which they tell '
+      'apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -183,6 +183,7 @@ void main() {
         pushRole,
         purchasesRole,
         envRole,
+        remoteConfigRole,
       ]),
     );
     expect(named('auth_role').roles, {authRole});
@@ -201,6 +202,7 @@ void main() {
     expect(named('purchases_session').roles, {purchasesRole});
     expect(named('purchases_device').roles, {purchasesRole});
     expect(named('env_role').roles, {envRole});
+    expect(named('remote_config_role').roles, {remoteConfigRole});
     // The test of the module that reads values of .env tests a module.
     expect(named('env_variables').roles, isEmpty);
     expect(named('localization_role').roles, {localizationRole});
@@ -1024,6 +1026,59 @@ void main() {
       expect(roleTest.envValues!(app).keys, [key], reason: app.name);
       expect(sessionTest.envValues, isNull, reason: app.name);
       expect(moduleTest.envValues, isNull, reason: app.name);
+    }
+  });
+
+  test(
+      'the test of the remote config role applies to the apps with every '
+      'module, where the fixture remote config provides the role and the '
+      'module that reads parameters gives it one of each type, and not to the '
+      'apps of the two alone, which the matrix only analyzes', () {
+    final roleTest = named('remote_config_role');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    // The role neither requires nor uses a role, so its provider has one app,
+    // and the module that requires it one.
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(remoteConfigRole) &&
+              app.everyModuleWith == null)
+            app.name,
+      ],
+      ['fake_remote_config', 'fake_config_user'],
+    );
+    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    expect(roleTest.startProbe, isNull);
+    expect(roleTest.mocks, isNull);
+    expect(roleTest.envValues, isNull);
+    for (final app in everyModule) {
+      final keys = remoteConfigRole.keysIn(
+        remoteConfigRole.hookInput(app.hook!),
+      );
+      expect(
+        [for (final key in keys) (key.name, key.type)],
+        [for (final key in FakeConfigUserModule.keys) (key.name, key.type)],
+        reason: app.name,
+      );
+      expect(
+        {for (final key in keys) key.type},
+        RemoteParameterType.values.toSet(),
+        reason: 'The module gives the role a parameter of each type, so the '
+            'test reads each type in ${app.name}.',
+      );
+      final files = roleTest.generatedFiles!(app, 'fixture_app');
+      final file = files['test/remote_config_role/keys.dart']!;
+      for (final key in keys) {
+        expect(
+          file,
+          contains('read: (values) => values.${key.getter},'),
+          reason: app.name,
+        );
+      }
     }
   });
 
