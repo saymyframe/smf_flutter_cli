@@ -2053,6 +2053,22 @@ void main() {
     });
 
     test(
+        'tells that a request that the store did not take records nothing, '
+        'so that the next call asks again, and not the next launch', () async {
+      final section = await sectionWith(const {});
+
+      expect(
+        section,
+        contains(
+          'Elsewhere the request fails and the app records nothing, so the '
+          'next call of `appReview.requestIfDue()` asks again, also in the '
+          'same launch.',
+        ),
+      );
+      expect(section, isNot(contains('launch on which a review is due')));
+    });
+
+    test(
         'tells of the guards of the routes only in an app with guards, and '
         'of the entry only in an app with a settings screen', () async {
       const flows = 'It is never due in the flow of a guard of the routes';
