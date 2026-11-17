@@ -452,6 +452,15 @@ List<String> _languagesOf(String file) => [
         language[1]!,
     ];
 
+/// The matrix of the CLI with the one language that its apps are given,
+/// which several tests read: built once, when a test reads it first, since
+/// the contract harness renders each of its apps. The tests only read it.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})>
+    _englishMatrix = matrixOf(
+  smfModules,
+  roleOptions: const {'locales': 'en'},
+);
+
 /// The full names of the routes of the locations that the walk of the
 /// routes goes to, in its order, from the file that the matrix writes for
 /// it, [file].
@@ -3928,10 +3937,7 @@ void main() {
       'app', () async {
     final settings = named('settings');
     // The apps as they are, and with the one language that they are given.
-    final (apps: english, :failed) = await matrixOf(
-      smfModules,
-      roleOptions: const {'locales': 'en'},
-    );
+    final (apps: english, :failed) = await _englishMatrix;
     expect(failed, isEmpty);
 
     for (final (matrix, languages) in [
@@ -8030,10 +8036,7 @@ void main() {
     }
 
     // The apps as they are, and with the one language that they are given.
-    final (apps: english, :failed) = await matrixOf(
-      smfModules,
-      roleOptions: const {'locales': 'en'},
-    );
+    final (apps: english, :failed) = await _englishMatrix;
     expect(failed, isEmpty);
     for (final (matrix, languages) in [
       (apps, "['en', 'uk']"),
