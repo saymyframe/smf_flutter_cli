@@ -437,7 +437,7 @@ With `event_bus`:
 
 ## Feedback
 
-- `appFeedback` in `lib/core/feedback/app_feedback.dart` lets a user write to the developer: call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app. It opens the way of the provider, such as the mail app with a new mail, a form or a survey. It completes with `true` once that opened, without waiting for the user, or with `false`. It never throws, and a call while another is on its way does nothing.
+- `appFeedback` in `lib/core/feedback/app_feedback.dart` lets a user write to the developer: call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app. It opens what the provider offers, such as a new mail in the mail app, a form or a survey. It completes with `true` once that has opened, without waiting for the user, and with `false` otherwise. It never throws, and a call while another is on its way does nothing.
 - `appFeedback.available` tells whether the provider has what it needs, and does not change while the app runs: hide your own button while it is `false`.
 - Never ask anything before or around the review dialog of a store, and never make a way to write depend on whether the user rated the app.
 - A new provider implements `FeedbackService` of `lib/core/feedback/feedback_service.dart`, and only the files of its implementation import it. The code of the app calls neither `createFeedbackService()` nor `appFeedback.use()`, which is for tests.
@@ -629,7 +629,7 @@ With `dio`:
 ## Remote config
 
 - `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart` holds the values of remote config, which a backend changes without a new version of the app. Its `value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave or the default of the parameter. It is a `ValueListenable`: a widget that follows a value reads it in `build` under a `ValueListenableBuilder`, and code that must not change on the screen reads it once, such as in `initState`. The app has one controller, so create no other `AppRemoteConfigController`.
-- The values never hold the start. The start makes active what the device kept from the last fetch, and an app with parameters fetches new values in the background, also each time the user comes back to it, which take effect at once. While the app has no parameter, it asks the backend nothing.
+- The start never waits for a fetch: it makes active what the device kept from the last one. An app with parameters fetches new values in the background, also each time the user comes back to it, and they take effect at once. While the app has no parameter, it asks the backend nothing.
 - A parameter has a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and the same name and type in the backend of the provider. The code of a module reads only its own parameters.
 - Every value reaches every installation that fetches it, where anyone can read it: never put a secret into remote config, such as a key or a password.
 - A new provider implements `RemoteConfigService` of `lib/core/remote_config/remote_config_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/remote_config/app_remote_config.dart`, which exports `RemoteValues`, and calls neither `initRemoteConfig()` nor `createRemoteConfigService()` nor `appRemoteConfig.start()`. A test gives `appRemoteConfig.start()` a service of its own.
@@ -735,7 +735,7 @@ With `flutter_riverpod`:
 
 - `appReview` in `lib/core/review/app_review.dart` asks for the review dialog of the App Store or Google Play only where the code of the app calls `appReview.requestIfDue()`. Call it at a natural break, such as after the user has finished a task: `unawaited(appReview.requestIfDue());`. It asks only when `ReviewPolicy` says that a review is due: never on the first launch, in the flow of a guard of the routes, twice in a version or twice in 14 days. It returns nothing, since the store tells nothing.
 - Never call it from a button or after a question of your own, and show nothing around the dialog. Nothing in the app may depend on whether the app asked.
-- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, also from a build of another flavor.
+- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, even from a build of another flavor.
 - A new provider implements `ReviewService` of `lib/core/review/review_service.dart`, and only the files of that implementation import it. The code of the app calls neither `initReview()`, `createReviewService()` nor `appReview.start()`, and writes nothing under the keys `review.*`.
 
 - `ReviewSetting` in `lib/core/review/review_setting.dart`, an entry of the settings screen, opens the page of the app in its store for a review. It shows only where the app has a store page, and it never asks for the review dialog.
@@ -743,7 +743,7 @@ With `flutter_riverpod`:
 With `in_app_review`:
 
 - `InAppReviewService` in `lib/core/review/in_app_review_service.dart` implements `ReviewService` of `lib/core/review/review_service.dart`: it asks for the review dialog with `InAppReview.instance.requestReview()`, opens the page of the app in its store with `launchUrl` of url_launcher, and reads the version of the app with `PackageInfo.fromPlatform()` of package_info_plus. In `lib/`, only that file imports in_app_review.
-- Keep `openStoreListing()` of in_app_review out of the app: on Android it opens the page of the id of the build that runs, such as that of the flavor `dev`, which has no page in Google Play. `appReview.openStorePage()` opens the right page.
+- Keep `openStoreListing()` of in_app_review out of the app: on Android it opens the page for the id of the running build, such as that of the flavor `dev`, which has no page in Google Play. `appReview.openStorePage()` opens the right page.
 - The app asks for the dialog only where its code calls `appReview.requestIfDue()`. Google Play shows the dialog only in an app that it installed, such as from an internal test track, and the README of the app tells how to see it there. Never send a review while testing: Google Play shows no dialog to an account that has reviewed the app.
 - Through the dialog, Google Play collects the rating and the text of a review. Both stores require a link to a privacy policy in the listing of the app and inside the app.
 
@@ -761,9 +761,9 @@ With `in_app_review`:
 
 ## Update required
 
-- While the version of the app is below `updateRequiredMinimumVersion` of `appRemoteConfig.value`, the parameter `update_required_minimum_version` of remote config, the guard `update_required.supported` of `routeGuards` shows `UpdateRequiredScreen` of `lib/features/update_required/update_required_screen.dart`, the route `update_required.updateRequired` at `/update_required`, in place of every other screen. So no code navigates to it or away from it.
+- While the version of the app is below `updateRequiredMinimumVersion` of `appRemoteConfig.value` (the parameter `update_required_minimum_version` of remote config), the guard `update_required.supported` of `routeGuards` shows `UpdateRequiredScreen` of `lib/features/update_required/update_required_screen.dart` in place of every other screen. Its route is `update_required.updateRequired`, at `/update_required`. So no code navigates to it or away from it.
 - `updateStatus` in `lib/features/update_required/update_status.dart` has what the guard reads, `supported`, and starts in `bootstrap()`. It reads the version of the app with `PackageInfo.fromPlatform()`, without the build number, and compares it with `versionBelow()` of `lib/features/update_required/version_compare.dart`: number by number, a missing number is 0, and a version that is not numbers between dots keeps the app running.
-- The screen shows only where `appReview.hasStorePage` holds, so on iOS only with the App Store ID in `.env`. Its button calls `updateStatus.openStore()`, which opens the store page through `appReview.openStorePage()` and waits for it at most 10 seconds. Once the store opened, did not open or did not answer, the screen also shows "Not now", `updateStatus.continueForNow()`, which lets the user in for this launch below that lowest version.
+- The screen shows only where `appReview.hasStorePage` holds, so on iOS only with the App Store ID in `.env`. Its button calls `updateStatus.openStore()`, which opens the store page through `appReview.openStorePage()` and waits for it at most 10 seconds. Once the store has opened, failed to open or not answered, the screen also shows "Not now", `updateStatus.continueForNow()`, which lets the user in for this launch although the version is below the lowest one.
 - A test of another screen needs nothing: the default of the parameter is empty, so the app runs. A test of the screen gives `appRemoteConfig.start()` and `appReview.start()` services of its own, and `updateStatus.start(review: ...)` an `AppReviewController` of its own, such as one with an App Store ID that it scripts. It runs `updateStatus.start()` again for the next launch.
 
 ## Values in .env
@@ -1578,7 +1578,7 @@ While the version of the app is below the lowest version that may run, the scree
 
 The version of the app is its version name, such as `1.4.0` of `version: 1.4.0+12` in `pubspec.yaml`, without the build number. The two compare number by number, and a missing number is 0, so `1.2` equals `1.2.0` and `1.10.0` is above `1.9.2`. A lowest version that is not one to four numbers between dots, such as `2.0.0-beta`, keeps the app running, and a debug build prints why. The comparison is in `lib/features/update_required/version_compare.dart`.
 
-The screen is hard until the user taps "Update". From then on, or at once when no app of the device opened the store page, which the screen says, it also offers "Not now", which lets the user in for this launch. A store page that does not answer within 10 seconds counts as opened. So a lowest version above the version that the store has, set before the review of a release or during a staged rollout, costs a user one trip to the store and never locks anyone out. The next launch, and another lowest version, show the screen again.
+Until the user taps "Update", the screen offers no way into the app. From then on, or at once when no app of the device opened the store page, which the screen says, it also offers "Not now", which lets the user in for this launch. A store page that does not answer within 10 seconds counts as opened. So a lowest version above the version that the store has, set before the review of a release or during a staged rollout, costs a user one trip to the store and never locks anyone out. The next launch, and another lowest version, show the screen again.
 
 The store page is that of the section Store reviews: on Android the page of the app in Google Play, and on iOS its page in the App Store, which needs the App Store ID of the app in `REVIEW_APP_STORE_ID` of `.env`. Without it, the app has no store page on iOS, and the screen never shows there: a debug build says so. Before the app is in Google Play, "Update" leads to a page that says the item was not found.
 
@@ -22945,11 +22945,11 @@ final updateStatus = UpdateStatus._();
 /// version of the app with it, and keeps what the screen "Update required"
 /// offers. The app has one, [updateStatus].
 ///
-/// The screen is hard until the user taps "Update", which opens the page of
-/// the app in its store. From then on, or at once when the page did not
-/// open, it also offers "Not now", which lets the user in for this launch.
-/// So a lowest version above the version in the store, set too early, costs
-/// a user one trip to the store and never locks anyone out.
+/// Until the user taps "Update", which opens the page of the app in its store,
+/// the screen offers no way into the app. From then on, or at once when the
+/// page did not open, it also offers "Not now", which lets the user in for this
+/// launch. So a lowest version above the version in the store, set too early,
+/// costs a user one trip to the store and never locks anyone out.
 final class UpdateStatus {
   UpdateStatus._();
 
@@ -23105,7 +23105,8 @@ final class UpdateStatus {
         }
       }
     }
-    // The screen is hard again each time it takes the place of the app.
+    // The screen offers no way in again each time it takes the place of the
+    // app.
     if (!supported && _supported.value) _storeVisit.value = StoreVisit.none;
     _supported.value = supported;
   }

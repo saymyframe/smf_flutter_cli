@@ -5,11 +5,11 @@ The SMF module of store reviews with [in_app_review](https://pub.dev/packages/in
 The role decides when a review is due, and this module asks the store for its own review dialog: StoreKit on iOS, the In-App Review API of Google Play on Android. What holds with this provider, as with any other:
 
 - The app asks only where its code calls `appReview.requestIfDue()`. Nothing asks on its own, and the app shows nothing around the dialog.
-- A review is due from the third launch of the app, three days after its first launch, at most once a version and once in 14 days, and never in the flow of a guard of the routes, such as the onboarding.
-- `appReview.openStorePage()` opens the page of the app in its store: on Android the Google Play page of the id of the flavor for a release, also from a build of another flavor; on iOS the App Store page of `REVIEW_APP_STORE_ID` in `.env`.
-- In an app with a settings screen, the entry "Rate the app" opens the page for a review. It hides on iOS while `.env` has no App Store ID.
+- A review is due once the app has launched three times and three days have passed since its first launch. It is due at most once per version and once every 14 days, and never in the flow of a guard of the routes, such as the onboarding.
+- `appReview.openStorePage()` opens the page of the app in its store. On Android that is the Google Play page for the id of the release flavor, even from a build of another flavor. On iOS it is the App Store page of `REVIEW_APP_STORE_ID` in `.env`.
+- In an app with a settings screen, the entry "Rate the app" opens the page for a review. On iOS the entry is hidden while `.env` has no App Store ID.
 
-The module opens a page with `launchUrl` of [url_launcher](https://pub.dev/packages/url_launcher), never with `openStoreListing()` of the package, which on Android opens the page of the id of the build that runs. It reads the version of the app with [package_info_plus](https://pub.dev/packages/package_info_plus).
+The module opens a page with `launchUrl` of [url_launcher](https://pub.dev/packages/url_launcher), never with `openStoreListing()` of the package: on Android, that opens the page for the id of the running build. It reads the version of the app with [package_info_plus](https://pub.dev/packages/package_info_plus).
 
 Google Play shows the dialog only in an app that it installed, such as from an internal test track. The README of a generated app tells how to see it there, and what Google Play collects through it.
 

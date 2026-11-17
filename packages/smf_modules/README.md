@@ -36,7 +36,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_in_app_review` | `in_app_review`, the review dialog of the App Store and Google Play |
 | `smf_email_feedback` | `email_feedback`, feedback by email from the mail app of the device |
 | `smf_firebase_remote_config` | `firebase_remote_config`, remote config with Firebase Remote Config |
-| `smf_update_required` | `update_required`, the screen "Update required" below the lowest version of remote config |
+| `smf_update_required` | `update_required`, the screen "Update required" for a version below the lowest one in remote config |
 | `smf_github_actions` | `github_actions`, CI on GitHub Actions |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.

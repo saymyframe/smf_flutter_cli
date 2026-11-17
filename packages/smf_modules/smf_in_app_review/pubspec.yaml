@@ -1,5 +1,5 @@
 name: smf_in_app_review
-description: The SMF module of store reviews with in_app_review for the Flutter app that SMF generates. The app asks the App Store or Google Play for its review dialog and opens the page of the app in its store.
+description: The SMF module of store reviews with in_app_review for the Flutter app that SMF generates. The app asks the App Store or Google Play for its review dialog and opens its store page.
 version: 0.8.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_in_app_review

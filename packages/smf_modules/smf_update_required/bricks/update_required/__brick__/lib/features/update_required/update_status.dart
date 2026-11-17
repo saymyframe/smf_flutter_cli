@@ -33,11 +33,11 @@ final updateStatus = UpdateStatus._();
 /// version of the app with it, and keeps what the screen "Update required"
 /// offers. The app has one, [updateStatus].
 ///
-/// The screen is hard until the user taps "Update", which opens the page of
-/// the app in its store. From then on, or at once when the page did not
-/// open, it also offers "Not now", which lets the user in for this launch.
-/// So a lowest version above the version in the store, set too early, costs
-/// a user one trip to the store and never locks anyone out.
+/// Until the user taps "Update", which opens the page of the app in its store,
+/// the screen offers no way into the app. From then on, or at once when the
+/// page did not open, it also offers "Not now", which lets the user in for this
+/// launch. So a lowest version above the version in the store, set too early,
+/// costs a user one trip to the store and never locks anyone out.
 final class UpdateStatus {
   UpdateStatus._();
 
@@ -195,7 +195,8 @@ final class UpdateStatus {
         }
       }
     }
-    // The screen is hard again each time it takes the place of the app.
+    // The screen offers no way in again each time it takes the place of the
+    // app.
     if (!supported && _supported.value) _storeVisit.value = StoreVisit.none;
     _supported.value = supported;
   }
