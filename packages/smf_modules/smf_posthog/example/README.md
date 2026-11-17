@@ -15,10 +15,11 @@ Adding go_router: the only provider of the router role, which home requires.
 Adding dart_define: the only provider of the env role, which posthog requires.
 ```
 
-The module adds posthog_flutter to the `pubspec.yaml` of the app, and `lib/core/analytics/posthog_analytics_service.dart`, which starts PostHog and records to it. The analytics role adds `lib/core/analytics/analytics_service.dart` with the `AnalyticsService` interface, with `logEvent`, `logSignIn` and `logSignUp` among its methods, and `createAnalyticsService()`. `bootstrap()` starts PostHog:
+The module adds posthog_flutter to the `pubspec.yaml` of the app, and `lib/core/analytics/posthog_analytics_service.dart`, which starts PostHog and records to it. The analytics role adds `lib/core/analytics/analytics_service.dart` with the `AnalyticsService` interface, with `logEvent`, `logSignIn` and `logSignUp` among its methods, and `createAnalyticsService()`. `bootstrap()` checks the values of `.env` and starts PostHog:
 
 ```dart
 Future<void> bootstrap() async {
+  checkEnvValues(debugPrint);
   await initAnalytics();
 }
 ```
