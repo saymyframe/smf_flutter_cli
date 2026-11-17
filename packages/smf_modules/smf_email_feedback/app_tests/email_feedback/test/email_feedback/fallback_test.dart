@@ -7,12 +7,15 @@
 // and a sheet on the navigator at the root of the app shows a header, the
 // text and the address, in each language of the app and in the colours of a
 // light and of a dark theme. Its button copies exactly the address and says
-// so to a screen reader, and back closes it. A context that left the screen
-// during the open shows nothing. On a small phone with a large text size,
-// the sheet scrolls to its button above the inset at the bottom, shows the
-// address in full on one line, keeps the words of its title and of its text
-// whole, and the label of the button grows at most by half. In an app that
-// asks for less motion, the first frame has the sheet in place.
+// so to a screen reader, and back closes it. A screen on a navigator of its
+// own, as in a tab of the main navigation, still shows the sheet on the
+// navigator at the root. A context that left the screen during the open
+// shows nothing. On a small phone with a large text size, the sheet starts
+// below the inset at the top and scrolls to its button above the inset at
+// the bottom, shows the address in full on one line, keeps the words of its
+// title and of its text whole, and the label of the button grows at most by
+// half. In an app that asks for less motion, the first frame has the sheet
+// in place.
 //
 // It uses the service of the module and starts the app once, since the
 // start-up of an app may not run twice. Each expectation gives its reason.
@@ -41,8 +44,18 @@ void main() {
 
       /// Opens a mail from a page of the test with [theme] that no mail app
       /// opens, as [answer] says, and returns what the open completed with.
-      Future<bool?> openWithout(MailAnswer answer, {ThemeData? theme}) async {
-        final context = await contextBelowRoot(tester, theme: theme);
+      /// With [nested], it opens from a page of a navigator of its own inside
+      /// the page of the test.
+      Future<bool?> openWithout(
+        MailAnswer answer, {
+        ThemeData? theme,
+        bool nested = false,
+      }) async {
+        final context = await contextBelowRoot(
+          tester,
+          theme: theme,
+          nested: nested,
+        );
         device.next = answer;
         ({bool? answer, Object? error})? result;
         final errors = await errorsWhile(() async {
@@ -84,7 +97,13 @@ void main() {
         ]) {
           for (final MapEntry(key: name, value: theme) in themes.entries) {
             final where = 'in $code and the $name theme, as $platform answers';
-            final opened = await openWithout(answer, theme: theme);
+            // From a navigator of its own, as a screen in a tab of the main
+            // navigation is.
+            final opened = await openWithout(
+              answer,
+              theme: theme,
+              nested: true,
+            );
 
             expect(
               opened,
@@ -94,13 +113,14 @@ void main() {
             );
             expect(sheet, findsOneWidget, reason: 'The sheet shows, $where.');
             expect(
-              find.descendant(
-                of: find.byType(Navigator).first,
-                matching: sheet,
+              identical(
+                Navigator.of(tester.element(sheet)),
+                rootNavigatorOf(tester),
               ),
-              findsOneWidget,
+              isTrue,
               reason: 'The sheet is on the navigator at the root of the app, '
-                  'so it shows over the main navigation too, $where.',
+                  'though the screen that opened it is on a navigator of its '
+                  'own, so it shows over the main navigation too, $where.',
             );
             expect(
               [
@@ -235,6 +255,13 @@ void main() {
           isNull,
           reason: 'The sheet fits a small phone with a large text size, in '
               '$code.',
+        );
+        expect(
+          tester.getRect(sheet).top,
+          greaterThanOrEqualTo(40),
+          reason: 'The sheet starts below the inset at the top of the phone, '
+              'such as the status bar, so nothing of it is drawn under that '
+              'bar, in $code.',
         );
         for (final name in ['noMailTitle', 'noMailText']) {
           expectWholeWords(

@@ -499,14 +499,15 @@ void main() {
 
     test(
         'shows the sheet with the address on the navigator at the root of the '
-        'app, at once with less motion, with a header, a button that copies '
-        'the address and says so to a screen reader', () {
+        'app, below the status bar, at once with less motion, with a header, '
+        'a button that copies the address and says so to a screen reader', () {
       final code = _codeIn(app, sheetFile);
 
       expect(
         code,
         allOf([
           contains('useRootNavigator: true'),
+          contains('useSafeArea: true'),
           contains('showDragHandle: true'),
           contains('MediaQuery.disableAnimationsOf(context)'),
           contains('AnimationStyle.noAnimation'),

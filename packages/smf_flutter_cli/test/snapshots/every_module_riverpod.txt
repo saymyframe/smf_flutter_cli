@@ -5012,12 +5012,16 @@ import 'package:my_app/core/l10n/l10n.dart';
 /// Mail: the user copies the address and writes from their own email.
 ///
 /// It is a sheet on the navigator at the root of the app, so it shows over
-/// the main navigation too, and comes at once in an app that asks for less
-/// motion. Edit the texts among those of the email_feedback module.
+/// the main navigation too. It stays below the status bar, also where it
+/// takes the whole height of a small phone, and comes at once in an app that
+/// asks for less motion. Edit the texts among those of the email_feedback
+/// module.
 Future<void> showEmailFeedbackSheet(BuildContext context, String address) =>
     showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
+      // A sheet that may take the whole height starts below the status bar.
+      useSafeArea: true,
       showDragHandle: true,
       isScrollControlled: true,
       sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)

@@ -74,20 +74,34 @@ const _pageKey = ValueKey('email_feedback page of the test');
 /// root of the app, and returns a context in it: a context below the root of
 /// the app, with the texts of the app, as that of a button on a screen of the
 /// app is. With [theme], the page has that theme, which a sheet that it
-/// opens takes too. [closeTestPage] closes it.
+/// opens takes too. With [nested], the context is on a page of a navigator
+/// of its own inside that page, as that of a screen in a tab of the main
+/// navigation is. [closeTestPage] closes it.
 Future<BuildContext> contextBelowRoot(
   WidgetTester tester, {
   ThemeData? theme,
+  bool nested = false,
 }) async {
   unawaited(
     rootNavigatorOf(tester).push<void>(
       PageRouteBuilder<void>(
         pageBuilder: (context, animation, secondaryAnimation) {
-          const page = ColoredBox(
+          const content = ColoredBox(
             key: _pageKey,
             color: Color(0xFFFFFFFF),
             child: SizedBox.expand(),
           );
+          final Widget page = nested
+              ? Navigator(
+                  onGenerateRoute: (settings) => PageRouteBuilder<void>(
+                    settings: settings,
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        content,
+                    transitionDuration: Duration.zero,
+                    reverseTransitionDuration: Duration.zero,
+                  ),
+                )
+              : content;
           return theme == null ? page : Theme(data: theme, child: page);
         },
         transitionDuration: Duration.zero,
