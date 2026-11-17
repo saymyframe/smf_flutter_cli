@@ -85,15 +85,10 @@ final class BlocStateProvider extends RoleProvider<StateData> {
 /// entry as its doc, the widget [providerWidget], which provides them, and
 /// the class `ListenableCubit`.
 ///
-/// The file imports the library of each type and function once, with a
-/// prefix of its own, `state0`, `state1`, ..., in the order it first names
-/// them, so names of two feeders never clash.
+/// The file imports the library of each type and function as
+/// [SharedStateCode] says, so names of two feeders never clash.
 String cubitsFileOf(List<SharedState> entries, String appName) {
-  final libraries = _Libraries(appName);
-  final cubits = [
-    for (final entry in entries)
-      _cubitOf(entry, libraries.typeOf(entry), libraries.functionOf(entry)),
-  ];
+  final code = SharedStateCode(entries, appName: appName);
   return [
     '// The cubits that follow the values that controllers of the app keep,',
     '// one for each value, which the bloc module generates for the state',
@@ -101,23 +96,19 @@ String cubitsFileOf(List<SharedState> entries, String appName) {
     '// of the app. A widget reads one with context.watch, and code changes',
     '// the value only through the controller that the doc of its cubit',
     '// names.',
-    ...[
-      ...libraries.prefixed,
-      directiveOf(
-        'package:flutter/foundation.dart',
-        show: const ['ValueListenable'],
-      ),
-      directiveOf(
+    ...code.directives(const [
+      ImportRef('package:flutter/foundation.dart', show: ['ValueListenable']),
+      ImportRef(
         'package:flutter/widgets.dart',
-        show: const ['BuildContext', 'StatelessWidget', 'Widget'],
+        show: ['BuildContext', 'StatelessWidget', 'Widget'],
       ),
-      directiveOf(
+      ImportRef(
         'package:flutter_bloc/flutter_bloc.dart',
-        show: const ['BlocProvider', 'Cubit', 'MultiBlocProvider'],
+        show: ['BlocProvider', 'Cubit', 'MultiBlocProvider'],
       ),
-    ].sortedByUri,
+    ]),
     '',
-    cubits.join('\n\n'),
+    [for (final entry in entries) _cubitOf(entry, code)].join('\n\n'),
     '',
     _providerWidgetOf(entries),
     '',
@@ -126,15 +117,18 @@ String cubitsFileOf(List<SharedState> entries, String appName) {
 }
 
 /// The cubit of [entry], with the doc of its description, whose value has
-/// the type [type] and whose listenable [function] returns, each as the
-/// file writes it.
-String _cubitOf(SharedState entry, String type, String function) => [
-      ...docOf(entry.description),
-      'final class ${cubitOf(entry)} extends ListenableCubit<$type> {',
-      '  /// Creates the cubit, with the value that the controller has.',
-      '  ${cubitOf(entry)}() : super($function());',
-      '}',
-    ].join('\n');
+/// the type and whose listenable the function of the entry returns, each
+/// as [code] writes it.
+String _cubitOf(SharedState entry, SharedStateCode code) {
+  final cubit = cubitOf(entry);
+  return [
+    ...code.docOf(entry),
+    'final class $cubit extends ListenableCubit<${code.typeOf(entry)}> {',
+    '  /// Creates the cubit, with the value that the controller has.',
+    '  $cubit() : super(${code.functionOf(entry)}());',
+    '}',
+  ].join('\n');
+}
 
 /// The widget [providerWidget], which provides the cubits of [entries].
 String _providerWidgetOf(List<SharedState> entries) {
@@ -185,87 +179,3 @@ abstract base class ListenableCubit<T> extends Cubit<T> {
   }
 }
 ''';
-
-/// The libraries that the code of the bridges names, each imported once
-/// with a prefix of its own.
-final class _Libraries {
-  _Libraries(this._appName);
-
-  final String _appName;
-
-  /// The prefixes of the libraries, by their URIs in the app.
-  final Map<String, String> _prefixes = {};
-
-  /// The directives that import the libraries, in the order they were
-  /// first named.
-  List<({String uri, String line})> get prefixed => [
-        for (final MapEntry(key: uri, value: prefix) in _prefixes.entries)
-          directiveOf(uri, prefix: prefix),
-      ];
-
-  /// The prefix of the library of [import].
-  String _prefixOf(ImportRef import) => _prefixes.putIfAbsent(
-        import.resolveUri(_appName),
-        () => 'state${_prefixes.length}',
-      );
-
-  /// The type of the value of [entry] as the bridges write it.
-  String typeOf(SharedState entry) => entry.typeWith(
-        switch (entry.type.import) {
-          null => null,
-          final import => _prefixOf(import),
-        },
-      );
-
-  /// The function of [entry] as the bridges call it.
-  String functionOf(SharedState entry) =>
-      entry.listenable.codeWith(_prefixOf(entry.listenable.import));
-}
-
-/// The directive that imports [uri], with [prefix] or [show] if given, as
-/// `dart format` writes it: on one line, or with the rest on a line of its
-/// own when the line would be longer than 80 characters.
-({String uri, String line}) directiveOf(
-  String uri, {
-  String? prefix,
-  List<String> show = const [],
-}) {
-  final rest = [
-    if (prefix != null) 'as $prefix',
-    if (show.isNotEmpty) 'show ${show.join(', ')}',
-  ].join(' ');
-  final line = rest.isEmpty ? "import '$uri';" : "import '$uri' $rest;";
-  return (
-    uri: uri,
-    line: line.length <= 80 ? line : "import '$uri'\n    $rest;",
-  );
-}
-
-/// The lines of a doc comment with [text], with at most 80 characters on a
-/// line but for a word that is longer.
-List<String> docOf(String text) {
-  final lines = <String>[];
-  var line = StringBuffer('///');
-  for (final word in text.split(' ')) {
-    if (line.length > 3 && line.length + 1 + word.length > 80) {
-      lines.add('$line');
-      line = StringBuffer('///');
-    }
-    line.write(' $word');
-  }
-  return [...lines, '$line'];
-}
-
-/// The lines of a list of directives, in the order of their URIs, and of
-/// their lines for one URI.
-extension on List<({String uri, String line})> {
-  List<String> get sortedByUri => [
-        for (final directive in [...this]..sort(_byUri)) directive.line,
-      ];
-}
-
-int _byUri(({String uri, String line}) a, ({String uri, String line}) b) =>
-    switch (a.uri.compareTo(b.uri)) {
-      0 => a.line.compareTo(b.line),
-      final order => order,
-    };
