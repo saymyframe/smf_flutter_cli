@@ -331,27 +331,24 @@ final class BrokenProvider {
   /// in turn, as the fixture gates and the fixture feature are for a broken
   /// state manager.
   List<SmfModule> get registry {
-    final left = {
-      for (final other in fixtureModules())
-        if (other.descriptor.provides.contains(role)) other.descriptor.id,
+    final fixtures = {
+      for (final other in fixtureModules()) other.descriptor.id: other,
     };
-    var grew = true;
-    while (grew) {
-      grew = false;
-      for (final other in fixtureModules()) {
-        final descriptor = other.descriptor;
-        if (!left.contains(descriptor.id) &&
-            {
-              ...descriptor.dependsOn,
-              ...?descriptor.variants?.byProvider.keys,
-            }.any(left.contains)) {
-          grew = left.add(descriptor.id);
-        }
-      }
+    // The fixture modules have no cycle of dependencies, which the pipeline
+    // refuses, and each module that one of them depends on or has a variant
+    // for is a fixture module too.
+    bool leftOut(SmfModule other) {
+      final descriptor = other.descriptor;
+      return descriptor.provides.contains(role) ||
+          {
+            ...descriptor.dependsOn,
+            ...?descriptor.variants?.byProvider.keys,
+          }.any((id) => leftOut(fixtures[id]!));
     }
+
     return [
       for (final other in fixtureModules())
-        if (!left.contains(other.descriptor.id)) other,
+        if (!leftOut(other)) other,
       module,
     ];
   }
