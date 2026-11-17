@@ -556,6 +556,26 @@ void main() {
       });
 
       test(
+          'tells that the app asks only where its code asks, how Google Play '
+          'shows the dialog, that a test review is never sent, what Google '
+          'Play collects, and that both stores require a privacy policy', () {
+        expect(
+          agentNote,
+          allOf(
+            contains('The app asks for the dialog only where its code calls '
+                '`appReview.requestIfDue()`.'),
+            contains('Google Play shows the dialog only in an app that it '
+                'installed, such as from an internal test track'),
+            contains('A test review is never sent'),
+            contains('Google Play collects the rating and the text of a '
+                'review.'),
+            contains('Both stores require a link to a privacy policy in the '
+                'listing of the app and inside the app.'),
+          ),
+        );
+      });
+
+      test(
           'names the file of the module and what it declares and calls, the '
           'call of the app that asks, and the call of the package that it '
           'keeps out', () {
