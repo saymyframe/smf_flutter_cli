@@ -18,7 +18,8 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
-import 'package:smf_flutter_cli/matrix_app_tests.dart' show routerWalkFile;
+import 'package:smf_flutter_cli/matrix_app_tests.dart'
+    show routerWalkFile, stateBridgesFile;
 import 'package:test/test.dart';
 
 /// The full names of the routes of the locations that the walk of the
@@ -188,6 +189,7 @@ void main() {
         reviewRole,
         feedbackRole,
         analyticsRole,
+        stateManagementRole,
       ]),
     );
     // The test of the setting of collection checks that every provider of
@@ -242,6 +244,13 @@ void main() {
     expect(named('theme_look').roles, {appEntryRole});
     // Which flavor a command without --flavor builds only a run shows.
     expect(named('flavors').roles, {appEntryRole});
+    // The test of the bridges changes the values of the entries of the
+    // theme role, of the localization role and of the auth role through
+    // their controllers.
+    expect(
+      named('state_management_role').roles,
+      {stateManagementRole, themeRole, localizationRole, authRole},
+    );
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -1162,6 +1171,67 @@ void main() {
   });
 
   test(
+      'the test of the state management role applies to the apps with every '
+      'module, where a fixture state manager follows a value of each template '
+      'of a role that keeps one, remote config among them, and to no app of '
+      'a state manager without such a value', () {
+    final roleTest = named('state_management_role');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    // The apps of the fixture state managers alone, and those of the fixture
+    // feature, have no value to follow.
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(stateManagementRole) &&
+              app.everyModuleWith == null &&
+              !roleTest.appliesTo(app))
+            app.name,
+      ],
+      containsAll(['fake_bloc', 'fake_riverpod']),
+    );
+    for (final app in everyModule) {
+      final input = stateManagementRole.hookInput(app.hook!);
+      expect(
+        [
+          for (final entry in stateManagementRole.sharedStateIn(input))
+            '${entry.name} of ${entry.owner}',
+        ],
+        [
+          'localizationLocale of role:localization',
+          'themeMode of role:theme',
+          'authSession of role:auth',
+          'notificationsPermission of role:notifications',
+          'pushAddress of role:push',
+          'purchasesAccess of role:purchases',
+          'remoteConfigValues of role:remote_config',
+        ],
+        reason: app.name,
+      );
+      final file =
+          roleTest.generatedFiles!(app, 'fixture_app')[stateBridgesFile]!;
+      // The theme mode, the language and the session change in each app.
+      expect(
+        RegExp(r"^    entry: '(\w+)',$", multiLine: true)
+            .allMatches(file)
+            .map((match) => match[1]),
+        [
+          'themeMode',
+          'themeMode',
+          'localizationLocale',
+          'localizationLocale',
+          'authSession',
+        ],
+        reason: app.name,
+      );
+    }
+  });
+
+  test(
       'the test of the feedback role applies to the apps with every module, '
       'where the fixture feedback provides the role, but not to those of the '
       'fixture feedback alone, which the matrix only analyzes', () {
@@ -1196,6 +1266,30 @@ void main() {
     expect(roleTest.envValues, isNull);
     expect(roleTest.values, isNull);
     expect(roleTest.generatedFiles, isNull);
+    // The test of the entry "Write to us" is not registered for the
+    // fixtures: no app of their matrix has a settings screen next to the
+    // feedback, so it would apply to no app, which fails the run. Once an
+    // app of the matrix has both roles, such as with a fixture provider of
+    // the settings screen role, the test belongs among those of the
+    // fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'feedback_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({feedbackRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register feedbackSettingAppTest() in fixtureAppTests() for '
+          'these apps.',
+    );
   });
 
   test(
@@ -1328,6 +1422,30 @@ void main() {
       expect(roleTest.startProbe!.function, 'probeReview');
       expect(flowsTest.values, isNull);
     }
+    // The test of the entry that opens the page of the app in its store is
+    // not registered for the fixtures: no app of their matrix has a settings
+    // screen next to the reviews, so it would apply to no app, which fails
+    // the run. Once an app of the matrix has both roles, such as with a
+    // fixture provider of the settings screen role, the test belongs among
+    // those of the fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'review_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({reviewRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register reviewSettingAppTest() in fixtureAppTests() for these '
+          'apps.',
+    );
   });
 
   test(
@@ -2351,8 +2469,9 @@ void main() {
     test(
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
-        'role, of the purchases role, of the settings screen role and of the '
-        'theme role, the test of the paywall, the mocks of the fixture '
+        'role, of the purchases role, of the settings screen role, of the '
+        'theme role and of the remote config role, the test of the paywall, '
+        'the mocks of the fixture '
         'providers, the tests of the '
         'roles of several providers and the test of the onboarding screen '
         'role, which all apply to it', () {
@@ -2392,10 +2511,16 @@ void main() {
           'purchases_session',
           'purchases_setting',
           'paywall',
+          'email_feedback',
+          'feedback_role',
+          'feedback_setting',
           'app_icon_role',
           'launcher_icons',
           'splash_role',
           'native_splash',
+          'state_management_role',
+          'remote_config_role',
+          'firebase_remote_config',
         ]),
       );
       // The test of the purchases of the user of the device is for an app
@@ -2547,6 +2672,44 @@ void main() {
       expect(test.appliesTo(everyModule), isTrue);
       for (final app in matrix.where(test.appliesTo)) {
         for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            ofSeveral(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
+        }
+      }
+    });
+
+    test(
+        'has the entry "Write to us" on the settings screen, which the '
+        'template of the feedback role gives it with the provider of the CLI, '
+        'and the test of the entry, a test of the feedback role, applies to it '
+        'with the helpers of the tests of the settings screen and of the '
+        'feedback', () {
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(feedbackRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('email_feedback')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(everyModule.hook!)))
+            entry.file,
+        ],
+        contains(FeedbackRole.settingFile),
+      );
+      for (final name in ['feedback_role', 'feedback_setting']) {
+        expect(ofSeveral(name).roles, {feedbackRole}, reason: name);
+        expect(ofSeveral(name).appliesTo(everyModule), isTrue, reason: name);
+      }
+      final test = ofSeveral('feedback_setting');
+      for (final app in matrix.where(test.appliesTo)) {
+        for (final helper in ['settings_screen_role', 'feedback_role']) {
           expect(
             ofSeveral(helper).appliesTo(app),
             isTrue,

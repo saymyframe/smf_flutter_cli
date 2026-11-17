@@ -18,8 +18,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// the theme mode and shows the screen of a failed start, the auth role,
 /// the onboarding screen role, the notifications role, the push role, the
 /// purchases role, the env role, the REST role, the remote config role, the
-/// review role, the feedback role and the analytics role, whose providers
-/// keep the setting of collection.
+/// review role, the feedback role, the analytics role, whose providers keep
+/// the setting of collection, and the state management role, whose
+/// providers follow the values that the controllers of the app keep.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -537,6 +538,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // an app that takes what the user writes and says no when it is asked
       // whether it has one.
       await feedbackRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // The bridges of the state manager of the apps whose modules and roles
+      // give the state management role values that their controllers keep,
+      // whichever modules provide the roles, the test that the CLI keeps:
+      // the apps with every module, where the fixture state managers
+      // provide the role, next to the fixture theme, texts, sign-in,
+      // purchases, notifications, push messages and remote config, whose
+      // templates give it a value each.
+      await stateManagementRoleAppTest(),
       // The module that makes requests through the REST role, fake_rest_user:
       // it loads the notes of a server, a body of another shape is a reason of
       // the role, and it cancels its call when it is disposed of, whichever
@@ -597,6 +606,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       reviewRole,
       feedbackRole,
       analyticsRole,
+      stateManagementRole,
     },
   );
 }

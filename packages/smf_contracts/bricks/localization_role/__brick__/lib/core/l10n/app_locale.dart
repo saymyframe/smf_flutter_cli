@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../preferences/app_preferences.dart';
@@ -27,7 +28,8 @@ final appLocale = AppLocaleController._();
 
 /// Keeps the language that the user chose for the app, and saves each
 /// choice in the preferences of the app.
-final class AppLocaleController extends ChangeNotifier {
+final class AppLocaleController extends ChangeNotifier
+    implements ValueListenable<Locale?> {
   AppLocaleController._();
 
   Locale? _locale;
@@ -37,6 +39,7 @@ final class AppLocaleController extends ChangeNotifier {
 
   /// The language that the user chose, one of [appLocales], or `null` while
   /// the app follows the languages of the device.
+  @override
   Locale? get value => _locale;
 
   /// Chooses the language of [locale] as the language of the app, or with
@@ -86,6 +89,11 @@ Locale? _ofApp(String? code) {
   }
   return null;
 }
+
+/// The language that the user chose, as a [ValueListenable] for the state
+/// manager of the app: [appLocale], which changes it only through
+/// [AppLocaleController.choose].
+ValueListenable<Locale?> localizationLocaleListenable() => appLocale;
 
 /// Restores the language that the user chose from [preferences], which the
 /// app opened, and keeps them for the choices to come: a restorer of the

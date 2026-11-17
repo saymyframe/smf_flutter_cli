@@ -4,6 +4,8 @@ The SMF module that manages the state of screens with [Riverpod](https://riverpo
 
 It adds `flutter_riverpod` to the app and wraps the root widget in a `ProviderScope`. A module with screens supports Riverpod through its variant for `riverpod`, which brings the providers of its screens.
 
+In an app whose controllers keep values that screens read, such as the theme mode, the language, the session of sign-in, whether the onboarding is finished or the values of remote config, it also writes `lib/core/state/shared_state_providers.dart` with a provider for each value, such as `themeModeProvider`. A widget reads one with `ref.watch`. The providers only follow the values: code changes a value through its controller, which the doc of the provider names.
+
 ## Use with the SMF CLI
 
 `smf create` asks which module manages the state of the app, and offers none as well. To choose this one without the question:

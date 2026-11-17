@@ -14,6 +14,11 @@ export 'push_service.dart' show PushMessage;
 /// on them.
 final appPush = AppPushController._();
 
+/// The address of the device for push messages, as a [ValueListenable] for
+/// the state manager of the app: [AppPushController.address] of [appPush],
+/// `null` while the platform gives none.
+ValueListenable<String?> pushAddressListenable() => appPush.address;
+
 /// Receives the push messages of the app through the service of the
 /// provider of push messages. The app has one, [appPush].
 ///

@@ -29,16 +29,19 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_dio/smf_dio.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
+import 'package:smf_firebase_remote_config/smf_firebase_remote_config.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_in_app_review/smf_in_app_review.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
@@ -48,6 +51,7 @@ import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_posthog/smf_posthog.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -168,9 +172,10 @@ List<ModuleId> everyFixture({
     ];
 
 /// The registry of several providers: the modules of the CLI that provide a
-/// role an app can have several providers of, Firebase Crashlytics and
-/// Firebase Analytics, with the module they depend on, and PostHog, which
-/// reads its project token from the values of .env, next to the fixture
+/// role an app can have several providers of, Firebase Crashlytics, Sentry,
+/// which reads its DSN from the values of .env, Firebase Analytics and
+/// PostHog, which reads its project token from the values of .env, with the
+/// modules they depend on, next to the fixture
 /// providers of the same roles, whose start-up and services go through
 /// platform channels of their own; a fixture that provides both roles and
 /// notes each call that reaches it, which the tests of the roles look at;
@@ -240,7 +245,18 @@ List<ModuleId> everyFixture({
 /// the purchases of RevenueCat: that of the paywall, whose entry of the
 /// subscription the settings screen shows below the entries of the other
 /// features, and that of its step of the onboarding, which comes after the
-/// steps of the fixture steps and of the notifications role.
+/// steps of the fixture steps and of the notifications role. After them
+/// comes in_app_review, the provider of the review role that the CLI has, for
+/// the app test that it keeps and for the tests of that role that the CLI
+/// keeps, of the role and of its entry of the settings screen, which reads
+/// the App Store ID from the values of .env and shows on iOS only with one.
+/// Then comes email_feedback, the provider of the feedback role that the CLI
+/// has, for the app test that it keeps and for the tests of that role that
+/// the CLI keeps, of the role and of its entry "Write to us" of the settings
+/// screen, which shows only while the module has the address of .env. Then
+/// comes Firebase Remote Config, the provider of the remote config role that
+/// the CLI has, for the app test that it keeps and for the test of that role
+/// that the CLI keeps, which run there next to the other Firebase modules.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -260,6 +276,7 @@ List<SmfModule> severalProvidersModules() => const [
       GetItModule(),
       FirebaseCoreModule(),
       FirebaseCrashlyticsModule(),
+      SentryModule(),
       FirebaseAnalyticsModule(),
       PostHogModule(),
       FakeCrashModule(),
@@ -290,5 +307,8 @@ List<SmfModule> severalProvidersModules() => const [
       DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      InAppReviewModule(),
+      EmailFeedbackModule(),
+      FirebaseRemoteConfigModule(),
       LauncherIconsModule(),
     ];

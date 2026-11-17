@@ -342,6 +342,18 @@ final class FakePreferences implements AppPreferences {
 }
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the value, and sends back whether it returns the same listenable at each
+/// call, and whether that is `appNotifications.permission`.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['the same listenable at each call'] =
+      identical(notificationsPermissionListenable(), notificationsPermissionListenable());
+  result['the permission'] = identical(notificationsPermissionListenable(), appNotifications.permission);
+  port.send(result);
+}
+''';
+
 /// What the scripts for the test app share. `pump` lets what is on its way
 /// happen, `failureOf` tells what a call fails with, and `shown` a tap.
 const _notes = r'''
@@ -1496,6 +1508,36 @@ void main() {
       tearDownAll(() => app.delete());
 
       test(
+          'gives the state manager its value through a function of the file '
+          'of the controller, which returns the same listenable each time',
+          () async {
+        const state = NotificationsRole.permissionState;
+
+        expect(await app.run('$_notes$_listenable'), {
+          'the same listenable at each call': true,
+          'the permission': true,
+        });
+        expect(notificationsRole.feeds, {stateManagementRole});
+        expect(
+          [
+            for (final data in _dataFor(stateManagementRole)) data.value,
+          ],
+          [state],
+        );
+        expect(state.name, 'notificationsPermission');
+        expect(state.listenable.name, 'notificationsPermissionListenable');
+        expect(
+          state.listenable.import,
+          const ImportRef.app('core/notifications/app_notifications.dart'),
+        );
+        expect(state.type.name, 'NotificationPermission');
+        expect(state.type.import, state.listenable.import);
+        expect(state.nullable, isFalse);
+        expect(state.listenableType, 'ValueListenable<NotificationPermission>');
+        expect(state.problems(), isEmpty);
+      });
+
+      test(
           'asks once while the question of the system is shown, and every '
           'request then completes with its answer', () async {
         expect(await app.run('$_notes$_requests'), {
@@ -1724,7 +1766,9 @@ void main() {
       expect(data.single.when, isEmpty);
       final constructor = unit.declarations
           .whereType<ClassDeclaration>()
-          .single
+          .singleWhere(
+            (type) => type.namePart.typeName.lexeme == 'NotificationsSetting',
+          )
           .body
           .members
           .whereType<ConstructorDeclaration>()
@@ -1761,13 +1805,16 @@ void main() {
       }
 
       final row = created('ListTile').single;
-      expect(row['title'], 'Text(context.l10n.notificationsSettingTitle)');
+      expect(
+        row['title'],
+        '_WholeWords(context.l10n.notificationsSettingTitle)',
+      );
       expect(
         code,
         contains(
-          'permission == NotificationPermission.granted\n'
-          '              ? context.l10n.notificationsSettingOn\n'
-          '              : context.l10n.notificationsSettingOff,',
+          'final state = permission == NotificationPermission.granted\n'
+          '            ? context.l10n.notificationsSettingOn\n'
+          '            : context.l10n.notificationsSettingOff;',
         ),
       );
     });
@@ -1777,9 +1824,9 @@ void main() {
       final rendered = await _rendered(present: {settingsScreenRole});
       final english = rendered.files[NotificationsRole.settingFile]!;
 
-      expect(english, contains("title: Text('Notifications'),"));
+      expect(english, contains("title: _WholeWords('Notifications'),"));
       expect(english, contains("? 'On'"));
-      expect(english, contains(": 'Off',"));
+      expect(english, contains(": 'Off';"));
       expectParses(english);
     });
 
@@ -1797,12 +1844,24 @@ void main() {
         'appNotifications.request : appNotifications.openSettings',
       );
       // At a large text size, the value goes below the title, as in the
-      // other entries of the role templates.
-      expect(row['subtitle'], 'below ? state : null');
+      // other entries of the role templates, where it wraps between its
+      // words.
+      expect(
+        row['subtitle'],
+        'below ? DefaultTextStyle.merge(style: style, child: '
+        '_WholeWords(state)) : null',
+      );
       expect(
         row['trailing'],
         'below ? arrow : Row(mainAxisSize: MainAxisSize.min, children: '
-        '[state, const SizedBox(width: 4), arrow])',
+        '[Text(state, style: style), const SizedBox(width: 4), arrow])',
+      );
+      expect(
+        code,
+        contains(
+          'final style = '
+          'theme.textTheme.bodyMedium?.copyWith(color: muted);',
+        ),
       );
       expect(
         code,
@@ -1821,6 +1880,12 @@ void main() {
           'package:my_app/core/l10n/l10n.dart',
         ]),
       );
+    });
+
+    test(
+        'keeps the words of its texts whole at a large text size, with a '
+        'copy of WholeWords of its own', () {
+      expectWholeWordsCopy(code);
     });
   });
 

@@ -7,7 +7,9 @@
 // tap asks for the permission through the provider, and the entry shows
 // On. On a small phone with a large text size, once the list of the screen
 // scrolled to the entry, the state is below the title, and the texts stay
-// in the row of the entry.
+// in the row of the entry, in full, and keep their words whole, in each
+// language of the app: each is as large as the text size asks, or, where
+// its longest word would not fit, as large as that word allows.
 //
 // It knows only the two roles, and starts the app once, since the start-up
 // of an app may not run twice. The matrix writes setting.dart next to it,
@@ -18,12 +20,25 @@
 // the notifications role does. Both of those tests run in every app that
 // this one runs in. Each expectation gives its reason.
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/notifications/app_notifications.dart';
 
 import '../notifications_role/notifications_role.dart';
 import '../settings_screen_role/open_settings.dart';
 import 'setting.dart';
+
+/// A letter, a mark that belongs to one, a digit, or a no-break space, which
+/// keeps the words around it together: a line that starts between two of
+/// them starts inside a word.
+final RegExp _joined = RegExp(
+  r'[\p{L}\p{M}\p{N}\u00A0\u2007\u202F]',
+  unicode: true,
+);
+
+/// A white space between two words, where a line may break: every one but a
+/// no-break space.
+final RegExp _space = RegExp(r'[^\S\u00A0\u2007\u202F]');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -202,7 +217,161 @@ void main() {
         findsOneWidget,
         reason: 'The row of the entry keeps its arrow at a large text size.',
       );
+
+      // The texts of the row on the small phone, in each language of the
+      // app.
+      //
+      // Under flutter test every glyph of the font of the tests is one em
+      // wide, so at this size the title has about 160 pixels of room in its
+      // row, and even "On", 84 pixels wide below it, fits while
+      // "Notifications" does not: the title is smaller than the text size
+      // asks here. With the font of the app, such as Geist of
+      // material_theme, a shorter word fits at the size that the text size
+      // asks. So the size that this check sees is no look of the app: it
+      // checks that the texts keep their words whole and stay in the row,
+      // whichever size that takes.
+      for (final MapEntry(key: code, value: texts) in settingTexts.entries) {
+        tester.platformDispatcher.localesTestValue = [Locale(code)];
+        await tester.pumpAndSettle();
+        expect(
+          language(),
+          code,
+          reason: 'The app is in the language that the device asks for, '
+              '$code, one of its languages.',
+        );
+        await tester.scrollUntilVisible(entry, 100, scrollable: list);
+        await tester.pumpAndSettle();
+        for (final text in [texts.title, texts.on]) {
+          _expectInPlace(
+            tester,
+            inEntry(text),
+            entry,
+            'the row of the entry',
+            language: code,
+          );
+        }
+      }
+      tester.platformDispatcher.localesTestValue = [
+        Locale(settingTexts.keys.first),
+      ];
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'The entry of the notifications fits a small phone with a '
+            'large text size in each language of the app.',
+      );
     },
     timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
+
+/// Checks that [shown], a text that [place] shows in [placed], keeps its
+/// words whole on the small phone in [language] and stays in [placed], in
+/// full: it is laid out in the width that it has and drawn at the size of
+/// its layout, and no line starts between two letters or digits, or at a
+/// no-break space. The text is as large as the text size of the device, as
+/// [placed] has it, asks for its style, or, where its longest word would not
+/// fit the width that the text has at that size, as large as that word
+/// allows: smaller, with that word on a line of its own.
+void _expectInPlace(
+  WidgetTester tester,
+  Finder shown,
+  Finder placed,
+  String place, {
+  required String language,
+}) {
+  final paragraph = tester.renderObject<RenderParagraph>(
+    find.descendant(
+        of: shown, matching: find.byType(RichText), matchRoot: true),
+  );
+  final text = paragraph.text.toPlainText();
+  final box = tester.getRect(shown);
+  final bounds = tester.getRect(placed);
+  expect(
+    (box.left >= bounds.left, box.right <= bounds.right),
+    (true, true),
+    reason: '"$text" stays in $place on a small phone with a large text '
+        'size, in $language: it is at $box in $place at $bounds.',
+  );
+  expect(
+    (
+      paragraph.didExceedMaxLines,
+      paragraph.size.height < paragraph.textSize.height,
+    ),
+    (false, false),
+    reason: '"$text" shows in full in $place, on as many lines as it needs, '
+        'on a small phone with a large text size, in $language.',
+  );
+  // The text is laid out in the width that it has and drawn at the size of
+  // its layout: a FittedBox would lay it out in a width without a limit,
+  // on one line, and draw it smaller.
+  expect(
+    paragraph.constraints.maxWidth.isFinite,
+    isTrue,
+    reason: '"$text" is laid out in the width that it has, in $language, '
+        'and not in ${paragraph.constraints}, where it would not wrap.',
+  );
+  expect(
+    tester.getRect(shown).width,
+    closeTo(paragraph.size.width, 0.01),
+    reason: '"$text" is drawn at the size of its layout, in $language, and '
+        'nothing scales it.',
+  );
+  // The boxes of the characters from [start] to [end].
+  List<TextBox> boxesOf(int start, int end) => paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      );
+  // The top of the line of the character at [index], or `null` for one that
+  // the paragraph draws no box for.
+  double? lineOf(int index) => boxesOf(index, index + 1).firstOrNull?.top;
+  for (var index = 1; index < text.length; index++) {
+    if (!_joined.hasMatch(text[index - 1]) || !_joined.hasMatch(text[index])) {
+      continue;
+    }
+    final (before, after) = (lineOf(index - 1), lineOf(index));
+    if (before == null || after == null) continue;
+    final start = text.lastIndexOf(_space, index) + 1;
+    final end = switch (text.indexOf(_space, index)) {
+      -1 => text.length,
+      final space => space,
+    };
+    expect(
+      after,
+      closeTo(before, 0.5),
+      reason: 'On the small phone, "$text" breaks between its words and not '
+          'inside "${text.substring(start, end)}", in $language: where a '
+          'word would not fit, the text is as large as the word allows.',
+    );
+  }
+  // The width of the longest word: that of all its boxes.
+  var widest = 0.0;
+  var from = 0;
+  for (final word in text.split(_space)) {
+    if (word.isEmpty) continue;
+    final start = text.indexOf(word, from);
+    from = start + word.length;
+    final width = boxesOf(start, from).fold(
+      0.0,
+      (width, box) => width + box.right - box.left,
+    );
+    if (width > widest) widest = width;
+  }
+  // The size that the text size of the device asks for the style of the
+  // text, the text size as placed has it: a text that clamps the text size
+  // for itself is smaller than that. And the size of the text, 14 for a
+  // style that gives none, as in Flutter.
+  final element = tester.element(shown);
+  final largest = MediaQuery.textScalerOf(tester.element(placed))
+      .scale(DefaultTextStyle.of(element).style.fontSize ?? 14);
+  final size = paragraph.textScaler.scale(paragraph.text.style?.fontSize ?? 14);
+  final room = paragraph.constraints.maxWidth;
+  expect(
+    size <= largest + 0.01 &&
+        (size >= largest - 0.01 || (widest <= room && widest >= room * 0.9)),
+    isTrue,
+    reason: 'On the small phone, "$text" is as large as the text size asks, '
+        '$largest, or as large as its longest word allows, in $language: it '
+        'is $size, and its longest word takes $widest of $room.',
   );
 }

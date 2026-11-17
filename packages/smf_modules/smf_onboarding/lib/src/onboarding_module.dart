@@ -78,6 +78,13 @@ import 'package:smf_onboarding/src/agents.dart';
 /// Nothing is saved before the user finishes: an app that is closed in the
 /// middle of the onboarding starts it from its first page the next time.
 ///
+/// The module feeds the [StateManagementRole] whether the user has finished
+/// the onboarding, as an entry, [completedState]: in an app with a state
+/// manager, a bridge of the provider of that role follows
+/// `onboardingStatus.completed`, through `onboardingCompleted()`, the
+/// function that the guard asks. The module renders the same files without
+/// a state manager.
+///
 /// `onboardingStatus.restart()` starts the onboarding again, at once, and
 /// saves that, for an app that lets its user see the onboarding again. The
 /// guard stops allowing, so the router shows the onboarding in place of the
@@ -121,6 +128,19 @@ final class OnboardingModule extends SmfModule {
   /// has, and `false` once the onboarding starts again.
   static const completedKey = 'onboarding.completed';
 
+  /// Whether the user has finished the onboarding, as an entry of the
+  /// [StateManagementRole]: in an app with a state manager, a bridge of the
+  /// provider of that role follows `onboardingStatus.completed`, through
+  /// `onboardingCompleted()` of `lib/features/onboarding/onboarding_status.dart`,
+  /// the function that the guard of the routes asks.
+  static const completedState = SharedState(
+    'onboardingCompleted',
+    listenable: FunctionRef('onboardingCompleted', import: _status),
+    type: TypeRef('bool'),
+    description: 'Whether the user finished the onboarding; '
+        '`onboardingStatus.complete()` and `restart()` change it.',
+  );
+
   /// The texts of the screen: what its two pages say, but for the name of
   /// the app, and its buttons. `done` is the label of the button on the
   /// last page.
@@ -162,6 +182,7 @@ final class OnboardingModule extends SmfModule {
         providers: [RoleProvider.plain(onboardingScreenRole)],
         requires: {preferencesRole},
         uses: {localizationRole},
+        feeds: {stateManagementRole},
       );
 
   @override
@@ -206,6 +227,7 @@ final class OnboardingModule extends SmfModule {
           Fragment('restoreOnboarding', imports: [_status]),
         ),
         localizationRole.data(texts),
+        stateManagementRole.data(completedState),
         AppEntryRole.agentSections.entry(agentHeading, AgentNote(agentNote)),
       ];
 }

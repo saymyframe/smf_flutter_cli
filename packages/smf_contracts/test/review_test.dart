@@ -878,6 +878,24 @@ Map<String, String> _variablesOf(CompilationUnit unit) => {
           variable.name.lexeme: declaration.toSource(),
     };
 
+/// Finds each call of a method on [target], such as `appReview`, as the
+/// name of the method with its arguments, in the order of the code.
+final class _CallsOn extends RecursiveAstVisitor<void> {
+  _CallsOn(this.target);
+
+  final String target;
+
+  final found = <String>[];
+
+  @override
+  void visitMethodInvocation(MethodInvocation node) {
+    if (node.target case SimpleIdentifier(:final name) when name == target) {
+      found.add('${node.methodName.name}${node.argumentList.toSource()}');
+    }
+    super.visitMethodInvocation(node);
+  }
+}
+
 /// The named arguments of each creation of the class [className], in the
 /// order of the code.
 final class _NamedArgumentsOf extends RecursiveAstVisitor<void> {
@@ -1925,6 +1943,16 @@ void main() {
       expect(row['onTap'], contains('appReview.openStorePage(review: true)'));
       expect(row['onTap'], contains('SnackBar(content: Text(failed))'));
       expect(code, isNot(contains('requestIfDue')));
+      // No app test sees the flag, since a service of the tests gets the page
+      // that appReview gives it, whichever page that is.
+      final calls = _CallsOn('appReview');
+      unit.accept(calls);
+      expect(
+        calls.found,
+        ['openStorePage(review: true)'],
+        reason: 'The entry calls appReview only to open the page on which the '
+            'user writes a review, which only the App Store has apart.',
+      );
       expect(
         [
           for (final directive in unit.directives.whereType<ImportDirective>())
@@ -1936,6 +1964,13 @@ void main() {
           'package:my_app/core/l10n/l10n.dart',
         ]),
       );
+    });
+
+    test(
+        'keeps the words of its title whole, with a copy of WholeWords of its '
+        'own, the same as the copies of the other entries of the templates '
+        'of roles', () {
+      expectWholeWordsCopy(code);
     });
   });
 
@@ -2053,18 +2088,30 @@ void main() {
     });
 
     test(
-        'tells that a request that the store did not take records nothing, '
-        'so that the next call asks again, and not the next launch', () async {
+        'tells that a request that the store cannot take records nothing, so '
+        'that the next call asks again, and not the next launch, and that one '
+        'that Google Play takes for an app that it did not install counts, '
+        'though it shows nothing', () async {
       final section = await sectionWith(const {});
 
       expect(
         section,
-        contains(
-          'Elsewhere the request fails and the app records nothing, so the '
-          'next call of `appReview.requestIfDue()` asks again, also in the '
-          'same launch.',
+        allOf(
+          contains(
+            'On a device without the review service of Google Play, such as '
+            'an emulator without the Play Store, the store cannot take the '
+            'request and the app records nothing, so the next call of '
+            '`appReview.requestIfDue()` asks again, also in the same launch.',
+          ),
+          contains(
+            'On a device with the Play Store, for an app that Google Play did '
+            'not install, such as a local build, the request completes and '
+            'shows nothing, and the app counts it as a request, so it does '
+            'not ask again in that version of the app.',
+          ),
         ),
       );
+      expect(section, isNot(contains('Elsewhere')));
       expect(section, isNot(contains('launch on which a review is due')));
     });
 

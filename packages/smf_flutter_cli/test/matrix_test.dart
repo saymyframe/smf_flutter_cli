@@ -228,8 +228,9 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
 /// since the app has no layout. The apps of a module with the settings
-/// screen, such as those of the theme, of RevenueCat, of the paywall and of
-/// the notifications, get the settings feature for it, and the apps of the
+/// screen, such as those of the theme, of RevenueCat, of the paywall, of
+/// the notifications, of in_app_review and of email_feedback, get the
+/// settings feature for it, and the apps of the
 /// notifications and of the paywall with the onboarding screen get the
 /// onboarding feature, which has no route to start on either, and neither
 /// has the paywall. An
@@ -340,6 +341,22 @@ const _warningApps = <String, List<String>>{
   ],
   'sign_in (bloc)': ['router.no_main_navigation', 'router.no_start'],
   'sign_in (riverpod)': ['router.no_main_navigation', 'router.no_start'],
+  'in_app_review with router, settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'in_app_review with router, settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'email_feedback with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'email_feedback with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
 };
 
 void main() {
@@ -359,7 +376,8 @@ void main() {
       'localization and without each, which all get the values of .env, the '
       'apps of the paywall for each state manager with the localization, '
       'the settings screen and the onboarding screen and without each, which '
-      'get RevenueCat, the values of .env and the router, the apps of CI with '
+      'get RevenueCat, the values of .env and the router, the app of Firebase '
+      'Remote Config, which gets Firebase, the apps of CI with '
       'the values of .env and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
@@ -396,8 +414,9 @@ void main() {
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
-        'revenuecat, paywall, dart_define, firebase_crashlytics, '
-        'firebase_analytics, posthog, '
+        'revenuecat, paywall, in_app_review, email_feedback, '
+        'firebase_remote_config, dart_define, '
+        'firebase_crashlytics, sentry, firebase_analytics, posthog, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
@@ -647,6 +666,57 @@ void main() {
             'paywall ($stateManager)$uses (paywall,',
             '${others.replaceFirst('%', stateManager)})',
           ].join(' '),
+      // in_app_review with each subset of the roles that the review role
+      // uses, the settings screen with the router that it requires, and the
+      // providers of the preferences and of the values of .env, which the
+      // role requires.
+      equals(
+        'in_app_review with router, settings_screen, localization '
+        '(in_app_review, go_router, settings, gen_l10n, flutter_core, '
+        'shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with router, settings_screen (in_app_review, '
+        'go_router, settings, flutter_core, shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with router, localization (in_app_review, go_router, '
+        'gen_l10n, flutter_core, shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with router (in_app_review, go_router, flutter_core, '
+        'shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with localization (in_app_review, gen_l10n, '
+        'flutter_core, shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review (in_app_review, flutter_core, shared_preferences, '
+        'dart_define)',
+      ),
+      // email_feedback with each subset of the roles that the feedback role
+      // uses, the settings screen with the router that it requires and the
+      // localization with the preferences that it requires, and the
+      // provider of the values of .env, which the module requires.
+      equals(
+        'email_feedback with settings_screen, localization (email_feedback, '
+        'settings, gen_l10n, flutter_core, dart_define, go_router, '
+        'shared_preferences)',
+      ),
+      equals(
+        'email_feedback with settings_screen (email_feedback, settings, '
+        'flutter_core, dart_define, go_router)',
+      ),
+      equals(
+        'email_feedback with localization (email_feedback, gen_l10n, '
+        'flutter_core, dart_define, shared_preferences)',
+      ),
+      'email_feedback (email_feedback, flutter_core, dart_define)',
+      equals(
+        'firebase_remote_config (firebase_remote_config, firebase_core, '
+        'flutter_core)',
+      ),
       'dart_define (dart_define, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -656,6 +726,10 @@ void main() {
         'firebase_crashlytics (firebase_crashlytics, firebase_core, '
         'flutter_core)',
       ),
+      // Sentry with the DI container, which registers the reporter, and
+      // without, each with the provider of the env role, which it requires.
+      'sentry with di (sentry, get_it, flutter_core, dart_define)',
+      'sentry (sentry, flutter_core, dart_define)',
       equals(
         'firebase_analytics with di, router (firebase_analytics, get_it, '
         'go_router, firebase_core, flutter_core)',
@@ -907,11 +981,11 @@ void main() {
       ModuleId('dependent'),
       dependsOn: {ModuleId('external')},
     );
-    // Crash reports come only from Firebase Crashlytics, which depends on
-    // Firebase Core, whose step configures an app in a Firebase project.
-    const reporter = _WithSteps(
-      ModuleId('reporter'),
-      requires: {crashReportingRole},
+    // Push messages come only from Firebase Cloud Messaging, which depends
+    // on Firebase Core, whose step configures an app in a Firebase project.
+    const messages = _WithSteps(
+      ModuleId('messages'),
+      requires: {pushRole},
     );
     final modules = [
       ...smfModules,
@@ -919,7 +993,7 @@ void main() {
       external,
       followUp,
       dependent,
-      reporter,
+      messages,
     ];
 
     final (:apps, :failed) = await everyModuleAppsOf(
@@ -931,8 +1005,9 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
-        'event_bus, shared_preferences, dio, revenuecat, paywall, dart_define, '
-        'posthog, launcher_icons, native_splash, github_actions, local)';
+        'event_bus, shared_preferences, dio, revenuecat, paywall, '
+        'in_app_review, email_feedback, dart_define, sentry, posthog, '
+        'launcher_icons, native_splash, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -953,7 +1028,7 @@ void main() {
           ModuleId('external'),
           ModuleId('follow_up'),
           ModuleId('dependent'),
-          ModuleId('reporter'),
+          ModuleId('messages'),
         ]),
       );
     }
@@ -2957,7 +3032,10 @@ Type type() => Types;
               'dio',
               'revenuecat',
               'paywall',
+              'in_app_review',
+              'email_feedback',
               'dart_define',
+              'sentry',
               'posthog',
               'launcher_icons',
               'native_splash',

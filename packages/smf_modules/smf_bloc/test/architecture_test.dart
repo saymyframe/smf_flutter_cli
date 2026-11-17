@@ -9,8 +9,15 @@ void main() {
     expect(
       const ModulePackage(
         'smf_bloc',
-        // The app entry of the apps that the tests render.
-        testModules: {'smf_flutter_core'},
+        testModules: {
+          // The app entry of the apps that the tests render.
+          'smf_flutter_core',
+          // The theme and the languages of the app whose values the tests
+          // follow, and the preferences that both require.
+          'smf_material_theme',
+          'smf_gen_l10n',
+          'smf_shared_preferences',
+        },
       ).problems(),
       isEmpty,
     );
