@@ -1049,7 +1049,7 @@ void main() {
 
   group('the entry of the theme mode on the settings screen', () {
     /// The file of the entry in an app with a settings screen, parsed, with
-    /// its calls.
+    /// the calls of its widget.
     Future<(CompilationUnit, Map<String, List<MethodInvocation>>)> entry({
       required bool localized,
     }) async {
@@ -1061,7 +1061,12 @@ void main() {
         content: rendered.files[ThemeRole.themeModeSettingFile]!,
       ).unit;
       final calls = _Calls();
-      unit.accept(calls);
+      unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere(
+            (type) => type.namePart.typeName.lexeme == 'ThemeModeSetting',
+          )
+          .accept(calls);
       return (unit, calls.byName);
     }
 
@@ -1070,7 +1075,11 @@ void main() {
         'without arguments', () async {
       final (unit, _) = await entry(localized: false);
 
-      final widget = unit.declarations.whereType<ClassDeclaration>().single;
+      // The one public class of the file.
+      final widget = unit.declarations
+          .whereType<ClassDeclaration>()
+          .where((type) => !type.namePart.typeName.lexeme.startsWith('_'))
+          .single;
       expect(
         widget.namePart.typeName.lexeme,
         settingsScreenRole
@@ -1179,6 +1188,16 @@ void main() {
       expect(control.parent!.parent, same(clamped.argumentList));
     });
 
+    test(
+        'keeps the words of its title whole at a large text size, with a '
+        'copy of WholeWords of its own', () async {
+      final rendered = await renderTemplate(
+        themeRole,
+        present: _rolesOf(settings: true, localized: false),
+      );
+      expectWholeWordsCopy(rendered.files[ThemeRole.themeModeSettingFile]!);
+    });
+
     for (final localized in [true, false]) {
       final how = localized
           ? 'from the texts of the app, in an app with the localization role'
@@ -1190,8 +1209,9 @@ void main() {
             localized ? 'context.l10n.${text.getter}' : "'${text.en}'";
 
         final control = calls['SegmentedButton']!.single;
+        final title = calls['_WholeWords']!.single;
         final shown = calls['Text']!;
-        for (final node in [...shown, control]) {
+        for (final node in [title, ...shown, control]) {
           expect(
             _inConstant(node),
             isFalse,
@@ -1199,14 +1219,16 @@ void main() {
                 '${node.toSource()}',
           );
         }
-        // The title, in the text style of the theme, and then the name of
-        // a mode.
+        // The title, in the text style of the theme, with its words whole,
+        // and then the name of a mode.
+        expect(
+          calls['merge']!.single.toSource(),
+          'DefaultTextStyle.merge(style: theme.textTheme.bodyLarge, child: '
+          '_WholeWords(${code(_texts.first)}))',
+        );
         expect(
           [for (final text in shown) text.toSource()],
-          [
-            'Text(${code(_texts.first)}, style: theme.textTheme.bodyLarge)',
-            'Text(name, maxLines: 1, softWrap: false)',
-          ],
+          ['Text(name, maxLines: 1, softWrap: false)'],
         );
         // The name of each mode, in the order of the modes.
         expect(

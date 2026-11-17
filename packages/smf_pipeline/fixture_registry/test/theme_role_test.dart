@@ -108,8 +108,14 @@ void main() {
   /// title, and then the name of each mode.
   List<String> shownBy(CompilationUnit unit) {
     final finder = _Texts();
-    // The declarations, without the strings of the imports.
+    // The declarations, without the strings of the imports, and without the
+    // copy of WholeWords, whose strings are no texts of the entry and which
+    // the tests of the contracts hold to the other copies.
     for (final declaration in unit.declarations) {
+      if (declaration case ClassDeclaration(:final namePart)
+          when namePart.typeName.lexeme == '_WholeWords') {
+        continue;
+      }
       declaration.accept(finder);
     }
     return finder.texts;

@@ -4,6 +4,12 @@ import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:mason/mason.dart';
+import 'package:smf_contracts/bundles/feedback_role_setting_bundle.dart';
+import 'package:smf_contracts/bundles/localization_role_settings_bundle.dart';
+import 'package:smf_contracts/bundles/notifications_role_setting_bundle.dart';
+import 'package:smf_contracts/bundles/purchases_role_setting_bundle.dart';
+import 'package:smf_contracts/bundles/review_role_setting_bundle.dart';
+import 'package:smf_contracts/bundles/theme_role_setting_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
@@ -368,6 +374,64 @@ void expectParses(String code, {String? reason}) {
     isEmpty,
     reason: reason ?? code,
   );
+}
+
+/// The files of the entries of the settings screen that the templates of
+/// roles give it with a copy of `WholeWords` of their own, as their bricks
+/// have them, by the name of the brick.
+final Map<String, String> _entriesWithWholeWords = {
+  for (final bundle in [
+    reviewRoleSettingBundle,
+    feedbackRoleSettingBundle,
+    themeRoleSettingBundle,
+    localizationRoleSettingsBundle,
+    notificationsRoleSettingBundle,
+    purchasesRoleSettingBundle,
+  ])
+    bundle.name: templatesOf(bundle).values.single,
+};
+
+/// The declaration of the class `_WholeWords` in [code], with its doc
+/// comment, as [code] writes it. A brick has tags of mustache elsewhere in
+/// its file, so the file need not parse without errors.
+String _wholeWordsIn(String code) {
+  final type = parseString(content: code, throwIfDiagnostics: false)
+      .unit
+      .declarations
+      .whereType<ClassDeclaration>()
+      .singleWhere((type) => type.namePart.typeName.lexeme == '_WholeWords');
+  return code.substring(type.offset, type.end);
+}
+
+/// Fails unless [code], the file of an entry of the settings screen, has a
+/// copy of its own of `WholeWords`, `_WholeWords`: a widget that breaks a
+/// line only at a white space but a no-break space, measures each word in
+/// the style in which a `Text` paints, bold for a user who asks for bold
+/// text, and where the longest word does not fit the width that the text
+/// has, makes the text as large as that word allows.
+///
+/// The copy must be the same, with its comments, as that of each brick of
+/// such an entry, the entries of the review, feedback, theme, localization,
+/// notifications and purchases roles, whose tests all call this: so a
+/// change of one copy goes into all of them, and they do not drift apart.
+void expectWholeWordsCopy(String code) {
+  final copy = _wholeWordsIn(code);
+  expect(copy, startsWith('/// A text that keeps its words whole'));
+  expect(copy, contains('class _WholeWords extends StatelessWidget {'));
+  expect(copy, contains(r"text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'))"));
+  expect(copy, contains('size *= room / widest * 0.98;'));
+  expect(copy, contains('MediaQuery.boldTextOf(context)'));
+  expect(copy, contains('DefaultTextStyle.of(context).style'));
+  for (final MapEntry(key: brick, value: file)
+      in _entriesWithWholeWords.entries) {
+    expect(
+      copy,
+      _wholeWordsIn(file),
+      reason: 'The copy of WholeWords of an entry of the settings screen is '
+          'the same as that of the brick $brick: a change goes into every '
+          'copy.',
+    );
+  }
 }
 
 /// An interactive environment whose user picks the choice at [pick] of every

@@ -3225,6 +3225,12 @@ class $name {
         for (final declaration in unit.declarations) {
           // The names of the languages.
           if (declaration is TopLevelVariableDeclaration) continue;
+          // The copy of WholeWords, whose one literal is the pattern of the
+          // white space between two words, which no user sees.
+          if (declaration is ClassDeclaration &&
+              declaration.namePart.typeName.lexeme == '_WholeWords') {
+            continue;
+          }
           declaration.accept(literals);
         }
 
@@ -3251,23 +3257,34 @@ class $name {
           'do not fit one row', () {
         final row = createdIn('LanguageSetting', 'ListTile').single;
 
-        expect(row['title'], 'Text(context.l10n.localizationLanguage)');
+        expect(row['title'], '_WholeWords(context.l10n.localizationLanguage)');
         // The choice: the option of the device, or the name of the
         // language.
         expect(
           code,
           contains(
-            'final choice = Text(\n'
-            '      chosen == null ? context.l10n.localizationSystem : '
-            '_nameOf(chosen),\n',
+            'final choice = chosen == null ? '
+            'context.l10n.localizationSystem : _nameOf(chosen);',
+          ),
+        );
+        expect(
+          code,
+          contains(
+            'final style = '
+            'theme.textTheme.bodyMedium?.copyWith(color: muted);',
           ),
         );
         expect(
           row['trailing'],
           'below ? arrow : Row(mainAxisSize: MainAxisSize.min, children: '
-          '[choice, const SizedBox(width: 4), arrow])',
+          '[Text(choice, style: style), const SizedBox(width: 4), arrow])',
         );
-        expect(row['subtitle'], 'below ? choice : null');
+        // Below the title, the choice wraps between its words too.
+        expect(
+          row['subtitle'],
+          'below ? DefaultTextStyle.merge(style: style, child: '
+          '_WholeWords(choice)) : null',
+        );
         expect(
           code,
           contains(
@@ -3307,11 +3324,20 @@ class $name {
         // No column of a fixed height, which the options of many languages
         // or a large text size would overflow.
         expect(createdIn('_LanguageSheet', 'Column'), isEmpty);
-        // Its title, as a header for a screen reader.
-        expect(
-          createdIn('_LanguageSheet', 'Semantics').single['header'],
-          'true',
-        );
+        // Its title, as a header for a screen reader, with its words
+        // whole.
+        expect(createdIn('_LanguageSheet', 'Semantics').single, {
+          'header': 'true',
+          'child': 'DefaultTextStyle.merge(style: '
+              'theme.textTheme.headlineSmall, child: '
+              '_WholeWords(context.l10n.localizationLanguage))',
+        });
+      });
+
+      test(
+          'keeps the words of its texts whole at a large text size, with a '
+          'copy of WholeWords of its own', () {
+        expectWholeWordsCopy(code);
       });
 
       test(
@@ -3329,9 +3355,10 @@ class $name {
         // selected: only the check tells the choice to the eye.
         expect(
           option['title'],
-          'Text(locale == null ? context.l10n.localizationSystem : '
-          '_nameOf(locale), style: '
-          'theme.textTheme.bodyLarge?.copyWith(fontSize: 19))',
+          'DefaultTextStyle.merge(style: '
+          'theme.textTheme.bodyLarge?.copyWith(fontSize: 19), child: '
+          '_WholeWords(locale == null ? context.l10n.localizationSystem : '
+          '_nameOf(locale)))',
         );
       });
 

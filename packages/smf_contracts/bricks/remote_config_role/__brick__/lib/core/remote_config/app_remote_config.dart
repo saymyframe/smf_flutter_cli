@@ -16,6 +16,10 @@ export 'remote_values.dart';
 /// on the screen reads it once, such as in `initState`.
 final appRemoteConfig = AppRemoteConfigController._();
 
+/// The values of remote config as a [ValueListenable], for the state manager
+/// of the app: [appRemoteConfig] itself.
+ValueListenable<RemoteValues> remoteConfigValuesListenable() => appRemoteConfig;
+
 /// Keeps the values of remote config of the app up to date with the service
 /// of the provider of remote config. The app has one, [appRemoteConfig].
 ///

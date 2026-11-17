@@ -27,6 +27,7 @@ import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -90,6 +91,7 @@ const List<SmfModule> smfModules = [
   DartDefineModule(),
   // What tells how it runs.
   FirebaseCrashlyticsModule(),
+  SentryModule(),
   FirebaseAnalyticsModule(),
   // What gets it released.
   LauncherIconsModule(),

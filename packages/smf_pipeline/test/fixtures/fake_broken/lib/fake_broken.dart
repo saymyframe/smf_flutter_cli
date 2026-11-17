@@ -20,6 +20,7 @@ import 'package:fake_broken/bundles/broken_settings_shows_hidden_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
+import 'package:fake_state/fake_state.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -1371,6 +1372,30 @@ final class BrokenModule extends SmfModule {
         '    return FixtureFeedbackDevice.open(message);\n',
         '    if (!await FixtureFeedbackDevice.canOpen()) return false;\n'
             '    return FixtureFeedbackDevice.open(message);\n',
+      ),
+    ],
+  );
+
+  /// The fixture Riverpod whose bridges read the value of their listenable
+  /// once, when a widget first reads them, and do not follow it: a widget
+  /// that reads the theme mode through its bridge keeps the mode of the
+  /// start once the controller changed it, as a provider does that reads
+  /// the value of a controller rather than listen to it.
+  static const stateReadOnce = BrokenModule._(
+    FakeRiverpodModule(),
+    ModuleId('broken_state_reads_once'),
+    'State with Riverpod whose bridges read each value once (fixture)',
+    FakeRiverpodModule.listenableFile,
+    [
+      (
+        '  T build() {\n'
+            '    final listenable = _listenable();\n'
+            '    void follow() => state = listenable.value;\n'
+            '    listenable.addListener(follow);\n'
+            '    ref.onDispose(() => listenable.removeListener(follow));\n'
+            '    return listenable.value;\n'
+            '  }\n',
+        '  T build() => _listenable().value;\n',
       ),
     ],
   );

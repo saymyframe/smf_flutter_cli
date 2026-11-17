@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
+import 'package:smf_bloc/smf_bloc.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_gen_l10n/smf_gen_l10n.dart';
@@ -366,6 +367,9 @@ void main() {
       expect(descriptor.effectiveUses, {localizationRole});
       expect(descriptor.dependsOn, isEmpty);
       expect(descriptor.variants, isNull);
+      // Whether the onboarding is finished reaches the state manager of an
+      // app with one, and the module renders the same files without it.
+      expect(descriptor.feeds, {stateManagementRole});
     });
 
     test('forms a valid registry with the modules of the tests', () {
@@ -437,11 +441,12 @@ void main() {
     test(
         'contributes its brick with the key of the preferences, the symbol '
         'of the app and the texts, its route with the guard, that route as '
-        'the onboarding screen, its restorer, its texts and its note for '
+        'the onboarding screen, its restorer, its texts, whether the '
+        'onboarding is finished for the state manager and its note for '
         'coding agents, and nothing else', () {
       final contributions = module.contribute(ContractHarness.defaultContext);
 
-      expect(contributions, hasLength(6));
+      expect(contributions, hasLength(7));
       final brick = contributions[0] as BrickContribution;
       expect(brick.bundle, same(onboardingBundle));
       expect(brick.bundle.name, 'onboarding');
@@ -501,7 +506,13 @@ void main() {
       final texts = contributions[4] as RoleData<TextsData>;
       expect(texts.role, localizationRole);
       expect(texts.value, same(OnboardingModule.texts));
-      final note = contributions[5] as SocketContribution;
+      final state = contributions[5] as RoleData<StateData>;
+      expect(state.role, stateManagementRole);
+      expect(state.value, same(OnboardingModule.completedState));
+      // A role that the module feeds takes data without a condition: the
+      // data applies only where the role is present.
+      expect(state.when, isEmpty);
+      final note = contributions[6] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, agentHeading);
       expect(note.entryValue, AgentNote(agentNote));
@@ -866,6 +877,90 @@ void main() {
         contains('onboarding_screen.steps_shown'),
       );
       expect(result.errors, isEmpty);
+    });
+  });
+
+  group('the app with the onboarding and a state manager', () {
+    late ContractResult result;
+    late ContractResult withoutStateManager;
+
+    setUpAll(() async {
+      const registry = [..._modules, BlocModule()];
+      result = await _rendered(
+        const [OnboardingModule.id, BlocModule.id, GenL10nModule.id],
+        registry: registry,
+      );
+      withoutStateManager = await _rendered(
+        const [OnboardingModule.id, GenL10nModule.id],
+        registry: registry,
+      );
+    });
+
+    test(
+        'gives the state manager whether the onboarding is finished, through '
+        'the function that the guard asks, before the entries of the '
+        'templates of roles', () {
+      final input = stateManagementRole.hookInput(result.hook!);
+
+      expect(
+        [
+          for (final entry in stateManagementRole.sharedStateIn(input))
+            '${entry.name} of ${entry.owner}',
+        ],
+        [
+          'onboardingCompleted of onboarding',
+          'localizationLocale of role:localization',
+        ],
+      );
+      const state = OnboardingModule.completedState;
+      expect(state.name, 'onboardingCompleted');
+      expect(state.listenable.name, 'onboardingCompleted');
+      expect(
+        state.listenable.import,
+        const ImportRef.app('features/onboarding/onboarding_status.dart'),
+      );
+      expect('lib/${state.listenable.import.uri}', _status);
+      expect(state.type.name, 'bool');
+      expect(state.type.import, isNull);
+      expect(state.nullable, isFalse);
+      expect(state.listenableType, 'ValueListenable<bool>');
+      // The doc of the bridge names the calls that change the value.
+      expect(state.description, contains('`onboardingStatus.complete()`'));
+      expect(state.description, contains('`restart()`'));
+      expect(state.problems(), isEmpty);
+      // The function of the entry is the one that the guard asks.
+      final guard = [
+        for (final contribution
+            in module.contribute(ContractHarness.defaultContext))
+          if (contribution is RoleData<RoutesData>) contribution,
+      ].single.value.guards.single;
+      expect(state.listenable, guard.allows);
+      // The rules of the role find the function, which returns the
+      // listenable of the value, and the bridge of the provider, which
+      // reads it.
+      expect(
+        [for (final rule in stateManagementRole.structuralRules) rule.id],
+        [
+          'state_management.listenable_functions',
+          'state_management.bridges_rendered',
+        ],
+      );
+      expect(result.errors, isEmpty);
+    });
+
+    test(
+        'renders the same files of its own without a state manager, which '
+        'gets none of its data', () {
+      final input = stateManagementRole.hookInput(withoutStateManager.hook!);
+
+      expect(stateManagementRole.sharedStateIn(input), isEmpty);
+      for (final path in [_screen, _pages, _status]) {
+        expect(
+          withoutStateManager.app!.files[path]!.text,
+          result.app!.files[path]!.text,
+          reason: path,
+        );
+      }
     });
   });
 

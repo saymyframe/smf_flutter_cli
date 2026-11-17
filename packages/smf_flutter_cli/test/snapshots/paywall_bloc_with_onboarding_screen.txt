@@ -280,7 +280,7 @@ With `go_router`:
 
 ## State management
 
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. So does a value that only a backend changes, such as the values of remote config in an app with that role; no code of the app changes it. A widget reads such a value through its bridge. Code changes any other such value only through its controller, which the doc of the bridge names, and never in a build.
 
 With `flutter_bloc`:
 
@@ -290,7 +290,7 @@ With `flutter_bloc`:
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
 
-- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `PurchasesAccessCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `OnboardingCompletedCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Values in .env
 
@@ -4477,12 +4477,20 @@ import 'package:flutter/widgets.dart'
     show BuildContext, StatelessWidget, Widget;
 import 'package:flutter_bloc/flutter_bloc.dart'
     show BlocProvider, Cubit, MultiBlocProvider;
-import 'package:my_app/core/purchases/app_purchases.dart' as state0;
+import 'package:my_app/core/purchases/app_purchases.dart' as state1;
+import 'package:my_app/features/onboarding/onboarding_status.dart' as state0;
+
+/// Whether the user finished the onboarding; `onboardingStatus.complete()` and
+/// `restart()` change it.
+final class OnboardingCompletedCubit extends ListenableCubit<bool> {
+  /// Creates the cubit, with the value that the controller has.
+  OnboardingCompletedCubit() : super(state0.onboardingCompleted());
+}
 
 /// The premium access of the user; the calls of `appPurchases` change it.
-final class PurchasesAccessCubit extends ListenableCubit<state0.AppAccess> {
+final class PurchasesAccessCubit extends ListenableCubit<state1.AppAccess> {
   /// Creates the cubit, with the value that the controller has.
-  PurchasesAccessCubit() : super(state0.purchasesAccessListenable());
+  PurchasesAccessCubit() : super(state1.purchasesAccessListenable());
 }
 
 /// Provides the cubits of the values that controllers of the app keep to
@@ -4497,7 +4505,10 @@ final class SharedStateCubits extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MultiBlocProvider(
-    providers: [BlocProvider(create: (_) => PurchasesAccessCubit())],
+    providers: [
+      BlocProvider(create: (_) => OnboardingCompletedCubit()),
+      BlocProvider(create: (_) => PurchasesAccessCubit()),
+    ],
     child: child,
   );
 }

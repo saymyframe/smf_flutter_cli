@@ -11,10 +11,11 @@ resolution: workspace
 dependencies:
   # The fixtures whose code the broken modules render with their bugs: the
   # fake DI container, the fake events, preferences, theme, analytics and
-  # crash reporting, and the fake router.
+  # crash reporting, the fake router, and the fake Riverpod.
   fake_di: any
   fake_infra: any
   fake_router: any
+  fake_state: any
   mason: ^0.1.1
   smf_contracts: ^0.8.0
 
