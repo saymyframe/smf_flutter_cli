@@ -6,6 +6,9 @@
 #
 # Write a value as it is, or in double quotes if it has a space, a # or a quote.
 
+# The DSN of your Sentry project, which the crash reports go to
+SENTRY_DSN=
+
 # The public API key of the App Store app in RevenueCat, which starts with appl_
 REVENUECAT_APPLE_KEY=
 
@@ -31,6 +34,9 @@ REST_BASE_URL=
 # counts as missing.
 #
 # Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The DSN of your Sentry project, which the crash reports go to
+SENTRY_DSN=
 
 # The public API key of the App Store app in RevenueCat, which starts with appl_
 REVENUECAT_APPLE_KEY=
@@ -254,6 +260,13 @@ With `firebase_crashlytics`:
 
 - Report through `CrashReporter`, not through `FirebaseCrashlytics.instance`.
 - `tool/configure_firebase.dart` keeps the build phase for Crashlytics working for `flutter build ipa` on macOS. After `flutterfire configure` by hand, `flutter build ipa` needs `tool/firebase_configured/fix_crashlytics_phase.dart`.
+
+With `sentry_flutter`:
+
+- `initSentryCrashReporter()` in `lib/core/crash_reporting/sentry_crash_reporter.dart` starts Sentry with `SENTRY_DSN` of `.env`, and `bootstrap()` awaits it. Without a value of the key, the app starts without Sentry.
+- Report through `CrashReporter`, not through `Sentry.captureException`. Never call `SentryFlutter.init` elsewhere: its start removes `OnErrorIntegration` and puts `FlutterError.onError` back, so that each error reaches Sentry once.
+- The environment of an event is the flavor of the build (`appFlavor`), and a debug build sends its events too.
+- `configureSentryForTests` changes the options of Sentry before it starts, for tests only: a test keeps the events in `beforeSend` and gives Sentry a `transport` that sends nothing. `SentryFlutter.init` never completes in the fake time of a widget test, so a test starts Sentry, or runs `bootstrap()`, in real time.
 
 ## Dependency injection
 
@@ -561,6 +574,7 @@ Once any commands of the sections below have run, the setup still needs these st
 11. Give RevenueCat your In-App Purchase key from App Store Connect
 12. Give RevenueCat access to Google Play with a service account
 13. Publish your terms of use and privacy policy and put their links into .env
+14. Create a Flutter project in Sentry and copy its DSN into .env
 
 Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
 
@@ -875,6 +889,7 @@ A release build needs `.env`: `flutter build` of a release, and an archive in Xc
 
 The keys of the app:
 
+- `SENTRY_DSN`, read as `AppEnv.sentryDsn`, from the module `sentry`: The DSN of your Sentry project, which the crash reports go to
 - `REVENUECAT_APPLE_KEY`, read as `AppEnv.revenuecatAppleKey`, from the module `revenuecat`: The public API key of the App Store app in RevenueCat, which starts with appl_
 - `REVENUECAT_GOOGLE_KEY`, read as `AppEnv.revenuecatGoogleKey`, from the module `revenuecat`: The public API key of the Play Store app in RevenueCat, which starts with goog_
 - `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
@@ -1048,6 +1063,57 @@ In a test, `RestTestServer` of `test/core/rest/rest_test_server.dart` is a local
 The screen that the system shows while the app starts is made from two images, which the app does not bundle: `assets/branding/splash_light.png` for the light mode of the device and `assets/branding/splash_dark.png` for the dark one. Each is 1152 by 1152, a logo on a transparent background. Keep the logo inside a circle of two thirds of the width of the image, since Android 12 and later cut the rest.
 
 All flavors share the screen. The section of the module that provides the screen says what the images show now, where the colours behind them are, and which command to run after a change.
+
+## Sentry
+
+The app reports its errors to [Sentry](https://sentry.io) with [sentry_flutter](https://pub.dev/packages/sentry_flutter). `lib/core/crash_reporting/sentry_crash_reporter.dart` starts Sentry in `bootstrap()` with the DSN of `SENTRY_DSN` in `.env`, and implements the crash reporter of the app on it. While `SENTRY_DSN` has no value in a build, the app starts without Sentry and reports nothing to it, and a debug build prints why.
+
+Create a Flutter project in Sentry and copy its DSN into `SENTRY_DSN`. The section Finish the setup lists this among the steps that you do by hand. A DSN only lets an app send events to its project, and it goes into the app, where anyone can read it, so it is no secret. In the settings of the project, give the key of the DSN a rate limit, so that one app that fails in a loop does not use up the quota of the organization. Keep a second project for development: its DSN goes into your local `.env`, and the DSN of the project of the release goes into the values that a build for a store gets, such as those of the environment `prod` of your CI.
+
+The environment of each event is the flavor of the build, such as `dev` or `prod`, so Sentry tells the events of a test build from those of the release. A debug build sends its events too. To keep debug builds out of Sentry, start `initSentryCrashReporter()` with this line:
+
+```dart
+if (kDebugMode) throw StateError('Sentry reports nothing from a debug build.');
+```
+
+What each start of the app sends to Sentry:
+
+- the errors that the crash reporting of the app reports: those that nothing catches, as fatal, and those that the code reports with `recordError()`, each with the messages of `log()` before it as breadcrumbs and with the id of the user that `setUserId()` set. An error that comes before Sentry has started in `bootstrap()` is not reported;
+- the native crashes of Android and iOS, which the SDKs of Sentry for the platforms record and send at the next start, and on Android an app that does not respond (ANR), on iOS an app that hangs;
+- a session, from which Sentry counts the users and the starts without a crash.
+
+Next to another crash reporter, both record the native crashes that each of them catches: an uncaught exception of Java or Kotlin reaches both, and a signal of native code on Android may reach Sentry alone. On iOS, another crash reporter may warn in the log that another handler of exceptions is installed, which does no harm. The free plan of Sentry has a monthly quota of errors, which the [pricing](https://sentry.io/pricing/) of Sentry tells.
+
+Without `--obfuscate`, the Dart frames of an event have their functions, files and lines, also in a release build. The other cases need files that a release build writes, uploaded with an auth token of Sentry that may upload debug files, in `SENTRY_AUTH_TOKEN`:
+
+1. The native frames of iOS need the dSYMs of the archive. After `flutter build ipa`, upload them with [sentry-cli](https://docs.sentry.io/cli/installation/):
+
+   ```bash
+   sentry-cli debug-files upload --org <org> --project <project> build/ios/archive/Runner.xcarchive/dSYMs
+   ```
+
+2. The Java and Kotlin frames of the plugins in an Android release, which R8 shrinks, need its mapping. The Gradle plugin of Sentry uploads it. Add `id("io.sentry.android.gradle") version "6.27.0"` to the `plugins` of `android/app/build.gradle.kts`, and this block below them, without which the plugin fails every release build without a token, sends telemetry of its own, and changes the bytecode of every plugin:
+
+   ```kotlin
+   sentry {
+       autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
+       uploadNativeSymbols.set(false)
+       telemetry.set(false)
+       autoInstallation { enabled.set(false) }
+       tracingInstrumentation { enabled.set(false) }
+   }
+   ```
+
+3. The Dart frames of a build with `--obfuscate` need its symbols. Build with `--obfuscate --split-debug-info=build/debug-info --extra-gen-snapshot-options=--save-obfuscation-map=build/app/obfuscation.map.json`, add [sentry_dart_plugin](https://pub.dev/packages/sentry_dart_plugin) `^3.5.0` to the `dev_dependencies`, give the `pubspec.yaml` of the app this block, and run `dart run sentry_dart_plugin`:
+
+   ```yaml
+   sentry:
+     org: <org>
+     project: <project>
+     dart_symbol_map_path: build/app/obfuscation.map.json
+   ```
+
+For the privacy policy of the app, which the App Store and Google Play ask for in the listing of the app and inside the app: Sentry gets crash and diagnostic data, the id of the user once the code sets one, and the IP address of the device, which Sentry may store unless "Prevent Storing of IP Addresses" is on in the settings of the project. The SDK of Sentry for iOS declares what it collects in its privacy manifest.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -3915,9 +3981,11 @@ import 'dart:async';
 
 import 'package:fixture_app/core/crash_reporting/crashlytics_crash_reporter.dart'
     as impl0;
-import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl1;
+import 'package:fixture_app/core/crash_reporting/sentry_crash_reporter.dart'
+    as impl1;
+import 'package:fixture_app/core/fixture_crash/fixture_crash.dart' as impl2;
 import 'package:fixture_app/core/fixture_service_log/fixture_service_log.dart'
-    as impl2;
+    as impl3;
 import 'package:flutter/foundation.dart';
 
 /// Reports the errors of the app.
@@ -4001,7 +4069,7 @@ final List<CrashReporter> _crashReporters = [
   ),
   ?_createAlone(
     'createServiceLogCrashReporter',
-    impl2.createServiceLogCrashReporter,
+    impl3.createServiceLogCrashReporter,
   ),
 ];
 
@@ -4009,7 +4077,8 @@ final List<CrashReporter> _crashReporters = [
 /// asynchronously; `bootstrap()` awaits it.
 Future<void> initCrashReporting() async {
   final started = await Future.wait([
-    _startAlone('initFixtureCrashReporter', impl1.initFixtureCrashReporter),
+    _startAlone('initSentryCrashReporter', impl1.initSentryCrashReporter),
+    _startAlone('initFixtureCrashReporter', impl2.initFixtureCrashReporter),
   ]);
   _crashReporters.addAll(started.nonNulls);
 }
@@ -4168,6 +4237,154 @@ final class CrashlyticsCrashReporter implements CrashReporter {
   Future<void> setUserId(String? userId) =>
       _crashlytics.setUserIdentifier(userId ?? '');
 }
+=== lib/core/crash_reporting/sentry_crash_reporter.dart (sentry) ===
+import 'package:fixture_app/core/env/app_env.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show appFlavor;
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+import 'crash_reporter.dart';
+
+/// Changes the options of Sentry before it starts, for the tests of the app
+/// only: their mocks keep the events and drop them, so that no test sends
+/// any.
+@visibleForTesting
+void Function(SentryFlutterOptions options)? configureSentryForTests;
+
+/// Starts Sentry with the DSN of `.env` and returns a crash reporter that
+/// reports to it. `bootstrap()` awaits it before it installs the handlers of
+/// the crash reporting.
+///
+/// The handlers of the errors that nothing catches belong to the crash
+/// reporting of the app, which reports each error to every crash reporter.
+/// So Sentry gets no handler of its own: the start removes the integration
+/// with which Sentry would take `PlatformDispatcher.instance.onError`, and
+/// puts back the handler of `FlutterError.onError` that Sentry replaces, or
+/// an error of Flutter would reach Sentry twice. Native crashes stay with
+/// the SDKs of Sentry for Android and iOS.
+///
+/// The environment of the events is the flavor of the build. A debug build
+/// sends its events too.
+///
+/// Throws a [StateError] when the build has no DSN, or when Sentry does not
+/// start with it: the app then reports nothing to Sentry, and a debug build
+/// prints why.
+Future<CrashReporter> initSentryCrashReporter() async {
+  final dsn = AppEnv.sentryDsn;
+  if (dsn == null) {
+    throw StateError(
+      'SENTRY_DSN has no value in this build, so the app reports nothing to '
+      'Sentry. In .env, give it the DSN of your Sentry project, and build the '
+      'app as the section "Values in .env" of its README says. The section '
+      '"Sentry" tells more.',
+    );
+  }
+  final flutterErrors = FlutterError.onError;
+  try {
+    await SentryFlutter.init((options) {
+      options
+        ..dsn = dsn
+        ..environment = appFlavor ?? 'dev'
+        // Sentry logs what it does in a debug build; the crash reporting of
+        // the app shows the errors, and Sentry logs nothing.
+        ..debug = false
+        ..sendDefaultPii = false
+        ..attachScreenshot = false
+        ..attachViewHierarchy = false
+        // An event of the app carries what it logged with log(), not what it
+        // printed, which may hold what nobody meant to send.
+        ..enablePrintBreadcrumbs = false;
+      // By type, which a build with --obfuscate keeps, unlike a name.
+      for (final integration
+          in options.integrations.whereType<OnErrorIntegration>().toList()) {
+        options.removeIntegration(integration);
+      }
+      configureSentryForTests?.call(options);
+    });
+  } finally {
+    FlutterError.onError = flutterErrors;
+  }
+  if (!Sentry.isEnabled) {
+    throw StateError(
+      'Sentry did not start with the SENTRY_DSN of this build, so the app '
+      'reports nothing to Sentry: copy the DSN of your Sentry project into '
+      '.env again.',
+    );
+  }
+  return const SentryCrashReporter();
+}
+
+/// Reports the errors of the app to Sentry.
+///
+/// It prints nothing. Of the errors that `installCrashReporting()` reports,
+/// Flutter already presents those it catches, in every mode, and in debug
+/// mode the engine prints the others.
+final class SentryCrashReporter implements CrashReporter {
+  /// Creates the reporter, which reports to the Sentry that
+  /// [initSentryCrashReporter] started.
+  const SentryCrashReporter();
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) async {
+    await Sentry.captureException(
+      ThrowableMechanism(
+        Mechanism(type: 'CrashReporter.recordError', handled: !fatal),
+        error,
+      ),
+      stackTrace: stackTrace,
+      withScope: (scope) async {
+        scope.level = fatal ? SentryLevel.fatal : SentryLevel.error;
+        if (reason != null) {
+          await scope.setContexts('reason', {'reason': reason});
+        }
+      },
+    );
+  }
+
+  /// Reports what the integration of Sentry for the errors of Flutter
+  /// reports, without presenting the error, which the crash reporting of the
+  /// app does.
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) async {
+    final context = details.context?.toDescription();
+    final information = details.informationCollector?.call() ?? const [];
+    final library = details.library;
+    await Sentry.captureException(
+      ThrowableMechanism(
+        Mechanism(type: 'CrashReporter.recordFlutterError', handled: !fatal),
+        details.exception,
+      ),
+      stackTrace: details.stack,
+      withScope: (scope) async {
+        scope.level = fatal ? SentryLevel.fatal : SentryLevel.error;
+        await scope.setContexts('flutter_error_details', {
+          if (context != null) 'context': 'thrown $context',
+          if (information.isNotEmpty) 'information': information.join('\n'),
+          'library': ?library,
+        });
+      },
+    );
+  }
+
+  @override
+  Future<void> log(String message) =>
+      Sentry.addBreadcrumb(Breadcrumb(message: message, category: 'log'));
+
+  @override
+  Future<void> setUserId(String? userId) async {
+    await Sentry.configureScope(
+      (scope) => scope.setUser(userId == null ? null : SentryUser(id: userId)),
+    );
+  }
+}
 === lib/core/di/dependencies.dart (get_it) ===
 import 'package:fixture_app/core/analytics/analytics_service.dart' as di1;
 import 'package:fixture_app/core/crash_reporting/crash_reporter.dart' as di0;
@@ -4252,12 +4469,19 @@ abstract final class AppEnv {
   /// of, also with an empty value, and this is `true` once it declared one
   /// of the keys below. A key of your own needs no change here.
   static const bool supplied =
+      bool.hasEnvironment('SENTRY_DSN') ||
       bool.hasEnvironment('REVENUECAT_APPLE_KEY') ||
       bool.hasEnvironment('REVENUECAT_GOOGLE_KEY') ||
       bool.hasEnvironment('REVENUECAT_TEST_KEY') ||
       bool.hasEnvironment('PAYWALL_TERMS_URL') ||
       bool.hasEnvironment('PAYWALL_PRIVACY_URL') ||
       bool.hasEnvironment('REST_BASE_URL');
+
+  /// The DSN of your Sentry project, which the crash reports go to.
+  static String? get sentryDsn {
+    const value = String.fromEnvironment('SENTRY_DSN');
+    return value.isEmpty ? null : value;
+  }
 
   /// The public API key of the App Store app in RevenueCat, which starts with
   /// appl_.
@@ -20842,6 +21066,7 @@ dependencies:
   go_router: "^17.5.0"
   google_sign_in: "^7.2.0"
   purchases_flutter: "^10.18.0"
+  sentry_flutter: "^10.4.0"
   shared_preferences: "^2.5.5"
   shared_preferences_android: "^2.5.2"
   sign_in_with_apple: "^8.2.0"

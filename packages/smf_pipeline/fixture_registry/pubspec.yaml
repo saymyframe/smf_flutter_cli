@@ -77,6 +77,10 @@ dependencies:
   # keeps.
   smf_revenuecat: ^0.7.1
   smf_riverpod: ^0.3.5
+  # A provider of the crash reporting role, which an app can have several
+  # providers of, in the registry of several providers, for the app test that
+  # it keeps.
+  smf_sentry: ^0.8.0
   # The settings screen of the CLI, for its app tests in the app of several
   # providers.
   smf_settings: ^0.4.4

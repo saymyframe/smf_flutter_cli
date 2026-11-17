@@ -20,6 +20,7 @@ import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
+import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
@@ -52,6 +53,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final paywall = await appTestsDirectoryOf('smf_paywall');
   final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
+  final sentry = await appTestsDirectoryOf('smf_sentry');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
     'smf_shared_preferences',
@@ -103,6 +105,34 @@ Future<MatrixAppTests> smfAppTests() async {
         mocks: const MatrixMocks(
           'test/firebase_crashlytics_mocks.dart',
           'mockFirebaseCrashlytics',
+        ),
+      ),
+      // The crash reporter of the sentry module reaches Sentry, with the
+      // environment of the flavor of the build (see _defaultFlavorOf); its
+      // start leaves the handlers of the errors as it found them, so that the
+      // errors that nothing catches reach Sentry once, through the handlers
+      // that the start-up of the app installs; and without a DSN, the app
+      // starts without Sentry. The tests look only at what reaches Sentry,
+      // whose mocks keep the events and send none, and which the matrix sets
+      // up for the tests of every module of the app, since the start-up of
+      // the app starts Sentry. The matrix gives SENTRY_DSN a DSN that reaches
+      // no server in the apps with a DI container and none in the others, so
+      // that both paths run (see _sentryDsnOf). Its probe sees on a device
+      // that Sentry runs exactly when the build has a DSN, and then sends an
+      // event through the reporter of the module and asks the script of CI
+      // that started the app for the answer sentry, whose exit code tells
+      // whether Sentry got the event.
+      MatrixAppTest(
+        '$sentry/sentry',
+        appliesTo: _has(SentryModule.id),
+        values: _defaultFlavorOf,
+        envValues: _sentryDsnOf,
+        mocks: const MatrixMocks('test/sentry_mocks.dart', 'mockSentry'),
+        startProbe: const MatrixStartProbe(
+          'integration_test/sentry/probe.dart',
+          'probeSentry',
+          answer: 'sentry',
+          verdict: MatrixAnswerVerdict.exitCode,
         ),
       ),
       // The analytics service of the module reaches Firebase Analytics, and
@@ -1550,6 +1580,23 @@ Map<String, String?> _revenueCatKeysOf(MatrixApp app) => {
       RevenueCatModule.appleKey.name: 'appl_tests',
       RevenueCatModule.googleKey.name: 'goog_tests',
       RevenueCatModule.testKey.name: '',
+    };
+
+/// The values of the files of the test of the sentry module, the same in
+/// every app: `default_flavor`, the flavor that `flutter test` builds, which
+/// is the environment of the events of Sentry there.
+Map<String, String> _defaultFlavorOf(MatrixApp app) =>
+    {'default_flavor': AppEntryRole.defaultFlavor.name};
+
+/// The value that the test of the sentry module gives its key in .env: a DSN
+/// whose host is in the reserved domain `invalid`, which reaches no server, in
+/// the apps with the DI role, such as the app of the module with a DI
+/// container and the apps with every module, and none in the others, whose
+/// tests check the app without Sentry.
+Map<String, String?> _sentryDsnOf(MatrixApp app) => {
+      SentryModule.dsnKey.name: app.hook!.presentRoles.contains(diRole)
+          ? 'https://0123456789abcdef0123456789abcdef@o1.ingest.sentry.invalid/1'
+          : '',
     };
 
 /// The values of the files of the test of the push role, the same in every
