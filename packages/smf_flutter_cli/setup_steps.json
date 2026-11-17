@@ -102,6 +102,16 @@
       ]
     },
     {
+      "id": "posthog.project_token",
+      "title": "Create a PostHog project and copy its token and host into .env",
+      "owner": "posthog",
+      "ownerKind": "module",
+      "ownerName": "posthog",
+      "neededBy": [
+        "posthog"
+      ]
+    },
+    {
       "id": "revenuecat.entitlement_and_offering",
       "title": "Set up the entitlement premium and the default offering in RevenueCat",
       "owner": "revenuecat",

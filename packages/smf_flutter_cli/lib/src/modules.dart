@@ -26,6 +26,7 @@ import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_posthog/smf_posthog.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_sentry/smf_sentry.dart';
@@ -95,6 +96,7 @@ const List<SmfModule> smfModules = [
   FirebaseCrashlyticsModule(),
   SentryModule(),
   FirebaseAnalyticsModule(),
+  PostHogModule(),
   // What gets it released.
   LauncherIconsModule(),
   NativeSplashModule(),

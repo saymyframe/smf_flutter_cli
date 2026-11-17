@@ -83,6 +83,7 @@ Every app has the native flavors `dev`, `staging` and `prod`, which install next
 | [`firebase_crashlytics`](https://doc.saymyframe.com/modules/firebase-crashlytics) | Crash reporting with Firebase Crashlytics. |
 | [`sentry`](https://doc.saymyframe.com/modules/sentry) | Crash reporting with Sentry: the errors of the app and its native crashes, with the flavor of the build as the environment, and the DSN in `.env`. |
 | [`firebase_analytics`](https://doc.saymyframe.com/modules/firebase-analytics) | Analytics with Firebase Analytics and, with a router, a screen view for each screen the user sees. |
+| [`posthog`](https://doc.saymyframe.com/modules/posthog) | Analytics with PostHog: the events of the app with the flavor of the build, with a router a screen for each screen the user sees, and the project token and host in `.env`. |
 | [`firebase_messaging`](https://doc.saymyframe.com/modules/firebase-messaging) | Push messages with Firebase Cloud Messaging: the address of the device for a backend, the messages that arrive and the taps on them. |
 | [`firebase_auth`](https://doc.saymyframe.com/modules/firebase-auth) | Sign-in with Firebase Authentication: an email address and a password, or an anonymous user. The sign-in methods are enabled in the Firebase project after generation. |
 | [`google_sign_in`](https://doc.saymyframe.com/modules/google-sign-in) | Google sign-in on Android and iOS, a way to sign in next to email for the provider of sign-in, such as `firebase_auth`. |

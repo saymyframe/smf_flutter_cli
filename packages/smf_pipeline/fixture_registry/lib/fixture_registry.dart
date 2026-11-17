@@ -48,6 +48,7 @@ import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_posthog/smf_posthog.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:smf_sentry/smf_sentry.dart';
@@ -172,8 +173,9 @@ List<ModuleId> everyFixture({
 
 /// The registry of several providers: the modules of the CLI that provide a
 /// role an app can have several providers of, Firebase Crashlytics, Sentry,
-/// which reads its DSN from the values of .env, and Firebase Analytics, with
-/// the module they depend on, next to the fixture
+/// which reads its DSN from the values of .env, Firebase Analytics and
+/// PostHog, which reads its project token from the values of .env, with the
+/// modules they depend on, next to the fixture
 /// providers of the same roles, whose start-up and services go through
 /// platform channels of their own; a fixture that provides both roles and
 /// notes each call that reaches it, which the tests of the roles look at;
@@ -276,6 +278,7 @@ List<SmfModule> severalProvidersModules() => const [
       FirebaseCrashlyticsModule(),
       SentryModule(),
       FirebaseAnalyticsModule(),
+      PostHogModule(),
       FakeCrashModule(),
       FakeAnalyticsModule(),
       FakeServiceLogModule(),

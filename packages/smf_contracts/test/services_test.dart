@@ -802,7 +802,9 @@ void main() {
         expect(
           '${setter.documentationComment?.tokens.join('\n')}',
           allOf(
-            contains('no provider sends anything to its'),
+            contains('nothing that the app logs from then'),
+            contains('What the app logged before the call'),
+            contains('may still leave with a batch that a provider had queued'),
             contains('Every provider keeps the setting on the device'),
             contains('[analyticsCollectedFromFirstStart]'),
           ),
@@ -897,8 +899,14 @@ void main() {
             contains('`setAnalyticsCollectionEnabled()` of the analytics '
                 'service is the one switch'),
             contains('Every provider keeps the setting on the device'),
-            contains('Off means that nothing is sent. It does not mean that '
-                'no SDK writes to the device'),
+            contains('Once a call with `false` completes, nothing that the '
+                'app logs from then on, and nothing that an SDK records itself '
+                'from then on, such as a screen or a session, reaches the '
+                'backend of a provider, until a call with `true` completes. '
+                'What the app logged before the call may still leave with a '
+                'batch that a provider had queued.'),
+            contains('Off means that nothing recorded while collection is off '
+                'is sent. It does not mean that no SDK writes to the device'),
             contains('the native lines of each provider whose SDK starts '
                 'before Dart, which its section of this README names'),
             contains('In the European Economic Area, the ePrivacy rules'),

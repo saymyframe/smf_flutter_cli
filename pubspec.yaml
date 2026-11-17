@@ -50,6 +50,7 @@ workspace:
   - packages/smf_modules/smf_native_splash
   - packages/smf_modules/smf_onboarding
   - packages/smf_modules/smf_paywall
+  - packages/smf_modules/smf_posthog
   - packages/smf_modules/smf_revenuecat
   - packages/smf_modules/smf_riverpod
   - packages/smf_modules/smf_sentry

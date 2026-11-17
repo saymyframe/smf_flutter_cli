@@ -318,9 +318,9 @@ void main() {
       'Purchases: which module provides it?',
       'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
-      'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -440,9 +440,9 @@ void main() {
       'Purchases: which module provides it?',
       'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
-      'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -698,9 +698,9 @@ void main() {
       'Purchases: which module provides it?',
       'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
-      'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -782,9 +782,9 @@ void main() {
       'Purchases: which module provides it?',
       'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Analytics: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
-      'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -1720,8 +1720,9 @@ void main() {
 
   test(
       'a run in a terminal asks which modules provide the analytics after '
-      'the crash reporting, and offers Firebase Analytics, which brings '
-      'Firebase and listens to the screen the user sees', () async {
+      'the purchases and before the values of .env, which PostHog requires, '
+      'and offers Firebase Analytics, which brings Firebase and listens to '
+      'the screen the user sees, and PostHog', () async {
     final run = await _create(
       {
         'Features': ['home'],
@@ -1755,20 +1756,24 @@ void main() {
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
-    // The roles come in the order of the list of modules, and
-    // firebase_analytics comes after firebase_crashlytics. An app can
-    // record to more than one service, so the question takes any number of
-    // answers, none included.
+    // The roles come in the order of the list of modules, each after the
+    // roles that require it: posthog requires the values of .env, so the
+    // analytics come before them, and so before the crash reporting, which
+    // comes after them. An app can record to more than one service, so the
+    // question takes any number of answers, none included.
     final messages = [for (final question in run.asked) question.message];
     final analytics = messages.indexOf('Analytics: which module provides it?');
     expect(
       analytics,
-      greaterThan(
-        messages.indexOf('Crash reporting: which module provides it?'),
-      ),
+      greaterThan(messages.indexOf('Purchases: which module provides it?')),
+    );
+    expect(
+      analytics,
+      lessThan(messages.indexOf('Values in .env: which module provides it?')),
     );
     expect(run.asked[analytics].shown, [
       'firebase_analytics — Firebase Analytics with firebase_analytics',
+      'posthog — PostHog with posthog_flutter',
     ]);
     // Once the modules of the app are known, the analytics role asks
     // whether the app collects before the user agrees, with the default
@@ -2638,6 +2643,7 @@ void main() {
       'firebase_crashlytics',
       'sentry',
       'firebase_analytics',
+      'posthog',
       'dio',
       'in_app_review',
       'email_feedback',
@@ -2661,7 +2667,7 @@ void main() {
         'State management': ['bloc'],
         'Events': ['event_bus'],
         'Crash reporting': ['firebase_crashlytics', 'sentry'],
-        'Analytics': ['firebase_analytics'],
+        'Analytics': ['firebase_analytics', 'posthog'],
         'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],
         'REST API': ['dio'],
@@ -2686,8 +2692,10 @@ void main() {
     // state manager and the events; what the app talks to, the
     // authentication, the REST API, the purchases, the feedback and the
     // remote config; what tells how it runs, the crash reporting and the
-    // analytics; and last what gets it released, its icon, its splash screen
-    // and CI. The choices of the roles come once the modules are known, and
+    // analytics, which come before the values of .env that sentry and
+    // posthog require; and last what gets it released, its icon, its splash
+    // screen and CI. The choices of the roles come once the modules are
+    // known, and
     // the question about a step that the user may leave for later once the
     // app is rendered.
     expect(run.asked.map((question) => question.message), [
@@ -2707,9 +2715,9 @@ void main() {
       'Events: which module provides it?',
       'REST API: which module provides it?',
       'Feedback: which module provides it?',
-      'Remote config: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Remote config: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
