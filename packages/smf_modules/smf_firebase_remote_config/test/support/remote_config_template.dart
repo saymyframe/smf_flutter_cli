@@ -373,12 +373,14 @@ bool _sendAgain(int status) => status == 429 || status >= 500;
 
 /// Whether [response] tells that the template changed since it was read,
 /// so that its ETag is no longer the one of the template: 409 or 412, or 400
-/// with a message of a version or an ETag that does not match.
+/// with a message of a version or an ETag that does not match, also in the
+/// form of a code, such as `[VERSION_MISMATCH]: Expected version 6, found 8`.
 bool isVersionConflict(http.Response response) =>
     response.statusCode == 409 ||
     response.statusCode == 412 ||
     (response.statusCode == 400 &&
         RegExp(
+          r'version[_\s-]*mismatch|'
           r'(etag|version)\b.{0,60}\b(mismatch|match|matches|stale|outdated)',
           caseSensitive: false,
         ).hasMatch(_messageOf(response.body)));

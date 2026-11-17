@@ -241,6 +241,11 @@ void main() {
           'parameter': 'remote_config_ci_$_nonce',
           'value': 'a text of the app',
         }),
+        // More after the nonce makes another parameter.
+        jsonEncode({
+          'parameter': 'remote_config_ci_${_nonce}_x',
+          'value': _nonce,
+        }),
       ]) {
         expect(
           () => ValueRequest.parse(text),
@@ -331,6 +336,24 @@ void main() {
         ['welcome_text', 'update_required_minimum_version', _other('3')],
         reason: 'Once a parameter of the check is more than two hours old, '
             'as one that a cancelled job left, it goes.',
+      );
+      final suffixed = '${_other('4')}_x';
+      expect(
+        withoutValues(
+          {
+            ..._parameters,
+            suffixed: _checkParameter(
+              _now.subtract(const Duration(hours: 3)),
+              '4' * 32,
+            ),
+          },
+          {suffixed},
+          _now,
+        )!
+            .keys,
+        contains(suffixed),
+        reason: 'A name with more after the nonce is no parameter of the '
+            'check, so it stays, though it is named and old.',
       );
     });
   });
@@ -444,6 +467,18 @@ void main() {
             'INVALID_ARGUMENT',
             'The version of the template does not match the ETag.',
           ),
+          400,
+        ),
+        http.Response(
+          _error(
+            400,
+            'FAILED_PRECONDITION',
+            '[VERSION_MISMATCH]: Expected version 6, found 8.',
+          ),
+          400,
+        ),
+        http.Response(
+          _error(400, 'FAILED_PRECONDITION', 'VERSION_MISMATCH'),
           400,
         ),
       ]) {
