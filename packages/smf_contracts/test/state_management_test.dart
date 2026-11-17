@@ -100,8 +100,9 @@ void main() {
     });
 
     test(
-        'has the entries of the modules in their order, then those of the '
-        'templates, each with its owner, and the bridges of the provider', () {
+        'has the entries in the order of the data, each with its owner, '
+        'that of an entry of a variant being its module, and the bridges of '
+        'the provider', () {
       final input = _input([
         dataOf<StateData>(stateManagementRole, _count, module: 'counter'),
         dataOf<StateData>(stateManagementRole, const _Bridges(), module: 'kit'),
@@ -479,9 +480,10 @@ void main() {
         'reports two entries of one name from different owners, as a '
         'problem of the later module, or of the module when the other is a '
         'template', () {
-      // The role push gives pushAddress, and a module push_address may give
-      // an entry that starts with its id too.
-      final pushAddress = _named(PushRole.addressState, 'pushAddress');
+      // A name that starts with the id of the role push and another word
+      // can start with the id of a module push_address and another word as
+      // well, so both may give pushAddressLabel.
+      final label = _named(PushRole.addressState, 'pushAddressLabel');
       final modules = validate([
         dataOf<StateData>(stateManagementRole, _count, module: 'counter'),
         dataOf<StateData>(stateManagementRole, _count, module: 'tally'),
@@ -496,19 +498,15 @@ void main() {
       expect(modules.single.hint, 'Rename one of the entries.');
 
       final withTemplate = validate([
-        dataOf<StateData>(
-          stateManagementRole,
-          pushAddress,
-          module: 'push_address',
-        ),
+        dataOf<StateData>(stateManagementRole, label, module: 'push_address'),
         stateManagementRole
-            .data(PushRole.addressState)
+            .data(label)
             .withOrigin(const RoleTemplateOrigin(pushRole)),
       ]);
       expect(_messages(withTemplate), [
         equals(
           'Both the module push_address and the template of the push messages '
-          'role give the state management role the entry pushAddress.',
+          'role give the state management role the entry pushAddressLabel.',
         ),
       ]);
       expect(
