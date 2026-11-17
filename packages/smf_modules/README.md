@@ -22,6 +22,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_local_notifications` | `local_notifications`, notifications |
 | `smf_firebase_core` | `firebase_core`, Firebase |
 | `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
+| `smf_sentry` | `sentry`, crash reporting with Sentry |
 | `smf_firebase_analytics` | `firebase_analytics`, analytics |
 | `smf_firebase_messaging` | `firebase_messaging`, push messages |
 | `smf_firebase_auth` | `firebase_auth`, sign-in |

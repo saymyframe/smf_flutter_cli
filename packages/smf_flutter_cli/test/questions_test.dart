@@ -312,8 +312,8 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Values in .env: which module provides it?',
       'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
@@ -430,8 +430,8 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Values in .env: which module provides it?',
       'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
@@ -680,8 +680,8 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Values in .env: which module provides it?',
       'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
@@ -760,8 +760,8 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
       'Crash reporting: which module provides it?',
+      'Values in .env: which module provides it?',
       'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
@@ -1553,8 +1553,9 @@ void main() {
 
   test(
       'a run in a terminal asks which modules provide the crash reporting '
-      'after the values of .env, and offers Firebase Crashlytics, which brings '
-      'Firebase', () async {
+      'after the events and before the values of .env, which Sentry requires, '
+      'and offers Firebase Crashlytics, which brings Firebase, and Sentry',
+      () async {
     final run = await _create(
       {
         'Features': [],
@@ -1587,9 +1588,10 @@ void main() {
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     // The roles come in the order of the list of modules, and
-    // firebase_crashlytics comes after event_bus. An app can report to more
-    // than one service, so the question takes any number of answers, none
-    // included.
+    // firebase_crashlytics comes after event_bus, each after the roles that
+    // require it: sentry requires the values of .env. An app can report to
+    // more than one service, so the question takes any number of answers,
+    // none included.
     final messages = [for (final question in run.asked) question.message];
     final crashReporting = messages.indexOf(
       'Crash reporting: which module provides it?',
@@ -1598,8 +1600,13 @@ void main() {
       crashReporting,
       greaterThan(messages.indexOf('Events: which module provides it?')),
     );
+    expect(
+      crashReporting,
+      lessThan(messages.indexOf('Values in .env: which module provides it?')),
+    );
     expect(run.asked[crashReporting].shown, [
       'firebase_crashlytics — Firebase Crashlytics with firebase_crashlytics',
+      'sentry — Sentry with sentry_flutter',
     ]);
     // Firebase was not chosen among the infrastructure, but Crashlytics
     // depends on it.
@@ -2575,6 +2582,7 @@ void main() {
       'event_bus',
       'paywall',
       'firebase_crashlytics',
+      'sentry',
       'firebase_analytics',
       'dio',
       'in_app_review',
@@ -2596,7 +2604,7 @@ void main() {
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
         'Events': ['event_bus'],
-        'Crash reporting': ['firebase_crashlytics'],
+        'Crash reporting': ['firebase_crashlytics', 'sentry'],
         'Analytics': ['firebase_analytics'],
         'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],

@@ -178,6 +178,7 @@ void main() {
         ],
         [
           for (final (index, (name, function)) in [
+            ('sentry', 'probeSentry'),
             if (!withoutExternalSteps) ('firebase_auth', 'probeFirebaseAuth'),
             if (!withoutExternalSteps) ('google_sign_in', 'probeGoogleSignIn'),
             if (!withoutExternalSteps)
@@ -202,17 +203,17 @@ void main() {
         reason: reason,
       );
       // The answers of CI that the probes ask for, in the order of the
-      // tests: that of Firebase Cloud Messaging, which only the apps with
-      // external steps have, and that of RevenueCat, each by its name alone,
-      // since the app gives the verdict on both (a line of an answer whose
-      // exit code is the verdict has exit-code after the name); and the
-      // argument of the provider of the env role, dart_define, that builds
-      // the app with its .env.
+      // tests: that of Sentry, with exit-code after its name, since the exit
+      // code of the answer is the verdict on it; that of Firebase Cloud
+      // Messaging, which only the apps with external steps have; and that of
+      // RevenueCat, each of these two by its name alone, since the app gives
+      // the verdict on both; and the argument of the provider of the env
+      // role, dart_define, that builds the app with its .env.
       expect(
         read(app, startAnswersFile),
         withoutExternalSteps
-            ? 'revenuecat\n'
-            : 'firebase_messaging\nrevenuecat\n',
+            ? 'sentry exit-code\nrevenuecat\n'
+            : 'sentry exit-code\nfirebase_messaging\nrevenuecat\n',
         reason: reason,
       );
       expect(

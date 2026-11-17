@@ -1998,6 +1998,7 @@ void main() {
         'event_bus with di',
         'shared_preferences with di',
         'firebase_crashlytics with di',
+        'sentry with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
         _analyticsOff,
@@ -2168,11 +2169,13 @@ void main() {
 
   test(
       'the probe of Firebase Cloud Messaging asks the script of CI that '
-      'starts the app for the answer firebase_messaging, a push message, and '
-      'that of RevenueCat for the answer revenuecat, premium access, by the '
+      'starts the app for the answer firebase_messaging, a push message, '
+      'that of RevenueCat for the answer revenuecat, premium access, and that '
+      'of Sentry for the answer sentry, the look-up of its event, by the '
       'names with which the jobs give the answers, and no other probe asks '
-      'for one; the app gives the verdict on both, since what each answer '
-      'sends reaches the app', () {
+      'for one; the app gives the verdict on the first two, since what each '
+      'sends reaches the app, and the exit code of the answer on that of '
+      'Sentry, since only Sentry sees what reached it', () {
     expect(
       {
         for (final test in appTests.tests)
@@ -2183,6 +2186,7 @@ void main() {
       {
         'firebase_messaging': ('firebase_messaging', MatrixAnswerVerdict.app),
         'revenuecat': ('revenuecat', MatrixAnswerVerdict.app),
+        'sentry': ('sentry', MatrixAnswerVerdict.exitCode),
       },
     );
   });
@@ -2244,8 +2248,8 @@ void main() {
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
       'of Firebase Cloud Messaging, the purchases of the role and those of '
-      'RevenueCat, each a function of a file of its tests that takes the one '
-      'that waits until the screen settles', () async {
+      'RevenueCat, and Sentry, each a function of a file of its tests that '
+      'takes the one that waits until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -2264,6 +2268,7 @@ void main() {
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
             'probeFirebaseMessaging',
         'revenuecat': 'integration_test/revenuecat/probe.dart probeRevenueCat',
+        'sentry': 'integration_test/sentry/probe.dart probeSentry',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -2307,18 +2312,20 @@ void main() {
     // all of them, which the list of the probes names. That of the
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
-    // the routes of the app past it. Those of Firebase Authentication, of
-    // Google sign-in, of Firebase Cloud Messaging, of RevenueCat, of the
-    // notifications role, of local_notifications, of the push role, of the
-    // purchases role and of the review role only read, so they hold
-    // wherever they come. That of the review role comes before that of the
-    // REST role, whose worst case is the longest.
+    // the routes of the app past it. Those of Sentry, which sends an event
+    // of its own, of Firebase Authentication, of Google sign-in, of Firebase
+    // Cloud Messaging, of RevenueCat, of the notifications role, of
+    // local_notifications, of the push role, of the purchases role and of
+    // the review role only read, so they hold wherever they come. That of
+    // the review role comes before that of the REST role, whose worst case
+    // is the longest.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
       [
         'start',
+        'sentry',
         'firebase_auth',
         'google_sign_in',
         'firebase_messaging',
@@ -2371,43 +2378,45 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: firebase_auth/probe.dart',
-        'probe1: google_sign_in/probe.dart',
-        'probe2: firebase_messaging/probe.dart',
-        'probe3: revenuecat/probe.dart',
-        'probe4: onboarding/probe.dart',
-        'probe5: shared_preferences/probe.dart',
-        'probe6: local_notifications/probe.dart',
-        'probe7: di_role/probe.dart',
-        'probe8: preferences_role/probe.dart',
-        'probe9: notifications_role/probe.dart',
-        'probe10: push_role/probe.dart',
-        'probe11: purchases_role/probe.dart',
-        'probe12: router_walk/walk.dart',
-        'probe13: localization_role/probe.dart',
-        'probe14: flavors/probe.dart',
-        'probe15: review_role/probe.dart',
-        'probe16: rest_role/probe.dart',
+        'probe0: sentry/probe.dart',
+        'probe1: firebase_auth/probe.dart',
+        'probe2: google_sign_in/probe.dart',
+        'probe3: firebase_messaging/probe.dart',
+        'probe4: revenuecat/probe.dart',
+        'probe5: onboarding/probe.dart',
+        'probe6: shared_preferences/probe.dart',
+        'probe7: local_notifications/probe.dart',
+        'probe8: di_role/probe.dart',
+        'probe9: preferences_role/probe.dart',
+        'probe10: notifications_role/probe.dart',
+        'probe11: push_role/probe.dart',
+        'probe12: purchases_role/probe.dart',
+        'probe13: router_walk/walk.dart',
+        'probe14: localization_role/probe.dart',
+        'probe15: flavors/probe.dart',
+        'probe16: review_role/probe.dart',
+        'probe17: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
-      ('firebase_auth', 'probe0.probeFirebaseAuth'),
-      ('google_sign_in', 'probe1.probeGoogleSignIn'),
-      ('firebase_messaging', 'probe2.probeFirebaseMessaging'),
-      ('revenuecat', 'probe3.probeRevenueCat'),
-      ('onboarding', 'probe4.probeOnboarding'),
-      ('shared_preferences', 'probe5.probeSharedPreferences'),
-      ('local_notifications', 'probe6.probeLocalNotifications'),
-      ('di_role', 'probe7.probeServices'),
-      ('preferences_role', 'probe8.probePreferences'),
-      ('notifications_role', 'probe9.probeNotifications'),
-      ('push_role', 'probe10.probePush'),
-      ('purchases_role', 'probe11.probePurchases'),
-      ('router_walk', 'probe12.probeRoutes'),
-      ('localization_role', 'probe13.probeLanguages'),
-      ('flavors', 'probe14.probeFlavor'),
-      ('review_role', 'probe15.probeReview'),
-      ('rest_role', 'probe16.probeRest'),
+      ('sentry', 'probe0.probeSentry'),
+      ('firebase_auth', 'probe1.probeFirebaseAuth'),
+      ('google_sign_in', 'probe2.probeGoogleSignIn'),
+      ('firebase_messaging', 'probe3.probeFirebaseMessaging'),
+      ('revenuecat', 'probe4.probeRevenueCat'),
+      ('onboarding', 'probe5.probeOnboarding'),
+      ('shared_preferences', 'probe6.probeSharedPreferences'),
+      ('local_notifications', 'probe7.probeLocalNotifications'),
+      ('di_role', 'probe8.probeServices'),
+      ('preferences_role', 'probe9.probePreferences'),
+      ('notifications_role', 'probe10.probeNotifications'),
+      ('push_role', 'probe11.probePush'),
+      ('purchases_role', 'probe12.probePurchases'),
+      ('router_walk', 'probe13.probeRoutes'),
+      ('localization_role', 'probe14.probeLanguages'),
+      ('flavors', 'probe15.probeFlavor'),
+      ('review_role', 'probe16.probeReview'),
+      ('rest_role', 'probe17.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -4240,6 +4249,58 @@ void main() {
     expect(moduleTest.roles, isEmpty, reason: 'It tests one provider.');
     expect(moduleTest.mocks, isNull, reason: 'dio has no platform side.');
     expect(moduleTest.startProbe, isNull);
+  });
+
+  test(
+      'the test of sentry runs in the apps with the module, with the mocks '
+      'that keep the events of Sentry, the default flavor, which is the '
+      'environment of the events under flutter test, a DSN that reaches no '
+      'server in the apps with a DI container and none in the others, and the '
+      'probe whose answer has its exit code for the verdict', () {
+    final test = named('sentry');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      ['sentry with di', 'sentry', ..._everyModule],
+    );
+    expect(test.roles, isEmpty, reason: 'It tests one provider.');
+    expect(
+      (test.mocks?.path, test.mocks?.function),
+      ('test/sentry_mocks.dart', 'mockSentry'),
+    );
+    expect(
+      (
+        test.startProbe?.path,
+        test.startProbe?.function,
+        test.startProbe?.answer,
+        test.startProbe?.verdict,
+      ),
+      (
+        'integration_test/sentry/probe.dart',
+        'probeSentry',
+        'sentry',
+        MatrixAnswerVerdict.exitCode,
+      ),
+    );
+    final byName = {
+      for (final app in apps.where(test.appliesTo)) app.name: app,
+    };
+    expect(test.values!(byName['sentry']!), {
+      'default_flavor': AppEntryRole.defaultFlavor.name,
+    });
+    const dsn = 'https://0123456789abcdef0123456789abcdef@o1.ingest.sentry'
+        '.invalid/1';
+    for (final withDsn in ['sentry with di', 'every module (bloc)']) {
+      expect(
+        test.envValues!(byName[withDsn]!),
+        {'SENTRY_DSN': dsn},
+        reason: withDsn,
+      );
+    }
+    expect(test.envValues!(byName['sentry']!), {'SENTRY_DSN': ''});
   });
 
   test(
@@ -6222,9 +6283,9 @@ void main() {
       expect(test.startProbe, isNull);
       // The matrix of the CLI runs it in the apps whose roles and modules give
       // the role keys: those of dio, whose role gives the key of its address,
-      // of revenuecat and of the paywall, whose tests give the keys values in
-      // .env, those of in_app_review, whose role gives the key of the App
-      // Store ID, and those with every module.
+      // of revenuecat, of the paywall and of sentry, whose tests give the keys
+      // values in .env, those of in_app_review, whose role gives the key of
+      // the App Store ID, and those with every module.
       expect(
         [
           for (final app in apps)
@@ -6243,6 +6304,8 @@ void main() {
           _rc,
           ..._paywall,
           ..._inAppReview,
+          'sentry with di',
+          'sentry',
           ..._everyModule,
         ],
       );
