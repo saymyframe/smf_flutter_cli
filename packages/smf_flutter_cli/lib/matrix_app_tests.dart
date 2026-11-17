@@ -28,6 +28,7 @@ import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
+import 'package:smf_update_required/smf_update_required.dart';
 
 /// The tests that the matrix of the modules of `smf create` adds to its
 /// apps, which the CLI and the packages of its modules keep in their
@@ -67,6 +68,7 @@ Future<MatrixAppTests> smfAppTests() async {
     'smf_shared_preferences',
   );
   final signIn = await appTestsDirectoryOf('smf_sign_in');
+  final updateRequired = await appTestsDirectoryOf('smf_update_required');
   return MatrixAppTests(
     [
       // The app starts and shows its first screen: a check that CI builds
@@ -863,6 +865,43 @@ Future<MatrixAppTests> smfAppTests() async {
           'integration_test/firebase_remote_config/probe.dart',
           'probeFirebaseRemoteConfig',
           answer: 'firebase_remote_config',
+        ),
+      ),
+      // The screen "Update required" of the module, in place of the app while
+      // its version is below the lowest version that may run in remote
+      // config: the defaults never show it, a lowest version above the
+      // version of the app shows it at once in place of the screen that the
+      // app starts on (see _updateRequiredOfAppOf), and one that the version
+      // is not below, or that is no version, does not; the screen is hard
+      // until "Update" opened the store page through the reviews of the app,
+      // and then offers "Not now", which lets the user in for this launch;
+      // another lowest version, and the next launch, show it again; and on
+      // iOS without the App Store ID of the app it never shows. The screen
+      // fits a small phone with a large text size, in each language of the
+      // app. The router shows the screen and leaves it, whichever module
+      // provides it, as the router role says of the guards of the routes:
+      // a test of the router role too. The tests give remote config and the
+      // reviews services of their own. The mocks give package_info_plus the
+      // version 1.0.0 of the tests, and the matrix sets them up for the tests
+      // of every module of the app, since the start-up of the app reads the
+      // version; the backend of the mocks of every provider of remote config
+      // has no value, so the app runs in the tests of the other modules. Its
+      // probe only reads, in well under a second: the version that the app
+      // read on a device, and whether the version may run, which must agree
+      // with remote config and the reviews. It comes before that of the REST
+      // role, whose worst case takes longest.
+      MatrixAppTest(
+        '$updateRequired/update_required',
+        appliesTo: _has(UpdateRequiredModule.id),
+        generatedFiles: _updateRequiredOfAppOf,
+        roles: {routerRole},
+        mocks: const MatrixMocks(
+          'test/update_required_mocks.dart',
+          'mockUpdateRequired',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/update_required/probe.dart',
+          'probeUpdateRequired',
         ),
       ),
       // The requests of the apps with the REST role, whichever module provides
@@ -4177,6 +4216,60 @@ Widget newOnboardingScreen() => screen.${screen.className}();
         AppEntryRole.fallbackStartScreen.importRef,
         AppEntryRole.fallbackStartScreen.name,
       ),
+  };
+}
+
+/// The path in an app of what the matrix writes for the tests of the
+/// update_required module: `startScreen`, the type of the screen that the
+/// app starts on, which the app shows while its version may run;
+/// `updateRequiredTexts`, the texts of the module
+/// ([UpdateRequiredModule.texts]), each by its name, in each language of the
+/// app, by the code of the language; `minimumParameter`, the parameter of
+/// remote config with the lowest version that may run
+/// ([UpdateRequiredModule.minimumVersion]); and `appStoreIdKey`, the key of
+/// `.env` with the App Store ID of the app ([ReviewRole.appStoreIdKey]),
+/// which a debug build names on iOS without it. The languages are those of
+/// the localization role of the app ([LocalizationRole.localesIn]), in its
+/// order, and English alone in an app without the role.
+const updateRequiredOfAppFile = 'test/update_required/of_app.dart';
+
+/// The file at [updateRequiredOfAppFile] of [app], an app of the matrix with
+/// the update_required module, whose package is [packageName].
+Map<String, String> _updateRequiredOfAppOf(
+  MatrixApp app,
+  String packageName,
+) {
+  final (import, screen) = _startScreenClassOf(app);
+  final texts = _textsByLanguageOf(app, UpdateRequiredModule.texts);
+  return {
+    updateRequiredOfAppFile: '''
+// The screen that the app starts on, the texts of the update_required module
+// in each language of the app, the parameter of remote config with the
+// lowest version and the key of the App Store ID, which the matrix of SMF
+// writes from the data of the roles of the app for the tests of the module,
+// in test/update_required.
+import '${import.resolveUri(packageName)}' as screen;
+
+/// The type of the screen that the app starts on: that of the route that
+/// the router role chose, or the fallback start screen of the app entry
+/// role in an app that no route can start.
+const Type startScreen = screen.$screen;
+
+/// The texts of the module by their names, by the code of each language of
+/// the app, the first of which the app uses when the device asks for none
+/// of them. An app without the localization role has the English texts
+/// alone.
+const Map<String, Map<String, String>> updateRequiredTexts = {
+$texts};
+
+/// The parameter of remote config with the lowest version of the app that
+/// may run.
+const String minimumParameter = ${SmfNames.dartString(UpdateRequiredModule.minimumVersion.name)};
+
+/// The key of `.env` with the App Store ID of the app, without which the app
+/// has no store page on iOS.
+const String appStoreIdKey = ${SmfNames.dartString(ReviewRole.appStoreIdKey.name)};
+''',
   };
 }
 

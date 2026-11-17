@@ -236,7 +236,8 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// has the paywall. An
 /// app of Google sign-in has no way to sign in that the App Store takes as
 /// its equivalent on iOS, which the apps with every module have in Sign in
-/// with Apple (guideline 4.8).
+/// with Apple (guideline 4.8). The apps of update_required have no route to
+/// start on either, but no destination, so no main navigation is missing.
 const _warningApps = <String, List<String>>{
   'settings with localization': [
     'router.no_main_navigation',
@@ -357,6 +358,8 @@ const _warningApps = <String, List<String>>{
     'router.no_main_navigation',
     'router.no_start',
   ],
+  'update_required with localization': ['router.no_start'],
+  'update_required': ['router.no_start'],
 };
 
 void main() {
@@ -377,7 +380,9 @@ void main() {
       'apps of the paywall for each state manager with the localization, '
       'the settings screen and the onboarding screen and without each, which '
       'get RevenueCat, the values of .env and the router, the app of Firebase '
-      'Remote Config, which gets Firebase, the apps of CI with '
+      'Remote Config, which gets Firebase, the apps of update_required with '
+      'the localization and without, which get the router, remote config and '
+      'the reviews, the apps of CI with '
       'the values of .env and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
@@ -415,7 +420,7 @@ void main() {
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
         'revenuecat, paywall, in_app_review, email_feedback, '
-        'firebase_remote_config, dart_define, '
+        'firebase_remote_config, update_required, dart_define, '
         'firebase_crashlytics, sentry, firebase_analytics, posthog, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
@@ -716,6 +721,20 @@ void main() {
       equals(
         'firebase_remote_config (firebase_remote_config, firebase_core, '
         'flutter_core)',
+      ),
+      // update_required with the localization and without, which gets the
+      // router, the providers of remote config and of the reviews that it
+      // requires, Firebase, and the preferences and the values of .env that
+      // the review role requires.
+      equals(
+        'update_required with localization (update_required, gen_l10n, '
+        'flutter_core, firebase_remote_config, firebase_core, in_app_review, '
+        'go_router, shared_preferences, dart_define)',
+      ),
+      equals(
+        'update_required (update_required, flutter_core, '
+        'firebase_remote_config, firebase_core, in_app_review, go_router, '
+        'shared_preferences, dart_define)',
       ),
       'dart_define (dart_define, flutter_core)',
       equals(

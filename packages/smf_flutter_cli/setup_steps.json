@@ -102,6 +102,16 @@
       ]
     },
     {
+      "id": "firebase_remote_config.parameters",
+      "title": "Create the parameters of the app in Firebase Remote Config",
+      "owner": "firebase_remote_config",
+      "ownerKind": "module",
+      "ownerName": "firebase_remote_config",
+      "neededBy": [
+        "firebase_remote_config"
+      ]
+    },
+    {
       "id": "posthog.project_token",
       "title": "Create a PostHog project and copy its token and host into .env",
       "owner": "posthog",

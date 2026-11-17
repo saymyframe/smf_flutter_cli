@@ -168,8 +168,9 @@ void main() {
       // on it, with their probes, Google sign-in, which requires the auth
       // role that only Firebase Authentication provides there, with its
       // probe, the push messages, which only Firebase Cloud Messaging
-      // provides, and Firebase Remote Config, with its probe, which comes
-      // before that of the REST role.
+      // provides, and Firebase Remote Config, with its probe, and so
+      // update_required, which requires the remote config role, with its
+      // probe, which both come before that of the REST role.
       final list = read(app, startProbesFile);
       expect(
         [
@@ -201,6 +202,8 @@ void main() {
             ('review_role', 'probeReview'),
             if (!withoutExternalSteps)
               ('firebase_remote_config', 'probeFirebaseRemoteConfig'),
+            if (!withoutExternalSteps)
+              ('update_required', 'probeUpdateRequired'),
             ('rest_role', 'probeRest'),
           ].indexed)
             (name, index, function),

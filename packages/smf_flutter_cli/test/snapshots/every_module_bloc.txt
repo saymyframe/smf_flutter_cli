@@ -757,6 +757,13 @@ With `in_app_review`:
 - The font of the themes is the family `_fontFamily`, which `pubspec.yaml` declares with the files in `assets/fonts/geist/`, in the weights 400, 500 and 600. For another font, add its files, declare its family in `pubspec.yaml` and name it in `_fontFamily`. `assets/fonts/geist/OFL.txt` is the licence of the font, which the app bundles as an asset: keep it while the app has the font.
 - Keep `brightness: brightness` in the colour scheme: `createLightTheme(context)` must return a light theme and `createDarkTheme(context)` a dark one.
 
+## Update required
+
+- While the version of the app is below `updateRequiredMinimumVersion` of `appRemoteConfig.value`, the parameter `update_required_minimum_version` of remote config, the guard `update_required.supported` of `routeGuards` shows `UpdateRequiredScreen` of `lib/features/update_required/update_required_screen.dart`, the route `update_required.updateRequired` at `/update_required`, in place of every other screen. So no code navigates to it or away from it.
+- `updateStatus` in `lib/features/update_required/update_status.dart` has what the guard reads, `supported`, and starts in `bootstrap()`. It reads the version of the app with `PackageInfo.fromPlatform()`, without the build number, and compares it with `versionBelow()` of `lib/features/update_required/version_compare.dart`: number by number, a missing number is 0, and a version that is not numbers between dots keeps the app running.
+- The screen shows only where `appReview.hasStorePage` holds, so on iOS only with the App Store ID in `.env`. Its button calls `updateStatus.openStore()`, which opens the store page through `appReview.openStorePage()`. Once the store opened, or did not open, the screen also shows "Not now", `updateStatus.continueForNow()`, which lets the user in for this launch below that lowest version.
+- A test of another screen needs nothing: the default of the parameter is empty, so the app runs. A test of the screen gives `appRemoteConfig.start()` and `appReview.start()` services of its own, and runs `updateStatus.start()` again for the next launch.
+
 ## Values in .env
 
 - Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
@@ -782,7 +789,7 @@ Generated with [Say My Frame](https://doc.saymyframe.com).
 
 ## Finish the setup
 
-Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,review.app_store_id,email_feedback.address,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,posthog.project_token,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account,paywall.legal_pages,sentry.dsn) shows each one click by click:
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,review.app_store_id,email_feedback.address,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,firebase_remote_config.parameters,posthog.project_token,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account,paywall.legal_pages,sentry.dsn) shows each one click by click:
 
 1. In Xcode, sign the iOS app with your paid Apple Developer team
 2. Set up payments in App Store Connect and Google Play Console
@@ -794,13 +801,14 @@ Once any commands of the sections below have run, the setup still needs these st
 8. Give Firebase your Sign in with Apple key, so that deleting an account works
 9. Before releasing on Google Play, give Firebase the SHA of your release keys
 10. Give Firebase your Apple push key (APNs key)
-11. Create a PostHog project and copy its token and host into .env
-12. Set up the entitlement premium and the default offering in RevenueCat
-13. Copy the API keys of your RevenueCat apps into .env
-14. Give RevenueCat your In-App Purchase key from App Store Connect
-15. Give RevenueCat access to Google Play with a service account
-16. Publish your terms of use and privacy policy and put their links into .env
-17. Create a Flutter project in Sentry and copy its DSN into .env
+11. Create the parameters of the app in Firebase Remote Config
+12. Create a PostHog project and copy its token and host into .env
+13. Set up the entitlement premium and the default offering in RevenueCat
+14. Copy the API keys of your RevenueCat apps into .env
+15. Give RevenueCat your In-App Purchase key from App Store Connect
+16. Give RevenueCat access to Google Play with a service account
+17. Publish your terms of use and privacy policy and put their links into .env
+18. Create a Flutter project in Sentry and copy its DSN into .env
 
 Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
 
@@ -1452,7 +1460,9 @@ The app reads values of remote config through `appRemoteConfig` in `lib/core/rem
 
 The values never hold the start of the app. The start makes active what the last fetch got, which the device keeps, also without the network, and waits for that at most a second. In an app with parameters, the app then asks the backend for new values in the background, at the start and each time the user comes back to the app, and makes them active at once, also while a screen shows. Where the provider tells of values that the backend publishes while the app runs, they come the same way. While the app has no parameter, it asks the backend nothing: it starts asking with its first parameter. A widget that follows a value reads it in `build` under a `ValueListenableBuilder` of `appRemoteConfig`, and code that must not change on the screen reads it once, such as in `initState`.
 
-No module of the app reads a parameter yet.
+The parameters of the app:
+
+- `update_required_minimum_version`, a text read as `updateRequiredMinimumVersion`, by default empty, from the module `update_required`: The lowest version of the app that may run, such as 1.4.0; empty for none
 
 To add a parameter of your own, give it a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and create it in the backend of the provider with the same name and type. The section of the module that provides remote config tells where its backend is.
 
@@ -1559,6 +1569,22 @@ Without `--obfuscate`, the Dart frames of an event have their functions, files a
    ```
 
 For the privacy policy of the app, which the App Store and Google Play ask for in the listing of the app and inside the app: Sentry gets crash and diagnostic data, the id of the user once the code sets one, and the IP address of the device, which Sentry may store unless "Prevent Storing of IP Addresses" is on in the settings of the project. The SDK of Sentry for iOS declares what it collects in its privacy manifest.
+
+## Update required
+
+While the version of the app is below the lowest version that may run, the screen "Update required" takes the place of the app, and its button "Update" opens the page of the app in its store. The lowest version is `update_required_minimum_version`, a parameter of remote config (see the section Remote config), whose default is empty, which is no lowest version. Raise it in the backend of remote config, and the screen shows without a new version of the app: at the next start, or while the app runs once the new value comes. Lower it or empty it, and the user is back where they were.
+
+The version of the app is its version name, such as `1.4.0` of `version: 1.4.0+12` in `pubspec.yaml`, without the build number. The two compare number by number, and a missing number is 0, so `1.2` equals `1.2.0` and `1.10.0` is above `1.9.2`. A lowest version that is not one to four numbers between dots, such as `2.0.0-beta`, keeps the app running, and a debug build prints why. The comparison is in `lib/features/update_required/version_compare.dart`.
+
+The screen is hard until the user taps "Update". From then on, or at once when no app of the device opened the store page, which the screen says, it also offers "Not now", which lets the user in for this launch. So a lowest version above the version that the store has, set before the review of a release or during a staged rollout, costs a user one trip to the store and never locks anyone out. The next launch, and another lowest version, show the screen again.
+
+The store page is that of the section Store reviews: on Android the page of the app in Google Play, and on iOS its page in the App Store, which needs the App Store ID of the app in `REVIEW_APP_STORE_ID` of `.env`. Without it, the app has no store page on iOS, and the screen never shows there: a debug build says so. Before the app is in Google Play, "Update" leads to a page that says the item was not found.
+
+The guard `update_required.supported` of `routeGuards` shows the screen, `lib/features/update_required/update_required_screen.dart`, in place of every other screen, and `updateStatus` of `lib/features/update_required/update_status.dart` has what it reads, so nothing navigates to the screen. Its texts are texts of the module. In an app with localization, they are texts of the app, which the screen reads from `context.l10n`: change them where the provider of the localization keeps the texts of the app, in each language. In an app without it, they are the English texts in that file. In an app with an onboarding, the order of the modules of the app decides which of the two comes first on a launch that needs both: the guard of the module that comes first in the app.
+
+The stores have no forced update of their own: Apple has no API for it, and the app only shows this screen. Raise the lowest version only when the old versions really cannot work any more, such as after a change of your backend that they do not understand, and only once the new version is in both stores for every user. Never raise it above the last version that the oldest system that the app supports can install: a user on that system can update to nothing newer. Where the backend of remote config gives a parameter a value for each platform, give each platform its own lowest version when the stores differ.
+
+An app that stays offline never learns a new lowest version, and a user may stay on an old version with "Not now", so only the backend of the app can really refuse an old version, such as by the version that each request names.
 === android/app/build.gradle.kts (flutter_core) ===
 plugins {
     id("com.android.application")
@@ -2100,6 +2126,7 @@ import 'package:my_app/core/purchases/app_purchases.dart';
 import 'package:my_app/core/push/app_push.dart';
 import 'package:my_app/core/remote_config/app_remote_config.dart';
 import 'package:my_app/core/review/app_review.dart';
+import 'package:my_app/features/update_required/update_status.dart';
 import 'package:my_app/firebase_options_of_flavor.dart';
 
 /// Runs the start-up code of the app before its first frame: first what
@@ -2119,6 +2146,7 @@ Future<void> bootstrap() async {
   await initRemoteConfig();
   await registerDependencies();
   await initReview();
+  await updateStatus.start();
 }
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
 import 'package:flutter/foundation.dart';
@@ -10961,7 +10989,9 @@ final class RemoteValues {
   /// Each parameter of the app by name, with the value that the app reads
   /// while the backend gives none, whose type is the type of the parameter:
   /// a `String`, a `bool`, an `int` or a `double`.
-  static const Map<String, Object> defaults = {};
+  static const Map<String, Object> defaults = {
+    'update_required_minimum_version': '',
+  };
 
   /// The values while the backend gives none: the [defaults].
   static const initial = RemoteValues._(defaults);
@@ -11005,6 +11035,10 @@ final class RemoteValues {
   };
 
   final Map<String, Object> _values;
+
+  /// The lowest version of the app that may run, such as 1.4.0; empty for none
+  String get updateRequiredMinimumVersion =>
+      _values['update_required_minimum_version']! as String;
 
   @override
   bool operator ==(Object other) =>
@@ -12873,8 +12907,9 @@ class _WholeWords extends StatelessWidget {
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:my_app/features/onboarding/onboarding_status.dart' as guard0;
-import 'package:my_app/features/paywall/paywall_guards.dart' as guard2;
-import 'package:my_app/features/sign_in/sign_in_guards.dart' as guard1;
+import 'package:my_app/features/paywall/paywall_guards.dart' as guard3;
+import 'package:my_app/features/sign_in/sign_in_guards.dart' as guard2;
+import 'package:my_app/features/update_required/update_status.dart' as guard1;
 
 import 'app_router_factory.dart';
 import 'navigation.dart';
@@ -13026,15 +13061,21 @@ final List<RouteGuard> routeGuards = [
     flow: const {'onboarding.onboarding'},
   ),
   RouteGuard(
+    'update_required.supported',
+    allows: guard1.versionSupported(),
+    redirectTo: const UpdateRequiredUpdateRequiredLocation(),
+    flow: const {'update_required.updateRequired'},
+  ),
+  RouteGuard(
     'sign_in.gate',
-    allows: guard1.signInAllowsApp(),
+    allows: guard2.signInAllowsApp(),
     redirectTo: const SignInSignInLocation(),
     flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
     resumes: false,
   ),
   RouteGuard(
     'sign_in.hasAccount',
-    allows: guard1.signInHasAccount(),
+    allows: guard2.signInHasAccount(),
     redirectTo: const SignInSignInLocation(),
     flow: const {'sign_in.signIn', 'sign_in.signUp', 'sign_in.resetPassword'},
     resumes: false,
@@ -13042,7 +13083,7 @@ final List<RouteGuard> routeGuards = [
   ),
   RouteGuard(
     'paywall.hasPremium',
-    allows: guard2.paywallHasPremium(),
+    allows: guard3.paywallHasPremium(),
     redirectTo: const PaywallPaywallLocation(),
     flow: const {'paywall.paywall'},
     routes: const {'paywall.subscription'},
@@ -13439,6 +13480,8 @@ import 'package:my_app/features/sign_in/account_screen.dart' as screen6;
 import 'package:my_app/features/sign_in/reset_password_screen.dart' as screen5;
 import 'package:my_app/features/sign_in/sign_in_screen.dart' as screen3;
 import 'package:my_app/features/sign_in/sign_up_screen.dart' as screen4;
+import 'package:my_app/features/update_required/update_required_screen.dart'
+    as screen9;
 
 import 'app_router.dart'
     show
@@ -13525,6 +13568,11 @@ final class _GoAppRouter implements AppRouter, AppNavigator {
           path: '/paywall/subscription',
           name: 'paywall.subscription',
           builder: (context, state) => const screen8.SubscriptionScreen(),
+        ),
+        GoRoute(
+          path: '/update_required',
+          name: 'update_required.updateRequired',
+          builder: (context, state) => const screen9.UpdateRequiredScreen(),
         ),
       ],
     ),
@@ -14408,6 +14456,18 @@ final class PaywallSubscriptionLocation extends AppLocation {
   String get path => '/paywall/subscription';
 }
 
+/// The location of `update_required.updateRequired`: `/update_required`.
+final class UpdateRequiredUpdateRequiredLocation extends AppLocation {
+  /// Creates the location.
+  const UpdateRequiredUpdateRequiredLocation();
+
+  @override
+  String get routeName => 'update_required.updateRequired';
+
+  @override
+  String get path => '/update_required';
+}
+
 /// Typed navigation to the routes of the app.
 extension AppNavigation on BuildContext {
   /// The routes of the app by module.
@@ -14434,6 +14494,9 @@ final class AppNav {
 
   /// The routes of the module `paywall`.
   PaywallRoutes get paywall => PaywallRoutes._(_context);
+
+  /// The routes of the module `update_required`.
+  UpdateRequiredRoutes get updateRequired => UpdateRequiredRoutes._(_context);
 }
 
 /// The routes of the module `home`.
@@ -14499,6 +14562,17 @@ final class PaywallRoutes {
   /// The route `paywall.subscription`: `/paywall/subscription`.
   NavLink subscription() =>
       NavLink(_context, const PaywallSubscriptionLocation());
+}
+
+/// The routes of the module `update_required`.
+final class UpdateRequiredRoutes {
+  const UpdateRequiredRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `update_required.updateRequired`: `/update_required`.
+  NavLink updateRequired() =>
+      NavLink(_context, const UpdateRequiredUpdateRequiredLocation());
 }
 === lib/core/router/not_found_screen.dart (role:router) ===
 import 'dart:math' as math;
@@ -22532,6 +22606,612 @@ class _SignUpViewState extends State<SignUpView> {
     );
   }
 }
+=== lib/features/update_required/update_required_screen.dart (update_required) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'update_status.dart';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Ma';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 5;
+
+/// The monospaced font of the device, for the number of the cell.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen that the guard of the routes of the module shows in place of
+/// the app while the version of the app is below the lowest version that
+/// may run (see `updateStatus`).
+///
+/// It shows the cell of the app next to the same cell one step higher and
+/// filled, the newer version, says why in the language of the app, and its
+/// button opens the page of the app in its store. Once the user opened the
+/// store from it, or the store did not open, which it says, it also offers
+/// "Not now", which lets the user in for this launch, so that a lowest
+/// version above the version in the store locks nobody out. It has no app
+/// bar and no back button: the back button of the system leaves the app.
+class UpdateRequiredScreen extends StatelessWidget {
+  /// Creates the screen.
+  const UpdateRequiredScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: ValueListenableBuilder<StoreVisit>(
+                valueListenable: updateStatus.storeVisit,
+                builder: (context, visit, _) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // A picture, which a screen reader passes over.
+                    const ExcludeSemantics(child: _Cells()),
+                    const SizedBox(height: 28),
+                    Semantics(
+                      header: true,
+                      namesRoute: true,
+                      // The title grows at most by half with a larger text.
+                      child: _WholeWords(
+                        context.l10n.updateRequiredTitle,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall,
+                        maxScaleFactor: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300),
+                      child: _WholeWords(
+                        context.l10n.updateRequiredBody,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // The button takes its look from the theme of the app.
+                    ElevatedButton(
+                      onPressed: updateStatus.openStore,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            // The label grows at most by half, so that its
+                            // words keep to the width of a phone.
+                            child: _WholeWords(
+                              context.l10n.updateRequiredUpdate,
+                              textAlign: TextAlign.center,
+                              maxScaleFactor: 1.5,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // The store opens outside the app.
+                          const Icon(Icons.open_in_new_rounded, size: 18),
+                        ],
+                      ),
+                    ),
+                    if (visit == StoreVisit.failed) ...[
+                      const SizedBox(height: 12),
+                      // A screen reader reads the failure once it comes.
+                      Semantics(
+                        liveRegion: true,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 300),
+                          child: _WholeWords(
+                            context.l10n.updateRequiredStoreFailed,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colors.error,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (visit != StoreVisit.none) ...[
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: updateStatus.continueForNow,
+                        // The label grows at most by half, as that of
+                        // "Update" does.
+                        child: _WholeWords(
+                          context.l10n.updateRequiredLater,
+                          textAlign: TextAlign.center,
+                          maxScaleFactor: 1.5,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell of the app, as an element of a table, and the same cell one
+/// step higher and filled, with an arrow up in place of its number: the
+/// newer version of the app. Smaller cells around them, as on the other
+/// screens of the app that show its cell.
+///
+/// The letters are part of the picture, so they keep their size with a
+/// larger text.
+class _Cells extends StatelessWidget {
+  const _Cells();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    Widget square(
+      double left,
+      double top,
+      double side, {
+      Color? fill,
+      Color? edge,
+    }) => Positioned(
+      left: left,
+      top: top,
+      child: Container(
+        width: side,
+        height: side,
+        decoration: BoxDecoration(
+          color: fill,
+          border: edge == null ? null : Border.all(color: edge),
+        ),
+      ),
+    );
+
+    return MediaQuery.withNoTextScaling(
+      child: SizedBox(
+        width: 260,
+        height: 156,
+        child: Stack(
+          children: [
+            square(0, 4, 36, fill: colors.secondaryContainer),
+            square(50, 12, 22, edge: colors.outline),
+            square(226, 124, 32, fill: colors.tertiaryContainer),
+            // The cell of the app as it is.
+            Positioned(
+              left: 14,
+              top: 40,
+              child: _Cell(
+                fill: colors.surfaceContainerLowest,
+                edge: colors.onSurface,
+                ink: colors.onSurface,
+                corner: Text(
+                  '$_appNumber',
+                  style: _mono.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+            ),
+            // The newer version: one step higher, filled.
+            Positioned(
+              left: 136,
+              top: 0,
+              child: _Cell(
+                fill: colors.primary,
+                edge: colors.primary,
+                ink: colors.onPrimary,
+                corner: Icon(
+                  Icons.arrow_upward_rounded,
+                  size: 16,
+                  color: colors.onPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A cell of 116 with the symbol of the app in [ink] on [fill], and
+/// [corner] in its top right corner.
+class _Cell extends StatelessWidget {
+  const _Cell({
+    required this.fill,
+    required this.edge,
+    required this.ink,
+    required this.corner,
+  });
+
+  final Color fill;
+  final Color edge;
+  final Color ink;
+  final Widget corner;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 116,
+    height: 116,
+    decoration: BoxDecoration(
+      color: fill,
+      border: Border.all(color: edge, width: 1.5),
+    ),
+    child: Stack(
+      children: [
+        Positioned(top: 7, right: 10, child: corner),
+        Center(
+          child: Text(
+            _appSymbol,
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+              fontSize: 54,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -2,
+              color: ink,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.maxScaleFactor = double.infinity,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none,
+  /// the text is as the text around it, as the label of a button is in the
+  /// style that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// How the lines of the text are aligned.
+  final TextAlign? textAlign;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: over that of the text around it,
+    // and bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textAlign: textAlign,
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
+=== lib/features/update_required/update_status.dart (update_required) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
+import '../../core/remote_config/app_remote_config.dart';
+import '../../core/review/app_review.dart';
+import 'version_compare.dart';
+
+/// What came of the last tap on "Update" on the screen "Update required".
+enum StoreVisit {
+  /// The user has not opened the store from the screen yet.
+  none,
+
+  /// The page of the app in its store opened.
+  opened,
+
+  /// No app of the device opened the page of the app in its store.
+  failed,
+}
+
+/// Whether the version of the app may run, which the guard of the routes of
+/// the screen "Update required" asks: while it may not, the router shows the
+/// screen in place of every other screen of the app.
+///
+/// The app may not run while its version is below the lowest version that
+/// may run, `update_required_minimum_version` of remote config, and the app
+/// has a page in its store to update from. So nothing navigates to the
+/// screen: [UpdateStatus.continueForNow] lets the user in.
+final updateStatus = UpdateStatus._();
+
+/// Follows the lowest version that may run in remote config, compares the
+/// version of the app with it, and keeps what the screen "Update required"
+/// offers. The app has one, [updateStatus].
+///
+/// The screen is hard until the user taps "Update", which opens the page of
+/// the app in its store. From then on, or at once when the page did not
+/// open, it also offers "Not now", which lets the user in for this launch.
+/// So a lowest version above the version in the store, set too early, costs
+/// a user one trip to the store and never locks anyone out.
+final class UpdateStatus {
+  UpdateStatus._();
+
+  /// How long [start] waits at most for the version of the app.
+  static const versionWait = Duration(seconds: 2);
+
+  final ValueNotifier<bool> _supported = ValueNotifier(true);
+
+  final ValueNotifier<StoreVisit> _storeVisit = ValueNotifier(StoreVisit.none);
+
+  /// The version of the app, once [start] read it.
+  String? _version;
+
+  /// The lowest version that the user let pass for this launch with "Not
+  /// now", if any.
+  String? _waived;
+
+  /// Whether the status follows the values of remote config.
+  bool _following = false;
+
+  /// The opening of the store page that is on its way, if any.
+  Future<void>? _opening;
+
+  /// What a debug build printed, so that it prints each once.
+  final Set<String> _told = {};
+
+  /// Whether the version of the app may run. It notifies its listeners when
+  /// that changes; the guard of the routes of the screen reads it.
+  ValueListenable<bool> get supported => _supported;
+
+  /// What came of the last tap on "Update" since the screen last took the
+  /// place of the app.
+  ValueListenable<StoreVisit> get storeVisit => _storeVisit;
+
+  /// The version of the app without its build number, such as `1.4.0`, once
+  /// [start] read it, or `null` while it is unknown.
+  String? get version => _version;
+
+  /// The lowest version that may run, as remote config has it now, without
+  /// the spaces around it: empty for none.
+  String get minimum =>
+      appRemoteConfig.value.updateRequiredMinimumVersion.trim();
+
+  /// The lowest version that the user let pass for this launch with "Not
+  /// now", or `null`.
+  String? get waived => _waived;
+
+  /// Reads the version of the app, within [versionWait], and starts to
+  /// follow the lowest version that may run in remote config: when it
+  /// returns, [supported] tells whether the version may run, before the
+  /// first frame of the app.
+  ///
+  /// `bootstrap()` calls it once the services of the app are ready. It may
+  /// be called again, as at the next launch of the app in a test: the screen
+  /// is then hard again, and a lowest version that the user let pass counts
+  /// again. A version that it cannot read leaves the app running, and a
+  /// debug build prints why.
+  Future<void> start() async {
+    _waived = null;
+    _storeVisit.value = StoreVisit.none;
+    String? version;
+    try {
+      final info = await PackageInfo.fromPlatform().timeout(versionWait);
+      version = info.version.trim();
+    } on Object catch (error) {
+      _tell(
+        'The version of the app is unknown, so the screen "Update required" '
+        'does not show: $error',
+      );
+    }
+    if (version != null && versionNumbers(version) == null) {
+      _tell(
+        'The version of the app, "$version", is not numbers between dots, '
+        'such as 1.4.0, so the screen "Update required" does not show.',
+      );
+    }
+    _version = version;
+    if (!_following) {
+      _following = true;
+      appRemoteConfig.addListener(_update);
+    }
+    _update();
+  }
+
+  /// Opens the page of the app in its store, outside the app, and offers
+  /// "Not now" on the screen from then on: once the page opened, or at once
+  /// if no app of the device opened it, which the screen says. A tap while
+  /// the page is opening opens it once.
+  Future<void> openStore() =>
+      _opening ??= _openStore().whenComplete(() => _opening = null);
+
+  Future<void> _openStore() async {
+    final opened = await appReview.openStorePage();
+    _storeVisit.value = opened ? StoreVisit.opened : StoreVisit.failed;
+  }
+
+  /// Lets the user in for this launch, below the lowest version that remote
+  /// config has now: "Not now" on the screen. The router then shows the
+  /// screen that the screen "Update required" took the place of.
+  ///
+  /// It does nothing until the user opened the store from the screen, or the
+  /// store did not open. Another lowest version takes the place of the app
+  /// again, and so does the next launch.
+  void continueForNow() {
+    if (_storeVisit.value == StoreVisit.none) return;
+    _waived = minimum;
+    _update();
+  }
+
+  /// Takes whether the version of the app may run from the values of remote
+  /// config.
+  void _update() {
+    final minimum = this.minimum;
+    final version = _version;
+    var supported = true;
+    if (version != null && minimum.isNotEmpty) {
+      if (versionNumbers(minimum) == null) {
+        _tell(
+          'update_required_minimum_version of remote config, "$minimum", is '
+          'not numbers between dots, such as 1.4.0, so the app runs.',
+        );
+      } else if (versionBelow(version, minimum) && minimum != _waived) {
+        if (appReview.hasStorePage) {
+          supported = false;
+        } else {
+          _tell(
+            'The version of the app, $version, is below $minimum, the lowest '
+            'version that may run, but the screen "Update required" does not '
+            'show: the app has no page in its store to update from. On iOS, '
+            'put the App Store ID of the app into REVIEW_APP_STORE_ID of '
+            '.env.',
+          );
+        }
+      }
+    }
+    // The screen is hard again each time it takes the place of the app.
+    if (!supported && _supported.value) _storeVisit.value = StoreVisit.none;
+    _supported.value = supported;
+  }
+
+  /// Prints [message] once in a debug build, for the developer of the app.
+  void _tell(String message) {
+    if (kDebugMode && _told.add(message)) debugPrint(message);
+  }
+}
+
+/// Whether the version of the app may run, as the guard of the routes of the
+/// screen "Update required" asks it: while the value is `false`, the router
+/// shows the screen in place of every other screen of the app.
+ValueListenable<bool> versionSupported() => updateStatus.supported;
+=== lib/features/update_required/version_compare.dart (update_required) ===
+// The versions of the app as the screen "Update required" compares them: the
+// version of the app, such as 1.4.0 of `version: 1.4.0+12` in its pubspec,
+// against the lowest version that may run. The file needs nothing but Dart.
+
+/// A number of a version: digits alone.
+final RegExp _number = RegExp(r'^[0-9]+$');
+
+/// The numbers of [version], such as `[1, 4, 0]` for `1.4.0`, or `null` when
+/// it is no version: one to four whole numbers between dots, such as `2`,
+/// `1.4` or `1.4.0.2`. A build number after `+`, as in `1.4.0+12`, does not
+/// count, nor do spaces around the version. A pre-release, such as
+/// `2.0.0-beta`, is no version here.
+List<int>? versionNumbers(String version) {
+  final name = version.trim().split('+').first.trim();
+  final parts = name.split('.');
+  if (parts.length > 4) return null;
+  final numbers = <int>[];
+  for (final part in parts) {
+    final number = _number.hasMatch(part) ? int.tryParse(part) : null;
+    if (number == null) return null;
+    numbers.add(number);
+  }
+  return numbers;
+}
+
+/// Whether [version], the version of the app, is below [minimum], the lowest
+/// version that may run.
+///
+/// The two compare number by number, and a missing number is 0: `1.2` equals
+/// `1.2.0`, and `1.10.0` is above `1.9.2`. An empty minimum, or one of
+/// spaces, is none. A version or a minimum that is no version (see
+/// [versionNumbers]) is below nothing, so the app runs.
+bool versionBelow(String version, String minimum) {
+  final numbers = versionNumbers(version);
+  final lowest = versionNumbers(minimum);
+  if (numbers == null || lowest == null) return false;
+  for (var index = 0; index < 4; index++) {
+    final number = index < numbers.length ? numbers[index] : 0;
+    final least = index < lowest.length ? lowest[index] : 0;
+    if (number != least) return number < least;
+  }
+  return false;
+}
 === lib/firebase_options_dev.dart (firebase_core) ===
 // File generated by FlutterFire CLI.
 // ignore_for_file: type=lint
@@ -22870,6 +23550,11 @@ class DefaultFirebaseOptions {
   "emailFeedbackNoMailText": "Couldn't open a mail app. Copy the address and write to us from your email.",
   "emailFeedbackCopy": "Copy the address",
   "emailFeedbackCopied": "Address copied",
+  "updateRequiredTitle": "Update required",
+  "updateRequiredBody": "This version of the app is no longer supported. Update the app to keep using it.",
+  "updateRequiredUpdate": "Update",
+  "updateRequiredLater": "Not now",
+  "updateRequiredStoreFailed": "Couldn't open the store.",
   "routerNotFoundTitle": "Page not found",
   "routerNotFoundAction": "Go to the start screen",
   "themeTitle": "Theme",
@@ -23047,6 +23732,11 @@ class DefaultFirebaseOptions {
   "emailFeedbackNoMailText": "Не вдалося відкрити поштовий застосунок. Скопіюйте адресу й напишіть нам зі своєї пошти.",
   "emailFeedbackCopy": "Скопіювати адресу",
   "emailFeedbackCopied": "Адресу скопійовано",
+  "updateRequiredTitle": "Потрібне оновлення",
+  "updateRequiredBody": "Ця версія застосунку більше не підтримується. Оновіть застосунок, щоб користуватися ним далі.",
+  "updateRequiredUpdate": "Оновити",
+  "updateRequiredLater": "Не зараз",
+  "updateRequiredStoreFailed": "Не вдалося відкрити магазин.",
   "routerNotFoundTitle": "Сторінку не знайдено",
   "routerNotFoundAction": "На стартовий екран",
   "themeTitle": "Тема",
@@ -23146,7 +23836,7 @@ dependencies:
   google_sign_in: "^7.2.0"
   in_app_review: "^2.0.12"
   intl: "any"
-  package_info_plus: "any"
+  package_info_plus: "^10.2.0"
   posthog_flutter: "^5.61.0"
   purchases_flutter: "^10.18.0"
   sentry_flutter: "^10.4.0"

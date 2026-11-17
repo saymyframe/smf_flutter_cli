@@ -226,6 +226,10 @@ const _signInChoice = 'sign_in — Sign-in, sign-up and password reset with '
 const _paywallChoice = 'paywall — A paywall with the plans of the purchases '
     'of the app, and a subscription screen';
 
+/// How a run in a terminal offers the feature `update_required`.
+const _updateRequiredChoice = 'update_required — A screen in place of the '
+    'app below the lowest version of remote config';
+
 void main() {
   test('a run in a terminal offers home selected, and no other module',
       () async {
@@ -329,6 +333,7 @@ void main() {
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
       _paywallChoice,
+      _updateRequiredChoice,
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -531,6 +536,7 @@ void main() {
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
       _paywallChoice,
+      _updateRequiredChoice,
     ]);
     expect(
       run.lines,
@@ -2626,6 +2632,7 @@ void main() {
     const picked = [
       'home',
       'sign_in',
+      'update_required',
       'firebase_core',
       'google_sign_in',
       'apple_sign_in',
@@ -2645,14 +2652,12 @@ void main() {
       'firebase_analytics',
       'posthog',
       'dio',
-      'in_app_review',
       'email_feedback',
-      'firebase_remote_config',
       'github_actions',
     ];
     final run = await _create(
       {
-        'Features': ['home', 'sign_in', 'paywall'],
+        'Features': ['home', 'sign_in', 'paywall', 'update_required'],
         'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
         'Layout': ['bottom_tabs'],
         'Onboarding screen': ['onboarding'],
@@ -2671,9 +2676,7 @@ void main() {
         'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],
         'REST API': ['dio'],
-        'Store reviews': ['in_app_review'],
         'Feedback': ['email_feedback'],
-        'Remote config': ['firebase_remote_config'],
         'CI': ['github_actions'],
       },
       options: ['--skip-external-setup'],
@@ -2686,12 +2689,13 @@ void main() {
     // so come before its question; the look of the app, its languages and
     // its theme; the push messages, before the notifications that their
     // role requires, which come after the two screens that the
-    // notifications role adds to; the store reviews; what is under the hood,
+    // notifications role adds to; what is under the hood,
     // the preferences that the localization, the theme, the onboarding, the
     // notifications and the store reviews require, the DI container, the
     // state manager and the events; what the app talks to, the
-    // authentication, the REST API, the purchases, the feedback and the
-    // remote config; what tells how it runs, the crash reporting and the
+    // authentication, the REST API, the purchases and the feedback; the
+    // store reviews and the remote config, which update_required requires,
+    // need no question; what tells how it runs, the crash reporting and the
     // analytics, which come before the values of .env that sentry and
     // posthog require; and last what gets it released, its icon, its splash
     // screen and CI. The choices of the roles come once the modules are
@@ -2706,7 +2710,6 @@ void main() {
       'Localization: which module provides it?',
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
-      'Store reviews: which module provides it?',
       'Dependency injection: which module provides it?',
       equals(
         'State management: sign_in requires the state management role. '
@@ -2717,7 +2720,6 @@ void main() {
       'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
-      'Remote config: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -2730,9 +2732,9 @@ void main() {
       ),
     ]);
     // The answers before the questions of the settings screen, the router,
-    // the notifications, the preferences, the purchases, the values of .env
-    // and the authentication need those roles, so the run asks none of them
-    // and adds their only providers.
+    // the notifications, the preferences, the purchases, the values of .env,
+    // the remote config, the store reviews and the authentication need those
+    // roles, so the run asks none of them and adds their only providers.
     final added = [
       for (final line in run.lines)
         if (line.startsWith('Adding ')) line,
@@ -2761,6 +2763,14 @@ void main() {
       equals(
         'Adding dart_define: the only provider of the env role, '
         'which paywall requires.',
+      ),
+      equals(
+        'Adding firebase_remote_config: the only provider of the remote '
+        'config role, which update_required requires.',
+      ),
+      equals(
+        'Adding in_app_review: the only provider of the store reviews role, '
+        'which update_required requires.',
       ),
       equals(
         'Adding shared_preferences: the only provider of the preferences '
