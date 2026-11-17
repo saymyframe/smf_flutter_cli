@@ -4,10 +4,10 @@ The SMF module of the screen "Update required". While the version of the app is 
 
 How it works:
 
-- The lowest version is `update_required_minimum_version`, a parameter of the remote config of the app, so you raise it without a new version of the app. Its default is empty, which is no lowest version.
+- The lowest version is `update_required_minimum_version`, a parameter of the remote config of the app, so you raise it without a new version of the app. Its default is empty, which sets no lowest version.
 - The version of the app is its version name, such as `1.4.0` of `version: 1.4.0+12`, from [package_info_plus](https://pub.dev/packages/package_info_plus). The two compare number by number, so `1.10.0` is above `1.9.2`.
-- The screen is hard until the user taps "Update". From then on, or at once when the store page did not open, it also offers "Not now", which lets the user in for this launch. So a lowest version set too early never locks anyone out.
-- The store page is that of the review role of the app: Google Play on Android, and on iOS the App Store page, which needs the App Store ID of the app in `.env`.
+- Until the user taps "Update", the screen offers no way into the app. From then on, or at once when the store page did not open, it also offers "Not now", which lets the user in for this launch. So a lowest version set too early never locks anyone out.
+- The store page comes from the review role of the app: Google Play on Android, and on iOS the App Store page, which needs the App Store ID of the app in `.env`.
 
 The module takes the remote config and the reviews from the modules that provide them, such as `firebase_remote_config` and `in_app_review`.
 
