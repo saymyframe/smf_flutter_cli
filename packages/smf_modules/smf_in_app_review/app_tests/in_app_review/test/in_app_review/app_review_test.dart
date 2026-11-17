@@ -16,6 +16,7 @@
 // restorer of the role reads what the test saved, and initReview() of the
 // role again. A start-up runs once in a test file, so the test starts the
 // app once. Each expectation gives its reason.
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';

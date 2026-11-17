@@ -125,8 +125,11 @@ void main() {
       );
 
       expect(
-        (service.calls, service.pages),
-        (['openStorePage'], [play]),
+        [service.calls, service.pages],
+        [
+          ['openStorePage'],
+          [play],
+        ],
         reason: 'A tap on the entry opens exactly the Google Play page of the '
             'app once, and asks for no review dialog, which the stores '
             'forbid from a button.',
