@@ -46,11 +46,13 @@ enum AnalyticsCollection {
 ///
 /// `setAnalyticsCollectionEnabled` of the service is the one switch of
 /// collection, for every provider of the app:
-/// - Once `setAnalyticsCollectionEnabled(false)` completes, no provider
-///   sends anything to its backend: neither what the app logs nor what its
-///   SDK records itself, such as a screen, a session or an install. This
-///   holds until `setAnalyticsCollectionEnabled(true)` completes, and the
-///   reverse.
+/// - Once `setAnalyticsCollectionEnabled(false)` completes, nothing that
+///   the app logs from then on, and nothing that an SDK records itself from
+///   then on, such as a screen, a session or an install, reaches the backend
+///   of a provider. This holds until `setAnalyticsCollectionEnabled(true)`
+///   completes, and the reverse. What the app logged before the call may
+///   still leave with a batch that a provider had queued: an SDK may keep
+///   its queue of events on the device and not empty it when it opts out.
 /// - Each provider keeps the setting on the device, so that it holds from
 ///   the first moment of every later start, before any code of the app
 ///   runs. No other call of the service changes it.
@@ -194,9 +196,9 @@ String _analyticsReadmeSection(AnalyticsCollection collection) {
   return '''
 $mode
 
-`setAnalyticsCollectionEnabled()` of the analytics service is the one switch, for every provider of the app. Once a call with `false` completes, no provider sends anything to its backend, neither what the app logs nor what an SDK records itself, such as a screen or a session, until a call with `true` completes. Every provider keeps the setting on the device, so what the code chose holds from the first moment of every later start. `analyticsCollectedFromFirstStart` applies only on a device where the code never chose.
+`setAnalyticsCollectionEnabled()` of the analytics service is the one switch, for every provider of the app. Once a call with `false` completes, nothing that the app logs from then on, and nothing that an SDK records itself from then on, such as a screen or a session, reaches the backend of a provider, until a call with `true` completes. What the app logged before the call may still leave with a batch that a provider had queued. Every provider keeps the setting on the device, so what the code chose holds from the first moment of every later start. `analyticsCollectedFromFirstStart` applies only on a device where the code never chose.
 
-Off means that nothing is sent. It does not mean that no SDK writes to the device: an SDK keeps at least the setting there.
+Off means that nothing recorded while collection is off is sent. It does not mean that no SDK writes to the device: an SDK keeps at least the setting there.
 
 To change what the app does before its code chose, change `analyticsCollectedFromFirstStart`, and the native lines of each provider whose SDK starts before Dart, which its section of this README names. Or generate the app again with the other value of `$option`.
 

@@ -17,9 +17,12 @@ abstract interface class AnalyticsService {
   /// Turns the collection of analytics data on or off, for every provider of
   /// the app: the one switch of collection.
   ///
-  /// Once a call with false completes, no provider sends anything to its
-  /// backend, neither what the app logs nor what its SDK records itself, such
-  /// as a screen, a session or an install, until a call with true completes.
+  /// Once a call with false completes, nothing that the app logs from then
+  /// on, and nothing that an SDK records itself from then on, such as a
+  /// screen, a session or an install, reaches the backend of a provider,
+  /// until a call with true completes. What the app logged before the call
+  /// may still leave with a batch that a provider had queued.
+  ///
   /// Every provider keeps the setting on the device, so it holds from the
   /// first moment of every later start. Until the code first calls it, the
   /// app collects as [analyticsCollectedFromFirstStart] says.
