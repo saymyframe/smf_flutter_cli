@@ -1,0 +1,22 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+// ignore_for_file: type=lint, implicit_dynamic_list_literal, implicit_dynamic_map_literal, inference_failure_on_collection_literal
+
+import 'package:mason/mason.dart';
+
+final fakeReviewBundle = MasonBundle.fromJson(<String, dynamic>{
+  "files": [
+    {
+      "path": "lib/core/fixture_review/fixture_review.dart",
+      "data":
+          "aW1wb3J0ICcuLi9yZXZpZXcvcmV2aWV3X3NlcnZpY2UuZGFydCc7CgovLy8gV2FpdHMgZm9yIHRoZSBhbnN3ZXIgb2YgdGhlIHN0b3JlLCB3aGljaCB0YWtlcyBhIG1vbWVudCwgYXMgd2l0aCBhCi8vLyBwcm92aWRlciB0aGF0IGFza3MgaXQ6IGEgdHVybiBvZiB0aGUgZXZlbnQgbG9vcC4gU28gYSB0ZXN0IG1ha2VzIHRoZQovLy8gY2FsbHMgb2YgdGhlIHJldmlld3MgaW4gcmVhbCB0aW1lLCBhcyBpdCBydW5zIHRoZSBzdGFydC11cCBvZiB0aGUgYXBwLgpGdXR1cmU8dm9pZD4gX2Fuc3dlcigpID0+IEZ1dHVyZTx2b2lkPi5kZWxheWVkKER1cmF0aW9uLnplcm8pOwoKLy8vIENyZWF0ZXMgdGhlIHJldmlld3Mgb2YgdGhlIGZpeHR1cmUsIHdpdGggdGhlIGFwcC4gSXQgYXNrcyB0aGUgdXNlcgovLy8gbm90aGluZy4KUmV2aWV3U2VydmljZSBjcmVhdGVGaXh0dXJlUmV2aWV3KCkgPT4gY29uc3QgRml4dHVyZVJldmlldy5fKCk7CgovLy8gVGhlIHJldmlld3Mgb2YgYSBkZXZpY2Ugd2hvc2Ugc3RvcmUgY2FuIGFsd2F5cyBzaG93IGl0cyBkaWFsb2csIHdoaWNoCi8vLyBzaG93cyBub3RoaW5nIGluIHRoZSB0ZXN0cywgYW5kIG9uIHdoaWNoIGEgcGFnZSBvZiB0aGUgc3RvcmUgYWx3YXlzCi8vLyBvcGVucywgYXMgdGhlIG1vY2tzIG9mIHRoZSBwbGF0Zm9ybSBzaWRlIG9mIGV2ZXJ5IHByb3ZpZGVyIG9mIHRoZSByb2xlCi8vLyBoYXZlIGl0LiBUaGUgdmVyc2lvbiBvZiB0aGUgYXBwIGlzIGAxLjAuMGAsIGFzIHRoZXkgaGF2ZSBpdCB0b28uCmZpbmFsIGNsYXNzIEZpeHR1cmVSZXZpZXcgaW1wbGVtZW50cyBSZXZpZXdTZXJ2aWNlIHsKICBjb25zdCBGaXh0dXJlUmV2aWV3Ll8oKTsKCiAgQG92ZXJyaWRlCiAgRnV0dXJlPGJvb2w+IGlzQXZhaWxhYmxlKCkgYXN5bmMgewogICAgYXdhaXQgX2Fuc3dlcigpOwogICAgcmV0dXJuIHRydWU7CiAgfQoKICAvLy8gQXNrcyB0aGUgc3RvcmUgb2YgdGhlIGRldmljZSBmb3IgaXRzIGRpYWxvZywgd2hpY2ggc2hvd3Mgbm90aGluZyBpbgogIC8vLyB0aGUgdGVzdHMsIGFuZCBzaG93cyBub3RoaW5nIG9mIGl0cyBvd24gYXJvdW5kIGl0LgogIEBvdmVycmlkZQogIEZ1dHVyZTx2b2lkPiByZXF1ZXN0UmV2aWV3KCkgYXN5bmMgewogICAgYXdhaXQgX2Fuc3dlcigpOwogIH0KCiAgQG92ZXJyaWRlCiAgRnV0dXJlPGJvb2w+IG9wZW5TdG9yZVBhZ2UoVXJpIHBhZ2UpIGFzeW5jIHsKICAgIGF3YWl0IF9hbnN3ZXIoKTsKICAgIHJldHVybiB0cnVlOwogIH0KCiAgQG92ZXJyaWRlCiAgRnV0dXJlPFN0cmluZz8+IGFwcFZlcnNpb24oKSBhc3luYyA9PiAnMS4wLjAnOwp9Cg==",
+      "type": "text"
+    }
+  ],
+  "hooks": [],
+  "name": "fake_review",
+  "description":
+      "A brick of the fixture package fake_infra, for the tests of the SMF pipeline.",
+  "version": "0.1.0+1",
+  "environment": {"mason": "^0.1.1"},
+  "vars": {}
+});

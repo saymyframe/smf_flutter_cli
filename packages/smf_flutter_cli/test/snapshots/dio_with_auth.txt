@@ -1239,6 +1239,10 @@ final appSession = AppSessionController(
   takeGuestData: takeGuestData,
 );
 
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
+
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
 /// one, [appSession].

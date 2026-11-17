@@ -28,7 +28,8 @@ final class ModuleRegistry {
   final List<SmfModule> modules;
 
   /// Every role the modules declare, directly or through other roles, in the
-  /// order of first appearance.
+  /// order of first appearance: the roles they provide, require, use or
+  /// feed.
   final List<Role> roles;
 
   final Map<ModuleId, SmfModule> _byId;
@@ -53,13 +54,15 @@ final class ModuleRegistry {
       };
 
   /// Every role [modules] declare, directly or through other roles, in the
-  /// order of first appearance.
+  /// order of first appearance: the roles they provide, require, use or
+  /// feed, and those that these roles require, use or feed in turn.
   static List<Role> rolesOf(List<SmfModule> modules) {
     final roles = <Role>{};
     void add(Role role) {
       if (!roles.add(role)) return;
       role.requires.forEach(add);
       role.uses.forEach(add);
+      role.feeds.forEach(add);
     }
 
     for (final module in modules) {
@@ -69,6 +72,7 @@ final class ModuleRegistry {
         ...descriptor.provides,
         ...descriptor.requires,
         ...descriptor.uses,
+        ...descriptor.feeds,
         if (descriptor.variants case final variants?) variants.role,
         ...kind.mustProvide,
         ...kind.impliedRequires,
@@ -84,8 +88,9 @@ final class ModuleRegistry {
   ///
   /// It checks the names that become Dart identifiers, tags and options,
   /// the values of the mode options, the dependencies between modules, the
-  /// rules of module kinds, the variants, the sockets, and the conditions of
-  /// the symbols of the roles on what roles chose.
+  /// rules of module kinds, the variants, the roles that modules and roles
+  /// feed, the sockets, and the conditions of the symbols of the roles on
+  /// what roles chose.
   static List<String> problemsOf(List<SmfModule> modules) {
     final roles = rolesOf(modules);
     return [
@@ -96,6 +101,7 @@ final class ModuleRegistry {
       ..._socketProblems(roles, modules),
       ..._optionProblems(roles),
       ..._symbolConditionProblems(roles),
+      ..._roleFeedProblems(roles),
       for (final role in roles)
         if (role.cardinality == RoleCardinality.exactlyOne &&
             !modules.any((m) => m.descriptor.provides.contains(role)))
@@ -263,7 +269,10 @@ List<String> _cycleProblems(
 List<String> _descriptorProblems(SmfModule module, List<SmfModule> modules) {
   final descriptor = module.descriptor;
   final provided = <Role>{};
-  final problems = _providerProblems(descriptor, provided);
+  final problems = [
+    ..._providerProblems(descriptor, provided),
+    ..._feedProblems(descriptor),
+  ];
   final variants = descriptor.variants;
   if (variants != null) {
     problems.addAll(_variantProblems(descriptor, variants, provided, modules));
@@ -304,6 +313,39 @@ List<String> _providerProblems(
   }
   return problems;
 }
+
+/// The problems of the roles that [descriptor] feeds: a role that it also
+/// provides, requires or uses, which gives it more than data already (see
+/// [ModuleDescriptor.feeds]).
+List<String> _feedProblems(ModuleDescriptor descriptor) => [
+      for (final role in descriptor.feeds)
+        if (descriptor.provides.contains(role))
+          _feedProblem('The module ${descriptor.id} provides', role)
+        else if (descriptor.effectiveRequires.contains(role))
+          _feedProblem('The module ${descriptor.id} requires', role)
+        else if (descriptor.effectiveUses.contains(role))
+          _feedProblem('The module ${descriptor.id} uses', role),
+    ];
+
+/// The problems of the roles that the templates of [roles] feed: the role
+/// itself, or a role that it requires or uses, to which its template has
+/// more than data already (see [Role.feeds]).
+List<String> _roleFeedProblems(List<Role> roles) => [
+      for (final role in roles)
+        for (final fed in role.feeds)
+          if (identical(fed, role))
+            'The $role feeds itself, but the template of a role gives its '
+                'own role data without feeding it.'
+          else if (role.requires.contains(fed))
+            _feedProblem('The $role requires', fed)
+          else if (role.uses.contains(fed))
+            _feedProblem('The $role uses', fed),
+    ];
+
+/// The problem of a feeder whose relation to [role], as [relation] says,
+/// gives it more than data already.
+String _feedProblem(String relation, Role role) =>
+    '$relation the $role, so it must not also feed it.';
 
 /// The problems of the [variants] of [descriptor], a module that provides
 /// the roles [provided], with the providers among [modules].

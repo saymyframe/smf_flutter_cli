@@ -286,11 +286,13 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. An entry may show only at times, such as one that hides on a platform: the screen asks it each time it builds. While no module of the app has a setting, or while none of its entries shows, the screen shows a note for the developer of the app in place of the group: the first entry that shows replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
 ## State management
+
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
 
 With `flutter_riverpod`:
 
@@ -300,6 +302,8 @@ With `flutter_riverpod`:
 - After an `await`, a `Notifier` checks `ref.mounted` before it sets `state`. The user may have left the screen while the call was on its way, and a provider that is disposed of throws when its `Notifier` reads from `ref` or sets `state`. So the `Notifier` reads what the call needs from `ref` before the `await`.
 - A widget talks only to providers, never to a service or a DI container. A provider gets a service through another provider, which a test overrides.
 - `ProviderScope` is around the root widget in `runApp()`, in `lib/main.dart`: keep it above every widget that reads a provider.
+
+- The values that controllers of the app keep have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
 
 ## Values in .env
 
@@ -1567,6 +1571,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -4582,6 +4591,42 @@ class _DashedEdge extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
+}
+=== lib/core/state/shared_state_providers.dart (riverpod) ===
+// The providers that follow the values that controllers of the app
+// keep, one for each value, which the riverpod module generates for the
+// state management role. A widget reads one with ref.watch, and code
+// changes the value only through the controller that the doc of its
+// provider names.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show Notifier, NotifierProvider;
+import 'package:my_app/core/purchases/app_purchases.dart' as state0;
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final NotifierProvider<ListenableNotifier<state0.AppAccess>, state0.AppAccess>
+purchasesAccessProvider = NotifierProvider(
+  () => ListenableNotifier(state0.purchasesAccessListenable),
+);
+
+/// A notifier whose state is the value of a [ValueListenable], from the first
+/// read of its provider until the `ProviderScope` disposes of it. It only
+/// follows the value: code changes it through the controller of the
+/// listenable.
+final class ListenableNotifier<T> extends Notifier<T> {
+  /// Creates the notifier of the listenable that [listenable] returns.
+  ListenableNotifier(this._listenable);
+
+  final ValueListenable<T> Function() _listenable;
+
+  @override
+  T build() {
+    final listenable = _listenable();
+    void follow() => state = listenable.value;
+    listenable.addListener(follow);
+    ref.onDispose(() => listenable.removeListener(follow));
+    return listenable.value;
+  }
 }
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:flutter/material.dart';

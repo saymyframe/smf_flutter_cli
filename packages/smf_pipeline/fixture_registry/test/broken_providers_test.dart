@@ -522,8 +522,12 @@ void main() {
       'that each role chooses as for an app that got none, but for the '
       'sign-in that links as a new user, whose app is in the mode anonymous: '
       'there the session gives an anonymous user the account on a sign-up, '
-      'and the test of the session fails on the bug too', () async {
+      'and the test of the session fails on the bug too; and for the '
+      'analytics that turns collection on at each start, whose app collects '
+      'nothing before its code chose: there its first start shows the bug '
+      'too', () async {
     const linking = ModuleId('broken_auth_links_as_new_user');
+    const collecting = ModuleId('broken_analytics_collects_at_each_start');
 
     expect(
       {
@@ -533,8 +537,44 @@ void main() {
       },
       {
         linking: {'auth-mode': 'anonymous'},
+        collecting: {'analytics-collection': 'off'},
       },
     );
+    for (final provider in providers) {
+      final (:app, :problems) = await _checkOf(provider.failingApp);
+      expect(problems, isEmpty);
+      if (!app!.hook!.presentRoles.contains(analyticsRole)) continue;
+      final collection =
+          analyticsRole.collectionIn(analyticsRole.hookInput(app.hook!));
+      final ofCollecting = provider.module.descriptor.id == collecting;
+      expect(
+        collection,
+        ofCollecting ? AnalyticsCollection.off : AnalyticsCollection.on,
+        reason: '${provider.module.descriptor.id}',
+      );
+      expect(
+        app.createArguments('app_1', '/apps'),
+        ofCollecting
+            ? contains('--analytics-collection=off')
+            : isNot(contains(startsWith('--analytics-collection'))),
+        reason: '${provider.module.descriptor.id}',
+      );
+      // The matrix gives the test of the role whether the app collects from
+      // its first start, as the role chose.
+      final collectionTest = (await brokenProviderAppTests()).singleWhere(
+        (test) => test.directory.endsWith('/analytics_collection'),
+      );
+      expect(
+        collectionTest.appliesTo(app),
+        isTrue,
+        reason: '${provider.module.descriptor.id}',
+      );
+      expect(
+        collectionTest.values!(app),
+        {'collected_from_first_start': '${!ofCollecting}'},
+        reason: '${provider.module.descriptor.id}',
+      );
+    }
     for (final provider in providers) {
       if (!identical(provider.role, authRole)) continue;
       final (:app, :problems) = await _checkOf(provider.failingApp);

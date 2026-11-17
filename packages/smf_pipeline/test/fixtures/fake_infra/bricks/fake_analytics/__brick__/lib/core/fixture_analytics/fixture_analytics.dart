@@ -6,12 +6,21 @@ import '../analytics/analytics_service.dart';
 /// The platform side of the analytics of the fixture, which only the mocks
 /// of its own tests answer, as only the tests of a plugin know its
 /// platform side.
+///
+/// Like the SDK of a provider, the platform side keeps the setting of
+/// collection that `setAnalyticsCollectionEnabled` gave it on the device,
+/// across the starts of the app. Its start takes `collectByDefault` only
+/// while it has kept nothing, on a device where the code never chose.
 const fixtureAnalyticsChannel = MethodChannel('smf.fixture/analytics');
 
 /// Creates the analytics service of the fixture once its platform side has
-/// started.
+/// started, with whether it collects before the code chose: the setting of
+/// the analytics role, `analyticsCollectedFromFirstStart`.
 Future<AnalyticsService> initFixtureAnalytics() async {
-  await fixtureAnalyticsChannel.invokeMethod<void>('start');
+  await fixtureAnalyticsChannel.invokeMethod<void>(
+    'start',
+    {'collectByDefault': analyticsCollectedFromFirstStart},
+  );
   return const FixtureAnalytics();
 }
 

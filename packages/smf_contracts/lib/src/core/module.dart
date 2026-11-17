@@ -37,6 +37,7 @@ final class ModuleDescriptor {
     this.dependsOn = const {},
     this.requires = const {},
     this.uses = const {},
+    this.feeds = const {},
     this.providers = const [],
     this.variants,
     this.sockets = const [],
@@ -71,6 +72,22 @@ final class ModuleDescriptor {
   /// template code refers to its symbols only inside `{{#has_<role>}}`, or
   /// through a variable whose code depends on the role (see [RoleVar]).
   final Set<Role> uses;
+
+  /// Roles to which the module gives data and nothing else, such as a role
+  /// that follows a value which the module keeps.
+  ///
+  /// The module may contribute [RoleData] of such a role, which applies only
+  /// where the role is present, as all data does, and the module rules of
+  /// the role check the module. It gets nothing else of the role: no
+  /// [Contribution.when] or [Contribution.whenChosen] of it, no [RoleVar],
+  /// no socket, no symbol and no presence flag. So the module renders the
+  /// same files whether the app has the role or not, and the contract test
+  /// harness builds no case of the module for the role: its data reaches an
+  /// app only with a provider of the role, as in the apps with every module.
+  /// A module that needs more of a role uses it instead (see [uses]); it
+  /// does not both feed a role and provide, require or use it. A role that
+  /// the module feeds is not among its [roles].
+  final Set<Role> feeds;
 
   /// The roles the module provides, one provider object per role.
   final List<RoleProvider> providers;
@@ -120,7 +137,8 @@ final class ModuleDescriptor {
         ..removeAll(effectiveRequires)
         ..removeAll(provides);
 
-  /// All roles of the module: those it provides, requires or uses.
+  /// All roles of the module: those it provides, requires or uses, and not
+  /// those it [feeds].
   ///
   /// The module may use the sockets and symbols of these roles, and its
   /// bricks get their presence flags.

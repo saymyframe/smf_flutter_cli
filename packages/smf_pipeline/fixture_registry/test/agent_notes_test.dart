@@ -111,6 +111,9 @@ void main() {
     final hasFixturePurchases = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_purchases'),
     );
+    final hasFixtureReview = modules.any(
+      (module) => module.descriptor.id == const ModuleId('fake_review'),
+    );
     final hasFixtureEnv = modules.any(
       (module) => module.descriptor.id == const ModuleId('fake_env'),
     );
@@ -328,6 +331,39 @@ void main() {
               '`lib/core/fixture_purchases/fixture_purchases.dart`',
               '`FixturePurchases`',
               'fake_purchases',
+            ],
+          );
+        });
+      }
+
+      // What only a registry with the fixture reviews can tell: there the
+      // review role has a provider, so the check holds its note against one.
+      if (hasFixtureReview) {
+        test(
+            'of the review role may name Dart, and may not name the fixture '
+            'reviews, its file or what it declares', () {
+          expect(
+            _namedWith(
+              results,
+              reviewRole,
+              '- Ask after a task that the user finished, with `unawaited`, '
+              'and keep no `Completer` for it.',
+            ),
+            isEmpty,
+          );
+          expect(
+            _namedWith(
+              results,
+              reviewRole,
+              '- `createFixtureReview()` of '
+              '`lib/core/fixture_review/fixture_review.dart` returns the '
+              '`FixtureReview`, as fake_review wants.',
+            ),
+            [
+              '`createFixtureReview`',
+              '`lib/core/fixture_review/fixture_review.dart`',
+              '`FixtureReview`',
+              'fake_review',
             ],
           );
         });

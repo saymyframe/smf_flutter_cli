@@ -34,6 +34,7 @@ dependencies:
   smf_contracts: ^0.8.0
   smf_dart_define: ^0.7.1
   smf_dio: ^0.8.0
+  smf_email_feedback: ^0.8.0
   smf_event_bus: ^0.3.5
   smf_firebase_analytics: ^0.5.0
   smf_firebase_auth: ^0.7.0
@@ -48,6 +49,7 @@ dependencies:
   smf_go_router: ^0.6.2
   smf_google_sign_in: ^0.7.0
   smf_home_flutter: ^0.5.2
+  smf_in_app_review: ^0.8.0
   smf_launcher_icons: ^0.8.0
   smf_local_notifications: ^0.6.2
   smf_material_theme: ^0.4.4

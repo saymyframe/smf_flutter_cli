@@ -1,0 +1,15 @@
+name: email_feedback
+description: "The feedback role of an SMF app by email: the service of the role, which opens a new mail to the developer in the mail app of the device, the link of the mail, and the sheet with the address where no mail app opens."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: release_flavor, the flavor for a release, which the mail does
+# not name, address_key, the name of the key of the module in .env,
+# values_heading, the heading of the section of .env in the README of the
+# app, text_<name> for each text of the module, the code that reads it, and
+# env_email_feedback_address, the code that reads the value of the key.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1

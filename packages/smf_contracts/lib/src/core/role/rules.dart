@@ -142,7 +142,8 @@ final class StructuralRuleInput<D extends Object> {
 }
 
 /// A check that a role applies, during validation and before anything is
-/// rendered, to each module that provides, requires or uses the role.
+/// rendered, to each module that provides, requires, uses or feeds the role
+/// (see [ModuleDescriptor.feeds]).
 ///
 /// The pipeline runs the [Role.moduleRules] with [Role.checkModule]. For
 /// checks of the generated code, see [StructuralRule].

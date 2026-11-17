@@ -17,7 +17,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode and shows the screen of a failed start, the auth role,
 /// the onboarding screen role, the notifications role, the push role, the
-/// purchases role, the env role, the REST role and the remote config role.
+/// purchases role, the env role, the REST role, the remote config role, the
+/// review role, the feedback role and the analytics role, whose providers
+/// keep the setting of collection.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -25,8 +27,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// for a condition, the fixture gates and the fixture late gate, whose
 /// guards of the routes a test closes and opens, the fixture analytics and
 /// the fixture screen log, whose listeners of the screen note what they
-/// hear, the fixture setting, whose restorers note what they read, the
-/// fixture theme, whose colour a test changes, the module that uses the
+/// hear, the platform side of the fixture analytics, which a test answers
+/// as a device, the fixture setting, whose restorers note what they read,
+/// the fixture theme, whose colour a test changes, the module that uses the
 /// fixture clock, which shows an hour on a clock of 24 hours or of 12, and
 /// the fixture steps of the onboarding, whose actions note their calls, and
 /// the module that reads values of .env, whose keys a test gives values,
@@ -454,6 +457,34 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // purchases alone, with the texts of the app and without them, since
       // every app with every module has the fixture sign-in.
       await purchasesDeviceAppTest(),
+      // The reviews of the apps with the review role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already.
+      // There the fixture reviews provide the role, next to the fixture
+      // preferences and the fixture values of .env, which the role
+      // requires.
+      await reviewRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // No review is due while the user is in the flow of a guard of the
+      // routes, whichever modules provide the router and the review role:
+      // while a gate of the fixture gates does not allow, and while the
+      // target of the guard of the badge, which stands for a condition, is
+      // open over a page, the router telling the listener of the screen
+      // that the template of the review role gives it; and the app asks
+      // once out of every flow. So the test is one of the router role too.
+      // Only in the apps with every module that have the gates, which run
+      // flutter test for other tests already, and whose tests of the
+      // review role, of router_screens, of router_guards and of
+      // router_conditions it uses the helpers of.
+      MatrixAppTest(
+        '$appTests/review_flows',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.hook!.presentRoles.contains(reviewRole) &&
+            _hearsScreens(app) &&
+            _hasGates(app) &&
+            app.modules.contains(const ModuleId('fake_second')),
+        roles: {reviewRole, routerRole},
+      ),
       // The values of .env in the apps with the env role whose modules give
       // the role keys, whichever module provides it, the test that the CLI
       // keeps: only in the apps with every module, which run flutter test
@@ -497,6 +528,15 @@ Future<MatrixAppTests> fixtureAppTests() async {
         among: (app) =>
             app.everyModuleWith != null || _parametersOf(app).isEmpty,
       ),
+      // The way through which the users of the apps with the feedback role
+      // write to the developer, whichever module provides it, the test that
+      // the CLI keeps: appFeedback over a service of the test, and the
+      // service of the provider on the device of its mocks. Only in the apps
+      // with every module, which run flutter test for other tests already.
+      // There the fixture feedback provides the role, on a device that has
+      // an app that takes what the user writes and says no when it is asked
+      // whether it has one.
+      await feedbackRoleAppTest(among: (app) => app.everyModuleWith != null),
       // The module that makes requests through the REST role, fake_rest_user:
       // it loads the notes of a server, a body of another shape is a reason of
       // the role, and it cancels its call when it is disposed of, whichever
@@ -505,6 +545,22 @@ Future<MatrixAppTests> fixtureAppTests() async {
       MatrixAppTest(
         '$appTests/rest_consumer',
         appliesTo: (app) => app.modules.contains(FakeRestUserModule.id),
+      ),
+      // Whether an app collects analytics before its code chose, the mode
+      // option of the analytics role, --analytics-collection, and what the
+      // code chose, which every provider keeps across starts, whichever
+      // modules provide the role: in the apps with every module, which the
+      // matrix has once more for the other value of the option. The value
+      // comes from the choice of the role. The test looks at the fixture
+      // analytics, whose platform side it answers as a device that keeps
+      // the setting as the SDK of a provider does.
+      MatrixAppTest(
+        '$appTests/analytics_collection',
+        appliesTo: (app) => _withEveryModule(app, analyticsRole),
+        values: (app) => {
+          'collected_from_first_start': '${_collectedFromFirstStartOf(app)}',
+        },
+        roles: {analyticsRole},
       ),
       // The module that uses the fixture clock, whose role has a mode
       // option, --clock-hours: the clock of the app has the hours that the
@@ -538,6 +594,9 @@ Future<MatrixAppTests> fixtureAppTests() async {
       envRole,
       restRole,
       remoteConfigRole,
+      reviewRole,
+      feedbackRole,
+      analyticsRole,
     },
   );
 }
@@ -546,6 +605,14 @@ Future<MatrixAppTests> fixtureAppTests() async {
 /// remote config role, in the order of the role ([RemoteConfigRole.keysIn]).
 List<AppRemoteConfigKey> _parametersOf(MatrixApp app) =>
     remoteConfigRole.keysIn(remoteConfigRole.hookInput(app.hook!));
+
+/// Whether [app], an app with the analytics role, collects analytics from
+/// its first start, as the role chose (`--analytics-collection`): from the
+/// choice of the role, which an app that got no value of the option has too,
+/// not from the options that the matrix gives `smf create`.
+bool _collectedFromFirstStartOf(MatrixApp app) =>
+    analyticsRole.collectionIn(analyticsRole.hookInput(app.hook!)) ==
+    AnalyticsCollection.on;
 
 /// The values that the test of the module that reads values of .env gives
 /// its keys in the file of the values of an app: a value that goes into the

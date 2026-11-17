@@ -28,6 +28,7 @@ workspace:
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_dart_define
   - packages/smf_modules/smf_dio
+  - packages/smf_modules/smf_email_feedback
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
   - packages/smf_modules/smf_firebase_auth
@@ -42,6 +43,7 @@ workspace:
   - packages/smf_modules/smf_go_router
   - packages/smf_modules/smf_google_sign_in
   - packages/smf_modules/smf_home_flutter
+  - packages/smf_modules/smf_in_app_review
   - packages/smf_modules/smf_launcher_icons
   - packages/smf_modules/smf_local_notifications
   - packages/smf_modules/smf_material_theme

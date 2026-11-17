@@ -31,6 +31,8 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_dio` | `dio`, REST requests with dio |
 | `smf_revenuecat` | `revenuecat`, premium access sold with RevenueCat |
 | `smf_paywall` | `paywall`, the paywall and the screen of the subscription |
+| `smf_in_app_review` | `in_app_review`, the review dialog of the App Store and Google Play |
+| `smf_email_feedback` | `email_feedback`, feedback by email from the mail app of the device |
 | `smf_firebase_remote_config` | `firebase_remote_config`, remote config with Firebase Remote Config |
 | `smf_github_actions` | `github_actions`, CI on GitHub Actions |
 

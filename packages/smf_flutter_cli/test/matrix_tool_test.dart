@@ -187,6 +187,7 @@ void main() {
             ('onboarding', 'probeOnboarding'),
             ('shared_preferences', 'probeSharedPreferences'),
             ('local_notifications', 'probeLocalNotifications'),
+            ('email_feedback', 'probeEmailFeedback'),
             ('di_role', 'probeServices'),
             ('preferences_role', 'probePreferences'),
             ('notifications_role', 'probeNotifications'),
@@ -195,6 +196,7 @@ void main() {
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
             ('flavors', 'probeFlavor'),
+            ('review_role', 'probeReview'),
             if (!withoutExternalSteps)
               ('firebase_remote_config', 'probeFirebaseRemoteConfig'),
             ('rest_role', 'probeRest'),
@@ -260,14 +262,15 @@ void main() {
         contains("import 'package:start_app/$implementation';"),
       );
       // The tests of shared_preferences, of Firebase Authentication, of
-      // Google sign-in and of Firebase Remote Config, which come with their
-      // probes, each need a dev dependency, which the tool adds with flutter
-      // in the app.
+      // Google sign-in, of email_feedback and of Firebase Remote Config,
+      // which come with their probes, each need a dev dependency, which the
+      // tool adds with flutter in the app.
       final pubAdd = [
         'flutter pub add',
         if (!withoutExternalSteps) 'dev:firebase_auth_platform_interface',
         if (!withoutExternalSteps) 'dev:google_sign_in_platform_interface',
         'dev:shared_preferences_platform_interface',
+        'dev:url_launcher_platform_interface',
         if (!withoutExternalSteps)
           'dev:firebase_remote_config_platform_interface',
         'in ',

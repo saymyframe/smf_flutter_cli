@@ -248,6 +248,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -286,6 +288,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -304,6 +308,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -311,6 +316,7 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
+      'Feedback: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
       'Crash reporting: which module provides it?',
@@ -340,14 +346,14 @@ void main() {
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
     // labels it shows. The theme follows, then the push messages before the
-    // notifications that their role requires, and then the preferences of
-    // the localization, the theme and the notifications and the DI
-    // container, all before the state managers.
+    // notifications that their role requires, the store reviews, and then
+    // the preferences of the localization, the theme, the notifications and
+    // the store reviews and the DI container, all before the state managers.
     expect(run.asked.last.shown, [
       'github_actions — CI on GitHub Actions',
       'None',
     ]);
-    expect(run.asked[11].shown, [
+    expect(run.asked[12].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -404,6 +410,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -422,6 +430,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -429,6 +438,7 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
+      'Feedback: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
       'Crash reporting: which module provides it?',
@@ -493,6 +503,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -593,6 +605,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -654,6 +668,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -672,6 +688,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -679,6 +696,7 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
+      'Feedback: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
       'Crash reporting: which module provides it?',
@@ -733,6 +751,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -752,6 +772,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -759,6 +780,7 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
+      'Feedback: which module provides it?',
       'Values in .env: which module provides it?',
       'Remote config: which module provides it?',
       'Crash reporting: which module provides it?',
@@ -805,6 +827,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -828,11 +852,12 @@ void main() {
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 5),
+      messages.sublist(localization + 1, localization + 6),
       [
         'Theme: which module provides it?',
         'Push messages: which module provides it?',
         'Notifications: which module provides it?',
+        'Store reviews: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
     );
@@ -952,6 +977,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1028,6 +1055,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1104,6 +1133,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1117,19 +1148,20 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them, and the localization, the theme and the notifications, whose
-    // roles require the preferences, come before the preferences and
-    // before get_it, and the push messages, whose role requires the
-    // notifications, before the notifications. So the question of the
-    // preferences knows whether the answers on the localization, on the
-    // theme and on the notifications need them.
+    // them, and the localization, the theme, the notifications and the
+    // store reviews, whose roles require the preferences, come before the
+    // preferences and before get_it, and the push messages, whose role
+    // requires the notifications, before the notifications. So the question
+    // of the preferences knows whether the answers on the localization, on
+    // the theme, on the notifications and on the store reviews need them.
     expect(
-      messages.sublist(preferences - 4, preferences + 1),
+      messages.sublist(preferences - 5, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
         'Push messages: which module provides it?',
         'Notifications: which module provides it?',
+        'Store reviews: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -1201,6 +1233,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': <String>[],
       'Analytics': <String>[],
@@ -1276,6 +1310,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1372,6 +1408,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1494,6 +1532,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1574,6 +1614,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1693,9 +1735,12 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['No: only once'],
         'Authentication': ['None'],
         'CI': ['None'],
       },
@@ -1717,6 +1762,20 @@ void main() {
     );
     expect(run.asked[analytics].shown, [
       'firebase_analytics — Firebase Analytics with firebase_analytics',
+    ]);
+    // Once the modules of the app are known, the analytics role asks
+    // whether the app collects before the user agrees, with the default
+    // first. This app collects nothing until its code turns collection on,
+    // and Firebase Analytics, which starts before any Dart code runs, has
+    // its collection off by default in the native projects.
+    final collection = run.asked.last;
+    expect(
+      collection.message,
+      'Does the app collect analytics before the user agrees?',
+    );
+    expect(collection.shown, [
+      'Yes, from its first start',
+      'No: only once your code turns it on, as after the user agrees',
     ]);
     // Firebase was not chosen among the infrastructure, but Analytics
     // depends on it.
@@ -1743,6 +1802,25 @@ void main() {
         contains('void logFirebaseScreenView(String? route, String location)'),
       ),
     );
+    expect(
+      app
+          .childFile('lib/core/analytics/analytics_service.dart')
+          .readAsStringSync(),
+      contains('const bool analyticsCollectedFromFirstStart = false;'),
+    );
+    expect(
+      app
+          .childFile('android/app/src/main/AndroidManifest.xml')
+          .readAsStringSync(),
+      contains(
+        'android:name="firebase_analytics_collection_enabled" '
+        'android:value="false"',
+      ),
+    );
+    expect(
+      app.childFile('ios/Runner/Info.plist').readAsStringSync(),
+      contains('<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>'),
+    );
     // The router tells the listener of Firebase Analytics about the screen
     // the user sees, in the main navigation too, and its navigators have no
     // observer.
@@ -1761,7 +1839,8 @@ void main() {
       ),
     );
     // The service starts without waiting, so bootstrap() only initializes
-    // Firebase.
+    // Firebase, after a debug build printed that collection waits for the
+    // code of the app.
     const bootstrap = 'lib/bootstrap.dart';
     final calls = DartFileIndexer.index(
       bootstrap,
@@ -1772,7 +1851,7 @@ void main() {
         for (final call in calls)
           if (call.enclosingDeclaration == 'bootstrap') call.name,
       ],
-      ['initializeApp'],
+      ['debugPrint', 'initializeApp'],
     );
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
@@ -1825,6 +1904,8 @@ void main() {
         'Push messages': ['firebase_messaging'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
@@ -1923,6 +2004,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Notifications': ['local_notifications'],
       'Dependency injection': ['None'],
       'State management': ['None'],
@@ -2025,9 +2108,12 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['Yes'],
         'Authentication': ['None'],
         'CI': ['None'],
       },
@@ -2089,6 +2175,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2289,6 +2377,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2415,6 +2505,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2539,6 +2631,8 @@ void main() {
       'firebase_crashlytics',
       'firebase_analytics',
       'dio',
+      'in_app_review',
+      'email_feedback',
       'firebase_remote_config',
       'github_actions',
     ];
@@ -2560,8 +2654,11 @@ void main() {
         'Events': ['event_bus'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],
         'REST API': ['dio'],
+        'Store reviews': ['in_app_review'],
+        'Feedback': ['email_feedback'],
         'Remote config': ['firebase_remote_config'],
         'CI': ['github_actions'],
       },
@@ -2575,12 +2672,12 @@ void main() {
     // so come before its question; the look of the app, its languages and
     // its theme; the push messages, before the notifications that their
     // role requires, which come after the two screens that the
-    // notifications role adds to; what is under the hood, the preferences
-    // that the localization, the theme, the onboarding and the
-    // notifications require, the DI container, the state manager and the
-    // events; what the app talks to, the authentication, the REST API, the
-    // purchases and the remote config; what tells how it runs, the crash
-    // reporting and the
+    // notifications role adds to; the store reviews; what is under the hood,
+    // the preferences that the localization, the theme, the onboarding, the
+    // notifications and the store reviews require, the DI container, the
+    // state manager and the events; what the app talks to, the
+    // authentication, the REST API, the purchases, the feedback and the
+    // remote config; what tells how it runs, the crash reporting and the
     // analytics; and last what gets it released, its icon, its splash screen
     // and CI. The choices of the roles come once the modules are known, and
     // the question about a step that the user may leave for later once the
@@ -2593,6 +2690,7 @@ void main() {
       'Localization: which module provides it?',
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
+      'Store reviews: which module provides it?',
       'Dependency injection: which module provides it?',
       equals(
         'State management: sign_in requires the state management role. '
@@ -2600,12 +2698,14 @@ void main() {
       ),
       'Events: which module provides it?',
       'REST API: which module provides it?',
+      'Feedback: which module provides it?',
       'Remote config: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
+      'Does the app collect analytics before the user agrees?',
       'Who may use the app without an account?',
       startsWith('Making the app icon from assets/branding ('),
       equals(

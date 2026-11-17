@@ -29,6 +29,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_dio/smf_dio.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -40,6 +41,7 @@ import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_in_app_review/smf_in_app_review.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
@@ -88,12 +90,14 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeNotificationsModule(),
       const FakePushModule(),
       const FakePurchasesModule(),
+      const FakeReviewModule(),
       const FakeEnvModule(),
       const FakeEnvUserModule(),
       const FakeRestModule(),
       const FakeRestUserModule(),
       const FakeRemoteConfigModule(),
       const FakeConfigUserModule(),
+      const FakeFeedbackModule(),
       const FakeCiModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
@@ -102,7 +106,8 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeClockBadgeModule(),
       const FakeClockUserModule(),
       const BottomTabsModule(),
-      // Last, so its start-up runs last in the late phase of the start-up.
+      // Last, so its start-up runs after that of every other module in the
+      // late phase of the start-up.
       const FakeStartFailureModule(),
     ];
 
@@ -147,18 +152,20 @@ List<ModuleId> everyFixture({
       FakeNotificationsModule.id,
       FakePushModule.id,
       FakePurchasesModule.id,
+      FakeReviewModule.id,
       FakeEnvModule.id,
       FakeEnvUserModule.id,
       FakeRestModule.id,
       FakeRestUserModule.id,
       FakeRemoteConfigModule.id,
       FakeConfigUserModule.id,
+      FakeFeedbackModule.id,
       FakeCiModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
-      // Last, so its start-up runs last in the late phase of the start-up,
-      // after crash reporting has started.
+      // Last, so its start-up runs after that of every other module in the
+      // late phase of the start-up, after crash reporting has started.
       FakeStartFailureModule.id,
     ];
 
@@ -234,9 +241,17 @@ List<ModuleId> everyFixture({
 /// the purchases of RevenueCat: that of the paywall, whose entry of the
 /// subscription the settings screen shows below the entries of the other
 /// features, and that of its step of the onboarding, which comes after the
-/// steps of the fixture steps and of the notifications role. Then comes
-/// Firebase Remote Config, the provider of the remote config role that the
-/// CLI has, for the app test that it keeps and for the test of that role
+/// steps of the fixture steps and of the notifications role. After them
+/// comes in_app_review, the provider of the review role that the CLI has, for
+/// the app test that it keeps and for the tests of that role that the CLI
+/// keeps, of the role and of its entry of the settings screen, which reads
+/// the App Store ID from the values of .env and shows on iOS only with one.
+/// Then comes email_feedback, the provider of the feedback role that the CLI
+/// has, for the app test that it keeps and for the tests of that role that
+/// the CLI keeps, of the role and of its entry "Write to us" of the settings
+/// screen, which shows only while the module has the address of .env. Then
+/// comes Firebase Remote Config, the provider of the remote config role that
+/// the CLI has, for the app test that it keeps and for the test of that role
 /// that the CLI keeps, which run there next to the other Firebase modules.
 ///
 /// With two state managers, the registry has two apps with every module,
@@ -286,6 +301,8 @@ List<SmfModule> severalProvidersModules() => const [
       DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      InAppReviewModule(),
+      EmailFeedbackModule(),
       FirebaseRemoteConfigModule(),
       LauncherIconsModule(),
     ];

@@ -1980,6 +1980,28 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.feedbackCheckingFirst,
+        role: feedbackRole,
+        bug: 'Its open first asks the device whether it has an app that takes '
+            'what the user writes, as canLaunchUrl of url_launcher does, and '
+            'completes with false on a no without opening. The device of the '
+            'tests has such an app and says no, as Android 11 and later say to '
+            'an app whose manifest names no other app, so the way to write '
+            'never opens there.',
+        // The role needs no other module: the fixture feedback alone, with
+        // the app entry of the fixtures.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/feedback_role/feedback_role_test.dart',
+            'open() of the provider opens its way on a device that has one, '
+                'and completes with true',
+            'the provider did not open its way to write, though the device of '
+                'the tests has one',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.purchasesKeptByService,
         role: purchasesRole,
         bug: 'Its service keeps the purchases in a field of its own, for '
@@ -2033,6 +2055,36 @@ List<BrokenProvider> brokenProviders() => const [
                 'after a sign-out of that account has none of them',
             'After the sign-out of an account, the next user of the device is '
                 'a new one, with nothing bought',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.reviewAskingFirst,
+        role: reviewRole,
+        bug: 'Its service asks the user "Do you like the app?" before the '
+            'review dialog, and asks the store only after a yes: the question '
+            'that the stores forbid, after which a request waits for the '
+            'user.',
+        // The fixture preferences and the fixture values of .env, which the
+        // role requires.
+        app: [FakePreferencesModule.id, FakeEnvModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/review_role/nothing_around_test.dart',
+            'the provider asks the store for its dialog and shows nothing of '
+                'its own around it',
+            'The provider asks the store for its dialog and shows nothing of '
+                'its own around it, as the stores ask: the app showed '
+                'something of its own around the review dialog.',
+          ),
+          MatrixExpectedFailure(
+            'test/review_role/request_test.dart',
+            'requestIfDue() on a launch on which a review is due asks the '
+                'store at once through the provider of the app, and the app '
+                'saves the request once the store took it',
+            'The provider asks the store for its dialog at once, and the '
+                'request completes once the store took it: the app then saves '
+                'the time and the version of the request.',
           ),
         ],
       ),
@@ -2430,6 +2482,70 @@ List<BrokenProvider> brokenProviders() => const [
             'test/analytics_role_start_test.dart',
             'the other analytics services get each call',
             'The service log gets the call.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.analyticsCollectingAtEachStart,
+        role: analyticsRole,
+        bug: 'Its start sets its platform side up with collection on, as a '
+            'provider does that starts its SDK with collection on at each '
+            'start: an app that collects nothing before its code chose '
+            'collects at its first start, and a collection that the code '
+            'turned off is on again at the next start.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        // The app collects nothing before its code chose, so its first start
+        // shows the bug too.
+        roleOptions: {'analytics-collection': 'off'},
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/first_start_test.dart',
+            'at its first start, the app collects analytics exactly when it '
+                'was generated to collect from its first start',
+            'An app that collects nothing before its code chose collects '
+                'nothing at its first start, not even a session that its SDK '
+                'would record itself.',
+          ),
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.analyticsKeepingOptOutInMemory,
+        role: analyticsRole,
+        bug: 'It keeps the opt-out in Dart memory alone: a call that turns '
+            'collection off never reaches its platform side, which collects '
+            'again at the next start, a session among what it records itself.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+          // The call that turns collection off does not reach its platform
+          // side, nor do the calls after it.
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'the analytics service of the app forwards each call to every '
+                'analytics service once',
+            'Each call reaches every analytics service once, in the order of '
+                'the calls.',
           ),
         ],
       ),
