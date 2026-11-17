@@ -343,6 +343,10 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 - A screen neither closes itself nor navigates after it changed the value of `allows` of a guard: the router has done both by then. This goes for a screen of a `flow` that turned the value `true`, as after a sign-in, and for a screen of the `routes` that turned it `false`, as a screen with a sign-out button. A `pop()` after the change closes the page that is on top by then: the page that the user asked for, or the page below the one that the router closed, which may be the main navigation of the app.
 - The `flow` of a guard is its `redirectTo` and the routes below it. These routes show only while a guard with that `flow` does not allow. At any other time the router shows the screen that the app starts on in their place, or the `redirectTo` of a gate whose `allows` is `false`. So no code navigates into the `flow` of a gate, and no screen of a `flow` navigates out of it once its guard allows: the router does. The first does not hold for a guard with `routes`. While it does not allow and every gate does, its `redirectTo` shows like any route, so a screen may open it with `push()`. `go()` to it from a screen takes the place of the stack, with no way back. A link to a route of its `flow` opens that route over the screen that the app starts on, so back leads into the app. Such a link is lost while a gate with another `flow` does not allow: once the gate allows, the user is on the screen that the app starts on. Inside a `flow`, navigate with `push()` or `replace()`. `go()` takes the place of the pages below the `flow`, and the request that waits is lost with them.
 
+## State management
+
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 ## Store reviews
 
 - `appReview` in `lib/core/review/app_review.dart` asks for the review dialog of the App Store or Google Play only where the code of the app calls `appReview.requestIfDue()`. Call it at a natural break, such as after the user has finished a task: `unawaited(appReview.requestIfDue());`. It asks only when `ReviewPolicy` says that a review is due: never on the first launch, in the flow of a guard of the routes, twice in a version or twice in 14 days. It returns nothing, since the store tells nothing.
@@ -1514,6 +1518,10 @@ final appSession = AppSessionController(
   mode: authMode,
   takeGuestData: takeGuestData,
 );
+
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
 
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
@@ -4955,6 +4963,7 @@ abstract final class FixtureValues {
   static String? get third => AppEnv.fakeEnvUserThird;
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../preferences/app_preferences.dart';
@@ -4984,7 +4993,8 @@ final appLocale = AppLocaleController._();
 
 /// Keeps the language that the user chose for the app, and saves each
 /// choice in the preferences of the app.
-final class AppLocaleController extends ChangeNotifier {
+final class AppLocaleController extends ChangeNotifier
+    implements ValueListenable<Locale?> {
   AppLocaleController._();
 
   Locale? _locale;
@@ -4994,6 +5004,7 @@ final class AppLocaleController extends ChangeNotifier {
 
   /// The language that the user chose, one of [appLocales], or `null` while
   /// the app follows the languages of the device.
+  @override
   Locale? get value => _locale;
 
   /// Chooses the language of [locale] as the language of the app, or with
@@ -5043,6 +5054,11 @@ Locale? _ofApp(String? code) {
   }
   return null;
 }
+
+/// The language that the user chose, as a [ValueListenable] for the state
+/// manager of the app: [appLocale], which changes it only through
+/// [AppLocaleController.choose].
+ValueListenable<Locale?> localizationLocaleListenable() => appLocale;
 
 /// Restores the language that the user chose from [preferences], which the
 /// app opened, and keeps them for the choices to come: a restorer of the
@@ -5258,6 +5274,12 @@ const String notificationOwnerKey = 'notifications.owner';
 /// notifications that the app shows now or at a time to come, and the taps
 /// of the user on them.
 final appNotifications = NotificationsController._();
+
+/// Whether the app may show notifications, as a [ValueListenable] for the
+/// state manager of the app: [NotificationsController.permission] of
+/// [appNotifications], which [NotificationsController.request] changes.
+ValueListenable<NotificationPermission> notificationsPermissionListenable() =>
+    appNotifications.permission;
 
 /// Shows the notifications of the app through the service of the provider
 /// of notifications, keeps the permission to show them up to date, and
@@ -5979,6 +6001,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -6772,6 +6799,11 @@ export 'push_service.dart' show PushMessage;
 /// that arrive while the app is in the foreground, and the taps of the user
 /// on them.
 final appPush = AppPushController._();
+
+/// The address of the device for push messages, as a [ValueListenable] for
+/// the state manager of the app: [AppPushController.address] of [appPush],
+/// `null` while the platform gives none.
+ValueListenable<String?> pushAddressListenable() => appPush.address;
 
 /// Receives the push messages of the app through the service of the
 /// provider of push messages. The app has one, [appPush].
@@ -10889,6 +10921,107 @@ class _DashedEdge extends CustomPainter {
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
 }
+=== lib/core/state/fixture_listenable_cubit.dart (fake_bloc) ===
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter_bloc/flutter_bloc.dart' show Cubit;
+
+/// A cubit whose state is the value of a [ValueListenable], from its creation
+/// until it is closed (fixture).
+abstract base class FixtureListenableCubit<T> extends Cubit<T> {
+  /// Creates the cubit of [listenable], with its value.
+  FixtureListenableCubit(this._listenable) : super(_listenable.value) {
+    _listenable.addListener(_follow);
+  }
+
+  final ValueListenable<T> _listenable;
+
+  void _follow() => emit(_listenable.value);
+
+  @override
+  Future<void> close() {
+    _listenable.removeListener(_follow);
+    return super.close();
+  }
+}
+=== lib/core/state/fixture_state_cubits.dart (fake_bloc) ===
+// The bridges of the fixture BLoC (fixture).
+import 'package:fixture_app/core/auth/app_session.dart' as state4;
+import 'package:fixture_app/core/l10n/app_locale.dart' as state1;
+import 'package:fixture_app/core/notifications/app_notifications.dart'
+    as state5;
+import 'package:fixture_app/core/purchases/app_purchases.dart' as state7;
+import 'package:fixture_app/core/push/app_push.dart' as state6;
+import 'package:fixture_app/core/state/fixture_listenable_cubit.dart';
+import 'package:fixture_app/core/theme/theme_mode.dart' as state3;
+import 'package:flutter/material.dart' as state2;
+import 'package:flutter/widgets.dart' as state0;
+import 'package:flutter/widgets.dart'
+    show BuildContext, StatelessWidget, Widget;
+import 'package:flutter_bloc/flutter_bloc.dart'
+    show BlocProvider, MultiBlocProvider;
+
+/// The language that the user chose, `null` to follow the device; `appLocale.choose()` changes it.
+final class LocalizationLocaleBridge
+    extends FixtureListenableCubit<state0.Locale?> {
+  /// Creates the cubit (fixture).
+  LocalizationLocaleBridge() : super(state1.localizationLocaleListenable());
+}
+
+/// The theme mode that the user selected; `appThemeMode.choose()` changes it.
+final class ThemeModeBridge extends FixtureListenableCubit<state2.ThemeMode> {
+  /// Creates the cubit (fixture).
+  ThemeModeBridge() : super(state3.themeModeListenable());
+}
+
+/// Who uses the app; the calls of `appSession` change it.
+final class AuthSessionBridge
+    extends FixtureListenableCubit<state4.AppSession> {
+  /// Creates the cubit (fixture).
+  AuthSessionBridge() : super(state4.authSessionListenable());
+}
+
+/// Whether the app may show notifications; `appNotifications.request()` changes it.
+final class NotificationsPermissionBridge
+    extends FixtureListenableCubit<state5.NotificationPermission> {
+  /// Creates the cubit (fixture).
+  NotificationsPermissionBridge()
+    : super(state5.notificationsPermissionListenable());
+}
+
+/// The address of the device for push messages, `null` while the platform gives none.
+final class PushAddressBridge extends FixtureListenableCubit<String?> {
+  /// Creates the cubit (fixture).
+  PushAddressBridge() : super(state6.pushAddressListenable());
+}
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final class PurchasesAccessBridge
+    extends FixtureListenableCubit<state7.AppAccess> {
+  /// Creates the cubit (fixture).
+  PurchasesAccessBridge() : super(state7.purchasesAccessListenable());
+}
+
+/// Provides the bridges around the root of the app (fixture).
+final class FixtureStateBridges extends StatelessWidget {
+  /// Creates the widget around [child].
+  const FixtureStateBridges({required this.child, super.key});
+
+  /// The root of the app.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MultiBlocProvider(
+    providers: [
+      BlocProvider(create: (_) => LocalizationLocaleBridge()),
+      BlocProvider(create: (_) => ThemeModeBridge()),
+      BlocProvider(create: (_) => AuthSessionBridge()),
+      BlocProvider(create: (_) => NotificationsPermissionBridge()),
+      BlocProvider(create: (_) => PushAddressBridge()),
+      BlocProvider(create: (_) => PurchasesAccessBridge()),
+    ],
+    child: child,
+  );
+}
 === lib/core/theme/app_theme.dart (fake_theme) ===
 import 'package:flutter/material.dart';
 
@@ -10935,6 +11068,7 @@ ThemeData _themeOf(BuildContext context, Brightness brightness) => ThemeData(
   ),
 );
 === lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -10950,7 +11084,8 @@ final appThemeMode = AppThemeModeController._();
 /// Keeps the theme mode that the user selected for the app, tells its
 /// listeners when the mode changes, and saves each choice in the
 /// preferences of the app. The app has one, [appThemeMode].
-final class AppThemeModeController extends ChangeNotifier {
+final class AppThemeModeController extends ChangeNotifier
+    implements ValueListenable<ThemeMode> {
   AppThemeModeController._();
 
   /// The key of the mode in the preferences, which keep it by its name.
@@ -10963,6 +11098,7 @@ final class AppThemeModeController extends ChangeNotifier {
 
   /// The mode of the app: [ThemeMode.system], which follows the device,
   /// unless the user selected another.
+  @override
   ThemeMode get value => _mode;
 
   /// Chooses [mode] as the mode of the app, at once, and saves the choice:
@@ -10993,6 +11129,11 @@ final class AppThemeModeController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// The theme mode that the user selected, as a [ValueListenable] for the
+/// state manager of the app: [appThemeMode], which changes it only through
+/// [AppThemeModeController.choose].
+ValueListenable<ThemeMode> themeModeListenable() => appThemeMode;
 
 /// Restores the theme mode that the user selected from [preferences], which
 /// the app opened, and keeps them for the choices to come: a restorer of
@@ -11504,6 +11645,7 @@ class FixtureSecondScreen extends StatelessWidget {
 }
 === lib/main.dart (flutter_core) ===
 import 'package:fixture_app/core/l10n/app_locale.dart';
+import 'package:fixture_app/core/state/fixture_state_cubits.dart';
 import 'package:fixture_app/core/theme/app_theme.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:flutter/material.dart';
@@ -11524,12 +11666,17 @@ Future<void> main() async {
     return;
   }
   runApp(
-    RepaintBoundary(
-      child: FixtureSeedScope(
-        notifier: fixtureSeed,
-        child: AppLocaleScope(
-          notifier: appLocale,
-          child: AppThemeModeScope(notifier: appThemeMode, child: const App()),
+    FixtureStateBridges(
+      child: RepaintBoundary(
+        child: FixtureSeedScope(
+          notifier: fixtureSeed,
+          child: AppLocaleScope(
+            notifier: appLocale,
+            child: AppThemeModeScope(
+              notifier: appThemeMode,
+              child: const App(),
+            ),
+          ),
         ),
       ),
     ),

@@ -292,6 +292,8 @@ With `go_router`:
 
 ## State management
 
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 With `flutter_riverpod`:
 
 - The state of a screen is a provider in the directory of its feature: a `NotifierProvider.autoDispose` with its `Notifier`, so the state lasts as long as the screen. Write it by hand: the app has no code generation for providers.
@@ -300,6 +302,8 @@ With `flutter_riverpod`:
 - After an `await`, a `Notifier` checks `ref.mounted` before it sets `state`. The user may have left the screen while the call was on its way, and a provider that is disposed of throws when its `Notifier` reads from `ref` or sets `state`. So the `Notifier` reads what the call needs from `ref` before the `await`.
 - A widget talks only to providers, never to a service or a DI container. A provider gets a service through another provider, which a test overrides.
 - `ProviderScope` is around the root widget in `runApp()`, in `lib/main.dart`: keep it above every widget that reads a provider.
+
+- The values that controllers of the app keep, such as the theme mode, have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
 
 ## Values in .env
 
@@ -1567,6 +1571,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -4582,6 +4591,42 @@ class _DashedEdge extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
+}
+=== lib/core/state/shared_state_providers.dart (riverpod) ===
+// The providers that follow the values that controllers of the app
+// keep, one for each value, which the riverpod module generates for the
+// state management role. A widget reads one with ref.watch, and code
+// changes the value only through the controller that the doc of its
+// provider names.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show Notifier, NotifierProvider;
+import 'package:my_app/core/purchases/app_purchases.dart' as state0;
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final NotifierProvider<ListenableNotifier<state0.AppAccess>, state0.AppAccess>
+purchasesAccessProvider = NotifierProvider(
+  () => ListenableNotifier(state0.purchasesAccessListenable),
+);
+
+/// A notifier whose state is the value of a [ValueListenable], from the first
+/// read of its provider until the `ProviderScope` disposes of it. It only
+/// follows the value: code changes it through the controller of the
+/// listenable.
+final class ListenableNotifier<T> extends Notifier<T> {
+  /// Creates the notifier of the listenable that [listenable] returns.
+  ListenableNotifier(this._listenable);
+
+  final ValueListenable<T> Function() _listenable;
+
+  @override
+  T build() {
+    final listenable = _listenable();
+    void follow() => state = listenable.value;
+    listenable.addListener(follow);
+    ref.onDispose(() => listenable.removeListener(follow));
+    return listenable.value;
+  }
 }
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:flutter/material.dart';

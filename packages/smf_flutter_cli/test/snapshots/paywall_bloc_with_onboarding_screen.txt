@@ -280,6 +280,8 @@ With `go_router`:
 
 ## State management
 
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 With `flutter_bloc`:
 
 - The state of a screen is a `Cubit` in the directory of its feature. The screen provides it with a `BlocProvider` around its content. In a `BlocBuilder` there, it passes the state on to its view as plain values, and the methods of the `Cubit` as callbacks.
@@ -287,6 +289,8 @@ With `flutter_bloc`:
 - When a screen is gone, its `BlocProvider` closes the `Cubit` that it created. For state that several screens read, put a `BlocProvider` around the root widget in `runApp()`, in `lib/main.dart`. A widget reads that `Cubit` with `context.watch`.
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
+
+- The values that controllers of the app keep, such as the theme mode, have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `PurchasesAccessCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Values in .env
 
@@ -1554,6 +1558,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -4455,6 +4464,62 @@ class _DashedEdge extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
+}
+=== lib/core/state/shared_state_cubits.dart (bloc) ===
+// The cubits that follow the values that controllers of the app keep,
+// one for each value, which the bloc module generates for the state
+// management role, and the widget that provides them around the root
+// of the app. A widget reads one with context.watch, and code changes
+// the value only through the controller that the doc of its cubit
+// names.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/widgets.dart'
+    show BuildContext, StatelessWidget, Widget;
+import 'package:flutter_bloc/flutter_bloc.dart'
+    show BlocProvider, Cubit, MultiBlocProvider;
+import 'package:my_app/core/purchases/app_purchases.dart' as state0;
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final class PurchasesAccessCubit extends ListenableCubit<state0.AppAccess> {
+  /// Creates the cubit, with the value that the controller has.
+  PurchasesAccessCubit() : super(state0.purchasesAccessListenable());
+}
+
+/// Provides the cubits of the values that controllers of the app keep to
+/// [child], the root of the app. Each cubit is created at its first read,
+/// and follows its value until the app ends.
+final class SharedStateCubits extends StatelessWidget {
+  /// Creates the widget around [child].
+  const SharedStateCubits({required this.child, super.key});
+
+  /// The root of the app.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MultiBlocProvider(
+    providers: [BlocProvider(create: (_) => PurchasesAccessCubit())],
+    child: child,
+  );
+}
+
+/// A cubit whose state is the value of a [ValueListenable], from its creation
+/// until it is closed. It only follows the value: code changes it through
+/// the controller of the listenable.
+abstract base class ListenableCubit<T> extends Cubit<T> {
+  /// Creates the cubit of [listenable], with its value.
+  ListenableCubit(this._listenable) : super(_listenable.value) {
+    _listenable.addListener(_follow);
+  }
+
+  final ValueListenable<T> _listenable;
+
+  void _follow() => emit(_listenable.value);
+
+  @override
+  Future<void> close() {
+    _listenable.removeListener(_follow);
+    return super.close();
+  }
 }
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:flutter/material.dart';
@@ -8234,6 +8299,7 @@ class _Row extends StatelessWidget {
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart' show BlocProvider;
+import 'package:my_app/core/state/shared_state_cubits.dart';
 import 'package:my_app/features/paywall/paywall_composition.dart'
     show createPremiumCubit;
 
@@ -8251,7 +8317,14 @@ Future<void> main() async {
     showFailedStart(error, stackTrace);
     return;
   }
-  runApp(BlocProvider(create: (_) => createPremiumCubit(), child: const App()));
+  runApp(
+    SharedStateCubits(
+      child: BlocProvider(
+        create: (_) => createPremiumCubit(),
+        child: const App(),
+      ),
+    ),
+  );
 }
 === pubspec.yaml (flutter_core) ===
 name: my_app
