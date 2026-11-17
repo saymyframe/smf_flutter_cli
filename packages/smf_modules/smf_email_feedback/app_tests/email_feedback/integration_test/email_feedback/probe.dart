@@ -89,7 +89,7 @@ Future<List<String>> probeEmailFeedback(
   if (appFeedback.available != hasAddress) {
     problems.add(
       'The app ${appFeedback.available ? 'offers' : 'does not offer'} the way '
-      'to write, though .env ${hasAddress ? 'has' : 'has no'} address.',
+      'to write, though .env ${hasAddress ? 'has an' : 'has no'} address.',
     );
   }
   return problems;

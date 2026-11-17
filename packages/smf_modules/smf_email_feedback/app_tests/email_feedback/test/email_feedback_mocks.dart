@@ -17,7 +17,9 @@
 // module that opens a page of a store or of the web find what they found
 // without it. The version comes from package_info_plus, whose values for
 // tests this sets, and the device from device_info_plus, whose method
-// channel this answers.
+// channel this answers. A test may hold that answer, as a slow device does.
+// The version is not read through a channel once package_info_plus has its
+// values for tests, so no test can hold it.
 import 'dart:async';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -61,6 +63,21 @@ final class MailDevice {
 
   /// Whether device_info_plus fails to read the device.
   bool deviceFails = false;
+
+  /// The answer of device_info_plus that waits until [releaseDevice], if a
+  /// test holds one.
+  Completer<void>? _deviceHeld;
+
+  /// Holds what device_info_plus reads until [releaseDevice], as a device
+  /// that is slow to tell what it is.
+  void holdDevice() => _deviceHeld = Completer<void>();
+
+  /// Lets the read of device_info_plus that waits get its answer.
+  void releaseDevice() {
+    final held = _deviceHeld;
+    _deviceHeld = null;
+    held?.complete();
+  }
 
   /// What the mail app does with the next new mail; then it opens mails
   /// again.
@@ -173,6 +190,7 @@ final class MailDevice {
       if (call.method != 'getDeviceInfo') {
         throw MissingPluginException('No answer for ${call.method}');
       }
+      if (_deviceHeld case final held?) await held.future;
       return _deviceData();
     });
     UrlLauncherPlatform.instance = _MailApp(this, UrlLauncherPlatform.instance);

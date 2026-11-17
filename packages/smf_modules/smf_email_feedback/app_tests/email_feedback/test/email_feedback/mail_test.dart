@@ -8,9 +8,9 @@
 // first whether it can. The link has %20 for a space and never +, and a line
 // break of a mail. The subject is the word of the module and the name of the
 // app, and the body tells the app with its version, its build number and
-// its flavor, and the device. A device that fails to tell what it is leaves
-// its part out, as does a version that is unknown, and the mail still
-// opens. Without an address, or with a value that is none, the service does
+// its flavor, and the device. A device that fails to tell what it is, or
+// does not tell it within 1.5 seconds, leaves its part out, as does a
+// version that is unknown, and the mail still opens. Without an address, or with a value that is none, the service does
 // not offer the way to write and opens nothing.
 //
 // It uses the service of the module, and leaves what every provider of the
@@ -178,6 +178,42 @@ void main() {
         );
       }
       device.deviceFails = false;
+
+      // A device that is slow to tell what it is: the mail opens once the
+      // read has waited its time, 1.5 seconds, with the platform alone.
+      device.holdDevice();
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      try {
+        await useLanguage(tester, first);
+        final context = await contextBelowRoot(tester);
+        device.opened.clear();
+        var done = false;
+        final open = createEmailFeedbackService().open(context);
+        open.whenComplete(() => done = true).ignore();
+        var waited = Duration.zero;
+        while (!done && waited < const Duration(milliseconds: 1600)) {
+          await tester.pump(const Duration(milliseconds: 100));
+          waited += const Duration(milliseconds: 100);
+        }
+        expect(
+          (
+            done,
+            device.opened.length,
+            device.opened
+                .map((mail) => partsOf(mail.raw)['body']!.split('\r\n').last)
+                .firstOrNull,
+          ),
+          (true, 1, 'Android'),
+          reason: 'A device that does not tell what it is within 1.5 seconds '
+              'leaves its part of the mail out: the mail opens within 1.6 '
+              'seconds, with the platform alone, though the read still '
+              'waits.',
+        );
+        await closeTestPage(tester);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+        device.releaseDevice();
+      }
 
       // A version that the platform does not give is left out.
       setVersion('', '');

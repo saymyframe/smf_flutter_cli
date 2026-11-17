@@ -4,13 +4,16 @@
 // (email_feedback_mocks.dart): the probe of the module, which the start
 // check runs on a device, finds no problem there. It finds a version that
 // package_info_plus does not give, and a device that device_info_plus fails
-// to read, and none of its problems names the address.
+// to read, and an app that does not offer the way to write though .env has
+// an address, and none of its problems names the address.
 //
 // It reads the app and the device without starting the app, as the probe
 // does on a device once the app has started.
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/env/app_env.dart';
+import 'package:{{app_name}}/core/feedback/app_feedback.dart';
+import 'package:{{app_name}}/core/feedback/email_feedback_service.dart';
 
 import '../../integration_test/email_feedback/probe.dart';
 import '../email_feedback_mocks.dart';
@@ -67,5 +70,26 @@ void main() {
       isEmpty,
       reason: 'No problem of the probe names the address of .env.',
     );
+  });
+
+  test(
+      'the probe finds an app that does not offer the way to write though '
+      '.env has an address', () async {
+    // The service of the module without an address, as a provider that
+    // does not read .env would be.
+    appFeedback.use(EmailFeedbackService());
+    try {
+      expect(
+        await probe(),
+        [
+          'The app does not offer the way to write, though .env has an '
+              'address.'
+        ],
+        reason: 'The probe compares whether the app offers the way to write '
+            'with whether .env has an address.',
+      );
+    } finally {
+      appFeedback.use(createFeedbackService());
+    }
   });
 }
