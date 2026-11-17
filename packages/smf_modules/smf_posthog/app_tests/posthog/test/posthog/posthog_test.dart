@@ -2,7 +2,8 @@
 // module whose .env has a project token: what only this provider of the
 // analytics role does, on the real posthog_flutter, over the mocks of its
 // platform side (posthog_mocks.dart), a device that keeps the setting of
-// collection as the SDK of PostHog for iOS does.
+// collection as the SDK of PostHog for iOS does. In every app of the module,
+// it also checks which values of .env the start takes as a project token.
 //
 // The start sets PostHog up with the token of .env, its default host, the
 // setting of collection that the app starts with, and the private defaults
@@ -63,6 +64,47 @@ Future<AnalyticsService> _startAgain() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test(
+      'the start takes a project token, and refuses no value, one of spaces '
+      'alone and a personal API key of PostHog, with what to do', () {
+    expect(postHogProjectToken('phc_tests'), 'phc_tests');
+    for (final value in [null, '', ' ', ' \t ']) {
+      expect(
+        () => postHogProjectToken(value),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            startsWith('POSTHOG_PROJECT_TOKEN has no value in this build'),
+          ),
+        ),
+        reason: 'PostHog trims the token and does not start without one, so '
+            'the role would keep a provider that records nothing: '
+            '"$value".',
+      );
+    }
+    for (final value in ['phx_personal', ' phx_personal ']) {
+      expect(
+        () => postHogProjectToken(value),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            allOf(
+              startsWith('POSTHOG_PROJECT_TOKEN in .env is a personal API key '
+                  'of PostHog, which never goes into an app'),
+              contains('the project token of your PostHog project, which '
+                  'starts with phc_'),
+              isNot(contains('phx_personal')),
+            ),
+          ),
+        ),
+        reason: 'A personal API key of PostHog never goes into an app: '
+            '"$value".',
+      );
+    }
+  });
 
   group('With a project token', () {
     test(

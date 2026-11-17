@@ -497,8 +497,9 @@ void main() {
 
     test(
         'reads the project token and the host of .env through AppEnv, and '
-        'throws without a token, or with a host that is no web address, a '
-        'StateError that names the key and the sections of the README', () {
+        'throws without a token, with a token of spaces alone or a personal '
+        'API key, or with a host that is no web address, a StateError that '
+        'names the key and the sections of the README', () {
       final start = _functionOf(unit, 'initPostHogAnalytics');
       final variables = _nodesIn<VariableDeclaration>(start);
 
@@ -507,12 +508,24 @@ void main() {
           for (final variable in variables.take(2))
             '${variable.name.lexeme} = ${variable.initializer}',
         ],
-        ['token = AppEnv.posthogProjectToken', 'host = AppEnv.posthogHost'],
+        [
+          'token = postHogProjectToken(AppEnv.posthogProjectToken)',
+          'host = AppEnv.posthogHost',
+        ],
       );
-      final checks = _nodesIn<IfStatement>(start).take(2).toList();
+      final checks = [
+        ..._nodesIn<IfStatement>(_functionOf(unit, 'postHogProjectToken')),
+        ..._nodesIn<IfStatement>(start).take(1),
+      ];
       expect(
         [for (final check in checks) '${check.expression}'],
-        ['token == null', 'host != null && !_isWebAddress(host)'],
+        [
+          'value == null || value.trim().isEmpty',
+          "value.trim().startsWith('phx_')",
+          'host != null && !_isWebAddress(host)',
+        ],
+        reason: 'PostHog does not start with a token of spaces alone, and a '
+            'personal API key never goes into an app.',
       );
       final texts = [
         for (final check in checks)
@@ -533,6 +546,16 @@ void main() {
       );
       expect(
         texts[1],
+        allOf(
+          startsWith('POSTHOG_PROJECT_TOKEN in .env is a personal API key of '
+              'PostHog'),
+          contains('the project token of your PostHog project, which starts '
+              'with phc_'),
+          contains('The section "$readmeHeading" of its README tells more.'),
+        ),
+      );
+      expect(
+        texts[2],
         allOf(
           startsWith('POSTHOG_HOST of this build is no http or https '
               'address'),
@@ -683,6 +706,9 @@ void main() {
           readmeSection,
           allOf([
             contains('starts with `phc_`'),
+            contains('or only spaces or a personal API key'),
+            contains('the app refuses one, and a build with it has the key '
+                'inside'),
             contains('`https://eu.i.posthog.com` for its EU Cloud'),
             contains('it is no secret'),
             contains('Every event has the property `app_flavor`'),

@@ -1120,9 +1120,9 @@ Dio sends over `dart:io`, which reaches an `http://` address with no key in the 
 
 ## PostHog
 
-The app records its events in [PostHog](https://posthog.com) with [posthog_flutter](https://pub.dev/packages/posthog_flutter). `lib/core/analytics/posthog_analytics_service.dart` starts PostHog in `bootstrap()` with `POSTHOG_PROJECT_TOKEN` and `POSTHOG_HOST` of `.env`, and implements the analytics service of the app on it. While `POSTHOG_PROJECT_TOKEN` has no value in a build, or `POSTHOG_HOST` has a value that is no http or https address, the app starts without PostHog and records nothing in it, and a debug build prints why.
+The app records its events in [PostHog](https://posthog.com) with [posthog_flutter](https://pub.dev/packages/posthog_flutter). `lib/core/analytics/posthog_analytics_service.dart` starts PostHog in `bootstrap()` with `POSTHOG_PROJECT_TOKEN` and `POSTHOG_HOST` of `.env`, and implements the analytics service of the app on it. While `POSTHOG_PROJECT_TOKEN` has no value in a build, or only spaces or a personal API key, or `POSTHOG_HOST` has a value that is no http or https address, the app starts without PostHog and records nothing in it, and a debug build prints why.
 
-Create a project in PostHog and copy its project token, which starts with `phc_`, into `POSTHOG_PROJECT_TOKEN`. Leave `POSTHOG_HOST` empty for PostHog's US Cloud, or give it `https://eu.i.posthog.com` for its EU Cloud, or the address of your own PostHog. The section Finish the setup lists this among the steps that you do by hand. A project token only lets an app send events to its project, and it goes into the app, where anyone can read it, so it is no secret. Never put a personal API key of PostHog, which starts with `phx_`, into `.env`.
+Create a project in PostHog and copy its project token, which starts with `phc_`, into `POSTHOG_PROJECT_TOKEN`. Leave `POSTHOG_HOST` empty for PostHog's US Cloud, or give it `https://eu.i.posthog.com` for its EU Cloud, or the address of your own PostHog. The section Finish the setup lists this among the steps that you do by hand. A project token only lets an app send events to its project, and it goes into the app, where anyone can read it, so it is no secret. Never put a personal API key of PostHog, which starts with `phx_`, into `.env`: the app refuses one, and a build with it has the key inside.
 
 Every event has the property `app_flavor`, the flavor of the build, such as `dev` or `prod`. A debug build records its events too, so filter the insights and the dashboards of PostHog on `app_flavor` equal to `prod` to count only the users of the release.
 
@@ -2188,19 +2188,12 @@ final Map<String, Object?> _pendingProperties = {};
 /// replay, no survey and no push message. Every event has the flavor of the
 /// build in its property `app_flavor`.
 ///
-/// Throws a [StateError] when the build has no project token, or a host that
-/// is no http or https address: the app then records nothing in PostHog, and
-/// a debug build prints why.
+/// Throws a [StateError] when the build has no project token that PostHog
+/// takes (see [postHogProjectToken]), or a host that is no http or https
+/// address: the app then records nothing in PostHog, and a debug build
+/// prints why.
 Future<AnalyticsService> initPostHogAnalytics() async {
-  final token = AppEnv.posthogProjectToken;
-  if (token == null) {
-    throw StateError(
-      'POSTHOG_PROJECT_TOKEN has no value in this build, so the app records '
-      'nothing in PostHog. In .env, give it the project token of your PostHog '
-      'project, and build the app as the section "Values in .env" of its '
-      'README says. The section "PostHog" tells more.',
-    );
-  }
+  final token = postHogProjectToken(AppEnv.posthogProjectToken);
   final host = AppEnv.posthogHost;
   if (host != null && !_isWebAddress(host)) {
     throw StateError(
@@ -2232,6 +2225,33 @@ Future<AnalyticsService> initPostHogAnalytics() async {
   await _registerFlavor();
   _started = true;
   return const PostHogAnalyticsService();
+}
+
+/// The project token with which [initPostHogAnalytics] starts PostHog:
+/// [value], the value of `POSTHOG_PROJECT_TOKEN` in this build.
+///
+/// Throws a [StateError] that tells what to do when the build has no token,
+/// or one of spaces alone, with which PostHog would not start, and when it
+/// has a personal API key of PostHog (`phx_`), which never goes into an app.
+String postHogProjectToken(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    throw StateError(
+      'POSTHOG_PROJECT_TOKEN has no value in this build, so the app records '
+      'nothing in PostHog. In .env, give it the project token of your PostHog '
+      'project, and build the app as the section "Values in .env" of its '
+      'README says. The section "PostHog" tells more.',
+    );
+  }
+  if (value.trim().startsWith('phx_')) {
+    throw StateError(
+      'POSTHOG_PROJECT_TOKEN in .env is a personal API key of PostHog, which '
+      'never goes into an app, so the app records nothing in PostHog. Give it '
+      'the project token of your PostHog project, which starts with phc_, and '
+      'roll the personal API key in PostHog if a build with it left your '
+      'machine. The section "PostHog" of its README tells more.',
+    );
+  }
+  return value;
 }
 
 /// Whether [value] is an http or https address with a host.

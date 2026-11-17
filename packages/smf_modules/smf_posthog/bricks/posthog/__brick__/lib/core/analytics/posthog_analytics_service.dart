@@ -41,19 +41,12 @@ final Map<String, Object?> _pendingProperties = {};
 /// replay, no survey and no push message. Every event has the flavor of the
 /// build in its property `app_flavor`.
 ///
-/// Throws a [StateError] when the build has no project token, or a host that
-/// is no http or https address: the app then records nothing in PostHog, and
-/// a debug build prints why.
+/// Throws a [StateError] when the build has no project token that PostHog
+/// takes (see [postHogProjectToken]), or a host that is no http or https
+/// address: the app then records nothing in PostHog, and a debug build
+/// prints why.
 Future<AnalyticsService> initPostHogAnalytics() async {
-  final token = {{{env_posthog_project_token}}};
-  if (token == null) {
-    throw StateError(
-      'POSTHOG_PROJECT_TOKEN has no value in this build, so the app records '
-      'nothing in PostHog. In .env, give it the project token of your PostHog '
-      'project, and build the app as the section "{{values_heading}}" of its '
-      'README says. The section "{{readme_heading}}" tells more.',
-    );
-  }
+  final token = postHogProjectToken({{{env_posthog_project_token}}});
   final host = {{{env_posthog_host}}};
   if (host != null && !_isWebAddress(host)) {
     throw StateError(
@@ -85,6 +78,33 @@ Future<AnalyticsService> initPostHogAnalytics() async {
   await _registerFlavor();
   _started = true;
   return const PostHogAnalyticsService();
+}
+
+/// The project token with which [initPostHogAnalytics] starts PostHog:
+/// [value], the value of `POSTHOG_PROJECT_TOKEN` in this build.
+///
+/// Throws a [StateError] that tells what to do when the build has no token,
+/// or one of spaces alone, with which PostHog would not start, and when it
+/// has a personal API key of PostHog (`phx_`), which never goes into an app.
+String postHogProjectToken(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    throw StateError(
+      'POSTHOG_PROJECT_TOKEN has no value in this build, so the app records '
+      'nothing in PostHog. In .env, give it the project token of your PostHog '
+      'project, and build the app as the section "{{values_heading}}" of its '
+      'README says. The section "{{readme_heading}}" tells more.',
+    );
+  }
+  if (value.trim().startsWith('phx_')) {
+    throw StateError(
+      'POSTHOG_PROJECT_TOKEN in .env is a personal API key of PostHog, which '
+      'never goes into an app, so the app records nothing in PostHog. Give it '
+      'the project token of your PostHog project, which starts with phc_, and '
+      'roll the personal API key in PostHog if a build with it left your '
+      'machine. The section "{{readme_heading}}" of its README tells more.',
+    );
+  }
+  return value;
 }
 
 /// Whether [value] is an http or https address with a host.
