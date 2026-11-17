@@ -76,6 +76,12 @@ jobs:
       # reports a failure, which a new release may change: so only the job
       # with the latest Flutter checks it.
       broken_providers: ${{ matrix.flutter == needs.versions.outputs.latest }}
+      # The Firebase project of CI has one template of Remote Config, so only
+      # the job with the latest Flutter publishes a value in it and checks
+      # that it reaches the app: the runs of every version would publish
+      # into it at once. The push messages, which change nothing that the
+      # runs share, go to the apps of each version.
+      shared_project_answers: ${{ matrix.flutter == needs.versions.outputs.latest }}
       # The CLI on pub.dev does not change with a pull request, so only this
       # workflow checks it.
       published_cli: true

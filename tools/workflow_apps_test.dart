@@ -62,6 +62,17 @@
 // that the --create of the matrix tool of the CLI writes next to the app:
 // .github/scripts/each_app.sh gives them to the command of each app with
 // --tool-arguments, so a step names neither the arguments nor the role.
+//
+// An answer of .github/scripts/start_app.sh may write into what every run
+// of CI shares, such as a value that a job publishes in the template of
+// Remote Config of the Firebase project of CI, of which the project has
+// one. Such an answer runs only in the runs of Build and in one item of a
+// matrix of calls, such as the latest Flutter of the nightly run, so that
+// runs at the same time do not all write into it. So the check also fails
+// when a step gives such an answer other than when the input
+// shared_project_answers of its workflow is true, when the workflow lacks
+// that input or sets it by default, when a job calls the workflow with it
+// for more than one item of its matrix, and when Build calls it without it.
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/utilities.dart';
@@ -104,13 +115,30 @@ const modulePaths = {
       'of Google that the configuration of the iOS apps wrote, before CI '
       'starts the app.',
   (
-    'Start the app with every module on the Android emulator, and send it a '
-        'push message',
+    'Start the app with every module on the Android emulator, send it a '
+        'push message and publish a value of remote config',
     'smf_firebase_messaging',
   ): 'The test of firebase_messaging that answers the request of the probe '
       'of the module in the start check, through start_app.sh: it sends a '
       'push message to the address of the device with the key of the '
       'service account, and the app tells the script whether it came.',
+  (
+    'Start the app with every module on the Android emulator, send it a '
+        'push message and publish a value of remote config',
+    'smf_firebase_remote_config',
+  ): 'The test of firebase_remote_config that answers the request of the '
+      'probe of the module in the start check, through start_app.sh: it '
+      'publishes a parameter of the check in Remote Config of the Firebase '
+      'project of CI with the key of the service account, and the app tells '
+      'the script whether its value became active there.',
+  (
+    'Remove the values of this run from Remote Config of the Firebase '
+        'project of CI',
+    'smf_firebase_remote_config',
+  ): 'The test of firebase_remote_config that removes from Remote Config of '
+      'the Firebase project of CI the parameters that the answer to the probe '
+      'of the module published in the run, with the key of the service '
+      'account, once the app ran.',
   (
     'Start the app without external services on the Android emulator, and '
         'grant it premium access in RevenueCat',
@@ -324,6 +352,214 @@ List<String> answerProblemsOf(
     for (final (where, name) in answers)
       if (!asked.contains(name)) problem(where, name),
   ];
+}
+
+/// The input of a reusable workflow that lets its jobs give start_app.sh
+/// the answers of [sharedAnswers].
+const sharedAnswersInput = 'shared_project_answers';
+
+/// The workflow whose runs, of the pull requests into main among them, give
+/// the answers of [sharedAnswers].
+const sharedAnswersWorkflow = 'build.yml';
+
+/// The answers of start_app.sh that write into what every run of CI shares,
+/// by their names, with the reason. A run gives one only when the input
+/// [sharedAnswersInput] of its workflow lets it: in the runs of
+/// [sharedAnswersWorkflow], and in one item of a matrix of calls, such as
+/// the latest Flutter of the nightly run.
+const sharedAnswers = {
+  'firebase_remote_config': 'It publishes a parameter in the template of '
+      'Remote Config of the Firebase project of CI, of which the project has '
+      'one, and runs at the same time, such as those of the nightly run for '
+      'each version of Flutter, would all publish into it.',
+};
+
+/// The problems of the answers of [sharedAnswers] in [workflows], the texts
+/// of the workflows of GitHub Actions by their file names:
+/// - a step that gives start_app.sh such an answer other than in the then
+///   of `if [ "$<variable>" = true ]`, where the `env` of the step gives the
+///   variable `${{ inputs.shared_project_answers }}`, such as through a
+///   variable of its environment or right after the script;
+/// - a workflow with such steps without that input, or with the input true
+///   by default;
+/// - a job that calls such a workflow for each item of a matrix with the
+///   input for more than one of them, rather than as
+///   `${{ matrix.<key> == <value> }}`;
+/// - [sharedAnswersWorkflow] calling such a workflow without the input
+///   true.
+///
+/// The check reads the lines of a step: an answer is in the then of an if
+/// when each line that names it is, also in an if inside it, up to the
+/// else, the elif or the fi of that if.
+List<String> sharedAnswerProblemsOf(Map<String, String> workflows) {
+  final problems = <String>[];
+  final roots = {
+    for (final MapEntry(:key, :value) in workflows.entries)
+      key: loadYaml(value) as YamlMap,
+  };
+  // The workflows with steps that give such answers.
+  final giving = <String>{};
+  for (final MapEntry(key: file, value: root) in roots.entries) {
+    for (final MapEntry(key: job, :value)
+        in (root['jobs'] as YamlMap).entries) {
+      final definition = value as YamlMap;
+      for (final step in definition['steps'] as YamlList? ?? YamlList()) {
+        step as YamlMap;
+        final where = '$file, job $job, step "${_nameOf(step)}"';
+        final text = '${step['run'] ?? ''}';
+        final given = {
+          for (final name in _Script(
+            where,
+            text,
+            powerShell: _isPowerShell(
+              step['shell'] ??
+                  _default(definition, 'shell') ??
+                  _default(root, 'shell'),
+            ),
+            environment: {
+              ..._map(root['env']),
+              ..._map(definition['env']),
+              ..._map(step['env']),
+            },
+          ).startAnswers)
+            if (sharedAnswers.containsKey(name)) name,
+        };
+        if (given.isEmpty) continue;
+        giving.add(file);
+        final gates = {
+          for (final MapEntry(:key, :value) in _map(step['env']).entries)
+            if (_sharedAnswersGate.hasMatch(value.trim())) key,
+        };
+        final lines = _gatedLines(text, gates);
+        for (final name in given) {
+          final named = RegExp('(?<![\\w-])${RegExp.escape(name)}=');
+          final gated = [
+            for (final (line, gated) in lines)
+              if (named.hasMatch(line)) gated,
+          ];
+          if (gated.isEmpty || gated.contains(false)) {
+            problems.add(
+              '$where gives start_app.sh the answer $name in every run of '
+              'its workflow: give it only in the then of '
+              r'`if [ "$<variable>" = true ]`, with `<variable>: ${{ '
+              'inputs.$sharedAnswersInput }}` in the env of the step. '
+              '${sharedAnswers[name]}',
+            );
+          }
+        }
+      }
+    }
+    if (!giving.contains(file)) continue;
+    switch (root['on']) {
+      case {
+          'workflow_call': {'inputs': {sharedAnswersInput: final YamlMap input}}
+        }:
+        if (input['default'] == true) {
+          problems.add(
+            '$file sets its input $sharedAnswersInput by default, so every '
+            'run that calls it would give start_app.sh the answers that '
+            'write into what every run of CI shares.',
+          );
+        }
+      default:
+        problems.add(
+          '$file gives start_app.sh answers that write into what every run '
+          'of CI shares, but has no input $sharedAnswersInput, false by '
+          'default, which only $sharedAnswersWorkflow and one item of a '
+          'matrix of calls, such as the latest Flutter of the nightly run, '
+          'set.',
+        );
+    }
+  }
+  for (final MapEntry(key: file, value: root) in roots.entries) {
+    for (final MapEntry(key: job, :value)
+        in (root['jobs'] as YamlMap).entries) {
+      if (value is! YamlMap) continue;
+      final called = '${value['uses'] ?? ''}'.split('/').last;
+      if (!giving.contains(called)) continue;
+      final lets = switch (value['with']) {
+        {sharedAnswersInput: final Object lets} => lets,
+        _ => null,
+      };
+      final matrix = switch (value['strategy']) {
+        {'matrix': final Object _} => true,
+        _ => false,
+      };
+      if (file == sharedAnswersWorkflow && lets != true) {
+        problems.add(
+          '$file, job $job calls $called without $sharedAnswersInput: true, '
+          'so no run of a pull request into main gives start_app.sh the '
+          'answers that write into what every run of CI shares, and what '
+          'they check goes unchecked.',
+        );
+      } else if (matrix &&
+          lets != null &&
+          lets != false &&
+          !_oneItem.hasMatch('$lets'.trim())) {
+        problems.add(
+          '$file, job $job calls $called with $sharedAnswersInput for more '
+          'than one item of its matrix, whose runs would write at once into '
+          'what every run of CI shares: give it for one item, as '
+          r'`${{ matrix.flutter == needs.versions.outputs.latest }}`.',
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/// What the `env` of a step gives a variable that lets it give the answers
+/// of [sharedAnswers].
+final _sharedAnswersGate = RegExp(
+  '^\\\$\\{\\{\\s*inputs\\.$sharedAnswersInput\\s*\\}\\}\$',
+);
+
+/// An expression of GitHub Actions that is true for one item of a matrix:
+/// one comparison of a value of the matrix with `==`.
+final _oneItem = RegExp(r'^\$\{\{\s*matrix\.[\w-]+\s*==\s*[^&|!=<>]+?\s*\}\}$');
+
+/// The condition of an if of bash that holds when a variable is `true`,
+/// `[ "$name" = true ]` or `[[ "$name" == true ]]`, with the name of the
+/// variable, and what comes after the condition on its line.
+final _trueCondition = RegExp(
+  r'^if\s+\[\[?\s+"?\$\{?(\w+)\}?"?\s+==?\s+"?true"?\s+\]\]?\s*(;.*)?$',
+);
+
+/// The lines of [script], a script of bash, without comments, each with
+/// whether it runs only when one of the variables [gates] is `true`: in the
+/// then of an if whose condition is that a gate is `true`, also in an if
+/// inside it, up to the else, the elif or the fi of that if. A line with an
+/// if up to its fi runs so when its condition is that, or when it is in
+/// such a then.
+List<(String, bool)> _gatedLines(String script, Set<String> gates) {
+  // For each if that is open, whether its branch runs only with a gate.
+  final open = <bool>[];
+  final lines = <(String, bool)>[];
+  for (final raw in script.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty || line.startsWith('#')) continue;
+    if (RegExp(r'^if\b').hasMatch(line)) {
+      final gated = switch (_trueCondition.firstMatch(line)) {
+        final match? => gates.contains(match[1]),
+        null => false,
+      };
+      if (RegExp(r'(^|[;\s])fi$').hasMatch(line)) {
+        lines.add((line, gated || open.contains(true)));
+      } else {
+        open.add(gated);
+        lines.add((line, open.contains(true)));
+      }
+    } else if (RegExp(r'^(else|elif)\b').hasMatch(line) && open.isNotEmpty) {
+      open[open.length - 1] = false;
+      lines.add((line, open.contains(true)));
+    } else if (RegExp(r'^fi\b').hasMatch(line) && open.isNotEmpty) {
+      open.removeLast();
+      lines.add((line, open.contains(true)));
+    } else {
+      lines.add((line, open.contains(true)));
+    }
+  }
+  return lines;
 }
 
 /// The text of [text] from [start] up to the parenthesis that closes the
@@ -4658,6 +4894,282 @@ flutter build ios --simulator
       ),
       [unknown],
     );
+  });
+
+  group('the answers that write into what every run of CI shares', () {
+    const reusable = r'''
+on:
+  workflow_call:
+    inputs:
+      shared_project_answers:
+        type: boolean
+        default: false
+jobs:
+  android:
+    steps:
+      - name: Start
+        env:
+          SHARED: ${{ inputs.shared_project_answers }}
+        run: |
+          answers=()
+          if [ "$SHARED" = true ]; then
+            remote_config="$GITHUB_WORKSPACE/packages/smf_modules/smf_firebase_remote_config"
+            answers+=("firebase_remote_config=cd '$remote_config' && dart test test/publish_value_test.dart")
+          else
+            echo "::notice::No value of remote config."
+          fi
+          answers+=("firebase_messaging=dart test test/push_delivery_test.dart")
+          .github/scripts/each_app.sh "$RUNNER_TEMP/apps" \
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 "${answers[@]}"
+''';
+    const build = '''
+jobs:
+  apps:
+    uses: ./.github/workflows/apps.yml
+    with:
+      shared_project_answers: true
+''';
+    const nightly = r'''
+jobs:
+  apps:
+    strategy:
+      matrix: ${{ fromJSON(needs.versions.outputs.matrix) }}
+    uses: ./.github/workflows/apps.yml
+    with:
+      shared_project_answers: ${{ matrix.flutter == needs.versions.outputs.latest }}
+''';
+    const step = 'apps.yml, job android, step "Start"';
+    const everyRun = '$step gives start_app.sh the answer '
+        'firebase_remote_config in every run of its workflow: give it only '
+        r'in the then of `if [ "$<variable>" = true ]`, with `<variable>: ${{ '
+        'inputs.shared_project_answers }}` in the env of the step. It '
+        'publishes a parameter in the template of Remote Config of the '
+        'Firebase project of CI, of which the project has one, and runs at '
+        'the same time, such as those of the nightly run for each version of '
+        'Flutter, would all publish into it.';
+
+    test(
+        'passes a step that gives them only when the input of its workflow '
+        'lets it, which build.yml and one item of the matrix of the nightly '
+        'run set, and the answers that write into nothing of the kind', () {
+      expect(
+        sharedAnswerProblemsOf({
+          'apps.yml': reusable,
+          'build.yml': build,
+          'nightly.yml': nightly,
+          // A workflow that calls it once may let it.
+          'other.yml': build,
+        }),
+        isEmpty,
+      );
+      // In an if inside the then, on one line with the whole if, and with
+      // the then on a line of its own.
+      for (final gated in [
+        r'''
+          if [ "$SHARED" = true ]; then
+            if [ -n "$A" ]; then
+              answers+=("firebase_remote_config=dart test")
+            else
+              answers+=("firebase_remote_config=dart test test/a_test.dart")
+            fi
+          fi
+''',
+        r'''
+          if [ "${SHARED}" = "true" ]; then answers+=("firebase_remote_config=dart test"); fi
+''',
+        r'''
+          if [[ "$SHARED" == true ]]
+          then
+            answers+=("firebase_remote_config=dart test")
+          fi
+''',
+      ]) {
+        expect(
+          sharedAnswerProblemsOf({
+            'apps.yml': reusable.replaceFirst(
+              RegExp(r'          if \[ "\$SHARED"[\s\S]*?\n          fi\n'),
+              gated,
+            ),
+            'build.yml': build,
+          }),
+          isEmpty,
+          reason: gated,
+        );
+      }
+    });
+
+    test('finds a step that gives them in every run', () {
+      const answer = '"firebase_remote_config=dart test"';
+      for (final (what, changed) in [
+        (
+          'after the if',
+          reusable.replaceFirst(
+            '          answers+=("firebase_messaging',
+            '          answers+=($answer)\n'
+                '          answers+=("firebase_messaging',
+          ),
+        ),
+        (
+          'in the else',
+          reusable.replaceFirst(
+            '            echo "::notice::',
+            '            answers+=($answer)\n            echo "::notice::',
+          ),
+        ),
+        (
+          'in an if on another variable',
+          reusable.replaceFirst(
+            r'          if [ "$SHARED" = true ]',
+            r'          if [ "$OTHER" = true ]',
+          ),
+        ),
+        (
+          'with a variable that is not from the input',
+          reusable.replaceFirst(
+            r'SHARED: ${{ inputs.shared_project_answers }}',
+            'SHARED: "true"',
+          ),
+        ),
+        (
+          'through the environment',
+          reusable
+              .replaceFirst(
+                '        env:\n',
+                '        env:\n'
+                    '          ANSWER: firebase_remote_config=dart test\n',
+              )
+              .replaceFirst(
+                RegExp(r'answers\+=\("firebase_remote_config=[^\n]*'),
+                r'answers+=("$ANSWER")',
+              ),
+        ),
+        (
+          'as an argument of start_app.sh',
+          reusable.replaceFirst(
+            r'240 "${answers[@]}"',
+            '240 "\${answers[@]}" \\\n            $answer',
+          ),
+        ),
+      ]) {
+        expect(changed, isNot(reusable), reason: what);
+        expect(
+          sharedAnswerProblemsOf({'apps.yml': changed, 'build.yml': build}),
+          [everyRun],
+          reason: what,
+        );
+      }
+    });
+
+    test('finds a workflow of such steps without the input, or true by default',
+        () {
+      expect(
+        sharedAnswerProblemsOf({
+          'apps.yml': reusable.replaceFirst('shared_project_answers:', 'x:'),
+          'build.yml': build,
+        }),
+        [
+          equals(
+            'apps.yml gives start_app.sh answers that write into what every '
+            'run of CI shares, but has no input shared_project_answers, '
+            'false by default, which only build.yml and one item of a '
+            'matrix of calls, such as the latest Flutter of the nightly '
+            'run, set.',
+          ),
+        ],
+      );
+      expect(
+        sharedAnswerProblemsOf({
+          'apps.yml': reusable.replaceFirst('default: false', 'default: true'),
+          'build.yml': build,
+        }),
+        [
+          equals(
+            'apps.yml sets its input shared_project_answers by default, so '
+            'every run that calls it would give start_app.sh the answers '
+            'that write into what every run of CI shares.',
+          ),
+        ],
+      );
+    });
+
+    test(
+        'finds a call for more than one item of a matrix, and build.yml '
+        'without the input', () {
+      for (final every in [
+        'true',
+        r'${{ matrix.flutter != needs.versions.outputs.latest }}',
+        r"${{ matrix.flutter == '3.44.2' || matrix.os == 'linux' }}",
+      ]) {
+        expect(
+          sharedAnswerProblemsOf({
+            'apps.yml': reusable,
+            'build.yml': build,
+            'nightly.yml': nightly.replaceFirst(
+              r'${{ matrix.flutter == needs.versions.outputs.latest }}',
+              every,
+            ),
+          }),
+          [
+            equals(
+              'nightly.yml, job apps calls apps.yml with '
+              'shared_project_answers for more than one item of its matrix, '
+              'whose runs would write at once into what every run of CI '
+              'shares: give it for one item, as '
+              r'`${{ matrix.flutter == needs.versions.outputs.latest }}`.',
+            ),
+          ],
+          reason: every,
+        );
+      }
+      for (final without in [
+        build.replaceFirst('true', 'false'),
+        build.replaceFirst('shared_project_answers', 'broken_providers'),
+      ]) {
+        expect(
+          sharedAnswerProblemsOf({'apps.yml': reusable, 'build.yml': without}),
+          [
+            equals(
+              'build.yml, job apps calls apps.yml without '
+              'shared_project_answers: true, so no run of a pull request '
+              'into main gives start_app.sh the answers that write into what '
+              'every run of CI shares, and what they check goes unchecked.',
+            ),
+          ],
+        );
+      }
+    });
+  });
+
+  test(
+      'the answers of the repository that write into what every run of CI '
+      'shares run only in Build and with the latest Flutter of the nightly '
+      'run', () {
+    final root = repositoryRoot();
+    final workflows = {
+      for (final entity in Directory('$root/.github/workflows').listSync())
+        if (entity is File && RegExp(r'\.ya?ml$').hasMatch(entity.path))
+          entity.uri.pathSegments.last: entity.readAsStringSync(),
+    };
+
+    expect(sharedAnswerProblemsOf(workflows), isEmpty);
+    final given = {
+      for (final MapEntry(:key, :value) in workflows.entries)
+        for (final (_, name) in startAnswersOf(value, file: key)) name,
+    };
+    expect(
+      sharedAnswers.keys.toSet().difference(given),
+      isEmpty,
+      reason: 'No workflow gives such an answer: remove it from '
+          'sharedAnswers.',
+    );
+    // The nightly run gives them with the Flutter with which it checks the
+    // broken providers, its latest.
+    final nightly = switch (loadYaml(workflows['nightly.yml']!)) {
+      {'jobs': {'apps': {'with': final YamlMap inputs}}} => inputs,
+      _ => throw StateError('nightly.yml has no job apps with inputs.'),
+    };
+    expect(nightly[sharedAnswersInput], isNotNull);
+    expect(nightly[sharedAnswersInput], nightly['broken_providers']);
   });
 
   test(

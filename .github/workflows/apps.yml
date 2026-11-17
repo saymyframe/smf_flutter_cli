@@ -73,6 +73,10 @@ on:
         description: Whether a job generates the app of each fixture provider of a role with one known bug and checks that the tests of the role fail there on the bug, with the reason that the fixture registry expects, and on nothing else. build.yml sets it, and the nightly run only for its latest Flutter.
         type: boolean
         default: false
+      shared_project_answers:
+        description: Whether the jobs that start an app give start_app.sh the answers that write into what every run of CI shares, such as the value that the job Android with Firebase publishes in the template of Remote Config of the Firebase project of CI, of which the project has one, and removes again. build.yml sets it, and the nightly run only for its latest Flutter, so that its runs of each version do not publish into the template at once; tools/workflow_apps_test.dart checks this.
+        type: boolean
+        default: false
     secrets:
       FIREBASE_SERVICE_ACCOUNT:
         description: The JSON key of a service account of the Firebase project of CI, with which the jobs configure an app with Firebase to start it. Without it, as in a pull request from a fork, they start only the apps without Firebase.
@@ -780,10 +784,11 @@ jobs:
     needs: [plan, firebase-key]
     if: needs.firebase-key.outputs.key == 'true'
     runs-on: ubuntu-latest
-    # About 15 minutes: the app, its configuration, its sign-in methods, its
+    # About 17 minutes: the app, its configuration, its sign-in methods, its
     # build and its start, which start_app.sh gives 240 s once the emulator
-    # has the app, and a push message to the app once it started.
-    timeout-minutes: 30
+    # has the app, and once it started a value of remote config that the job
+    # publishes and removes again, and a push message to the app.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -884,31 +889,79 @@ jobs:
       - *wait_for_emulator
 
       # Once the start check of the app passed, the probe of
-      # firebase_messaging asks start_app.sh for a push message to the
-      # address of the device, and tells whether it came with what it asked
-      # for. The answer, a test of the module, sends it with the key of the
-      # service account, in a file that only this step has, which is on
-      # disk while Gradle builds the app in this step too. The debug app
-      # prints its address for push messages, which the log of the start
-      # shows: that is harmless, since sending to it needs an access token
-      # of the Firebase project, and the app is on the emulator for minutes.
+      # firebase_remote_config asks start_app.sh to publish a parameter of
+      # its own in Remote Config of the Firebase project of CI, and tells
+      # whether the app made its value active through the real-time updates
+      # of Firebase; and the probe of firebase_messaging asks it for a push
+      # message to the address of the device, and tells whether it came with
+      # what it asked for. The answers, tests of the modules, publish the
+      # value and send the message with the key of the service account, in
+      # a file that only this step has, which is on disk while Gradle builds
+      # the app in this step too. The debug app prints its address for push
+      # messages, which the log of the start shows: that is harmless, since
+      # sending to it needs an access token of the Firebase project, and the
+      # app is on the emulator for minutes.
+      # The project has one template of Remote Config, which every run
+      # shares, so the step publishes in it only with the input
+      # shared_project_answers: in the runs of build.yml, and with the latest
+      # Flutter of the nightly run. A push message changes nothing that the
+      # runs share, so every run sends one.
+      # The script runs the answers one after another, and each check in the
+      # app waits 10 minutes from its request, which the probes write at
+      # once. A value of remote config reaches the app in seconds once it is
+      # published, while Firebase now and then takes a push message and
+      # never delivers it, and the script then sends another one after
+      # 150 s, three times in all. So the value of remote config comes first
+      # and costs the check of the push message seconds, and the push
+      # message comes last, where no check waits behind it.
       # The timeout of the step limits the build; start_app.sh limits the
-      # start, the answer and the wait for the message, which take a minute
-      # or two.
-      - name: Start the app with every module on the Android emulator, and send it a push message
-        timeout-minutes: 18
+      # start, the answers and the waits for the value and the message,
+      # which take two or three minutes.
+      - name: Start the app with every module on the Android emulator, send it a push message and publish a value of remote config
+        timeout-minutes: 22
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           SMF_FIREBASE_PROJECT: saymyframe-app-cli
           SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
+          SMF_REMOTE_CONFIG_PUBLISHED: ${{ runner.temp }}/remote-config-published
+          SHARED_PROJECT_ANSWERS: ${{ inputs.shared_project_answers }}
         run: |
           trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
           (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
           unset FIREBASE_SERVICE_ACCOUNT
+          answers=()
+          if [ "$SHARED_PROJECT_ANSWERS" = true ]; then
+            remote_config="$GITHUB_WORKSPACE/packages/smf_modules/smf_firebase_remote_config"
+            answers+=("firebase_remote_config=cd '$remote_config' && dart test test/publish_value_test.dart --file-reporter json:build/test-results/publish_value_test.json")
+          else
+            echo "::notice::This run publishes no value in Remote Config of the Firebase project of CI: only the runs of build.yml and the nightly run with its latest Flutter do."
+          fi
           messaging="$GITHUB_WORKSPACE/packages/smf_modules/smf_firebase_messaging"
+          answers+=("firebase_messaging=cd '$messaging' && dart test test/push_delivery_test.dart --file-reporter json:build/test-results/push_delivery_test.json")
           .github/scripts/each_app.sh "$RUNNER_TEMP/SMF apps/firebase" \
-            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 \
-            "firebase_messaging=cd '$messaging' && dart test test/push_delivery_test.dart --file-reporter json:build/test-results/push_delivery_test.json"
+            "$GITHUB_WORKSPACE/.github/scripts/start_app.sh" android emulator-5554 240 "${answers[@]}"
+
+      # The parameters of remote config that the answer published leave the
+      # template again, whatever happened in the steps before, as when the
+      # job was cancelled: the test of the module that published them noted
+      # their names in the file of SMF_REMOTE_CONFIG_PUBLISHED first, and a
+      # test of the module removes them, with the parameters of the check
+      # that are more than two hours old, as those of a job whose runner was
+      # lost. It publishes nothing when nothing is to go.
+      - name: Remove the values of this run from Remote Config of the Firebase project of CI
+        if: ${{ always() && inputs.shared_project_answers && steps.flutter.outcome == 'success' }}
+        timeout-minutes: 5
+        working-directory: packages/smf_modules/smf_firebase_remote_config
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SMF_FIREBASE_PROJECT: saymyframe-app-cli
+          SMF_FIREBASE_SERVICE_ACCOUNT: ${{ runner.temp }}/firebase-service-account.json
+          SMF_REMOTE_CONFIG_PUBLISHED: ${{ runner.temp }}/remote-config-published
+        run: |
+          trap 'rm -f "$SMF_FIREBASE_SERVICE_ACCOUNT"' EXIT
+          (umask 077 && printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$SMF_FIREBASE_SERVICE_ACCOUNT")
+          unset FIREBASE_SERVICE_ACCOUNT
+          dart test test/remove_values_test.dart --file-reporter json:build/test-results/remove_values_test.json
 
       - *delete_key
 
@@ -1481,6 +1534,12 @@ jobs:
       - *restore_swiftpm
       - *boot_simulator
 
+      # The step gives start_app.sh no answer. The probes of
+      # firebase_remote_config and firebase_messaging ask for one, and
+      # nothing reads their verdicts: the job Android with Firebase publishes
+      # the value of remote config, and the iOS simulator on the virtual
+      # machine of CI never gets the token of the Apple Push Notification
+      # service, so the app has no address for a push message.
       - name: Start the app with every module on the iOS simulator
         timeout-minutes: 24
         run: |
