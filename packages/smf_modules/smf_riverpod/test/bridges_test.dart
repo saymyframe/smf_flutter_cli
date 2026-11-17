@@ -222,6 +222,30 @@ void main() {
         contains(_bridges),
       );
     });
+
+    test(
+        'names in its second note no value that an app without the theme '
+        'lacks', () async {
+      final languages = (await _resultOf(const [
+        RiverpodModule.id,
+        GenL10nModule.id,
+        SharedPreferencesModule.id,
+      ]))
+          .app!;
+      final notes = [
+        for (final (from, _, note)
+            in languages.entriesOf(AppEntryRole.agentSections))
+          if (from == const ModuleOrigin(RiverpodModule.id)) note.text,
+      ];
+
+      expect(notes, hasLength(2));
+      expect(
+        notes.last,
+        isNot(contains('theme')),
+        reason: 'The note is in every app whose controllers keep values, '
+            'also in one without the theme role.',
+      );
+    });
   });
 
   test(

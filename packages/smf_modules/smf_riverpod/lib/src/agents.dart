@@ -31,5 +31,5 @@ With `flutter_riverpod`:
 /// use. It names no provider of a value: a file only declares those, and no
 /// code with the package uses them.
 const bridgesAgentNote = '''
-- The values that controllers of the app keep, such as the theme mode, have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
+- The values that controllers of the app keep have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
 ''';
