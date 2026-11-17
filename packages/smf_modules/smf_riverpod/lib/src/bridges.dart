@@ -54,7 +54,7 @@ final class RiverpodStateProvider extends RoleProvider<StateData> {
       fragments: [
         AppEntryRole.agentSections.entry(
           stateManagementRole.description,
-          AgentNote(bridgesAgentNote(providerOf(entries.first))),
+          AgentNote(bridgesAgentNote),
         ),
       ],
     );

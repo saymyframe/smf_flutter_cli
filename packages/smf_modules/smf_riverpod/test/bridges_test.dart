@@ -157,16 +157,15 @@ void main() {
             in app.entriesOf(AppEntryRole.agentSections))
           if (from == riverpod) (heading, note),
       ];
-      final note = bridgesAgentNote('themeModeProvider');
-
       expect(notes, [
         ('State management', AgentNote(agentNote)),
-        ('State management', AgentNote(note)),
+        ('State management', AgentNote(bridgesAgentNote)),
       ]);
-      expect(_codeOf(note), {
+      // The providers of the values are names that only the file declares,
+      // which no code with the package uses, so the note names none of
+      // them.
+      expect(_codeOf(bridgesAgentNote), {
         _bridges,
-        // The provider of the first value of the app, as an example.
-        'themeModeProvider',
         'NotifierProvider',
         'ListenableNotifier',
         'ref.watch',
@@ -175,11 +174,6 @@ void main() {
       for (final name in ['NotifierProvider', 'ListenableNotifier']) {
         expect(text, contains(name));
       }
-      // The provider of the first value of the app is the example.
-      expect(
-        bridgesAgentNote('localizationLocaleProvider'),
-        contains('such as `localizationLocaleProvider`, each'),
-      );
     });
 
     test(

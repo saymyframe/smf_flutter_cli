@@ -23,13 +23,13 @@ With `flutter_riverpod`:
 
 /// The note of the module in the guide for coding agents of an app whose
 /// controllers keep values that the state manager follows: where the
-/// providers of those values are, with [example], the provider of the first
-/// value of the app, how a widget reads one, and that code changes a value
-/// only through its controller.
+/// providers of those values are, what each is, how a widget reads one, and
+/// that code changes a value only through its controller.
 ///
-/// Its inline code names what the file of the providers and the code of a
-/// variant for this module use, and the file, which every app with the
-/// note has.
-String bridgesAgentNote(String example) => '''
-- The values that controllers of the app keep, such as the theme mode, have providers in `lib/core/state/shared_state_providers.dart`, one for each value, such as `$example`, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
+/// Its inline code names the file, which every app with the note has, and
+/// what the file of the providers and the code of a variant for this module
+/// use. It names no provider of a value: a file only declares those, and no
+/// code with the package uses them.
+const bridgesAgentNote = '''
+- The values that controllers of the app keep, such as the theme mode, have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
 ''';
