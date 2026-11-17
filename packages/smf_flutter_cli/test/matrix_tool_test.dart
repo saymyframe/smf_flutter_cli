@@ -194,6 +194,7 @@ void main() {
             ('router_walk', 'probeRoutes'),
             ('localization_role', 'probeLanguages'),
             ('flavors', 'probeFlavor'),
+            ('review_role', 'probeReview'),
             ('rest_role', 'probeRest'),
           ].indexed)
             (name, index, function),

@@ -247,6 +247,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -284,6 +285,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -302,6 +304,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -337,14 +340,14 @@ void main() {
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
     // labels it shows. The theme follows, then the push messages before the
-    // notifications that their role requires, and then the preferences of
-    // the localization, the theme and the notifications and the DI
-    // container, all before the state managers.
+    // notifications that their role requires, the store reviews, and then
+    // the preferences of the localization, the theme, the notifications and
+    // the store reviews and the DI container, all before the state managers.
     expect(run.asked.last.shown, [
       'github_actions — CI on GitHub Actions',
       'None',
     ]);
-    expect(run.asked[11].shown, [
+    expect(run.asked[12].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -400,6 +403,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -418,6 +422,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -487,6 +492,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -586,6 +592,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -646,6 +653,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -664,6 +672,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -723,6 +732,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -742,6 +752,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -793,6 +804,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -816,11 +828,12 @@ void main() {
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 5),
+      messages.sublist(localization + 1, localization + 6),
       [
         'Theme: which module provides it?',
         'Push messages: which module provides it?',
         'Notifications: which module provides it?',
+        'Store reviews: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
     );
@@ -939,6 +952,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1014,6 +1028,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1089,6 +1104,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1102,19 +1118,20 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them, and the localization, the theme and the notifications, whose
-    // roles require the preferences, come before the preferences and
-    // before get_it, and the push messages, whose role requires the
-    // notifications, before the notifications. So the question of the
-    // preferences knows whether the answers on the localization, on the
-    // theme and on the notifications need them.
+    // them, and the localization, the theme, the notifications and the
+    // store reviews, whose roles require the preferences, come before the
+    // preferences and before get_it, and the push messages, whose role
+    // requires the notifications, before the notifications. So the question
+    // of the preferences knows whether the answers on the localization, on
+    // the theme, on the notifications and on the store reviews need them.
     expect(
-      messages.sublist(preferences - 4, preferences + 1),
+      messages.sublist(preferences - 5, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
         'Push messages: which module provides it?',
         'Notifications: which module provides it?',
+        'Store reviews: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -1185,6 +1202,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Preferences': ['None'],
       'Crash reporting': <String>[],
       'Analytics': <String>[],
@@ -1259,6 +1277,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1354,6 +1373,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1475,6 +1495,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1554,6 +1575,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1672,6 +1694,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -1838,6 +1861,7 @@ void main() {
         'Push messages': ['firebase_messaging'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
@@ -1935,6 +1959,7 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
       'Notifications': ['local_notifications'],
       'Dependency injection': ['None'],
       'State management': ['None'],
@@ -2036,6 +2061,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
@@ -2100,6 +2126,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2299,6 +2326,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2424,6 +2452,7 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2548,6 +2577,7 @@ void main() {
       'firebase_crashlytics',
       'firebase_analytics',
       'dio',
+      'in_app_review',
       'github_actions',
     ];
     final run = await _create(
@@ -2571,6 +2601,7 @@ void main() {
         'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],
         'REST API': ['dio'],
+        'Store reviews': ['in_app_review'],
         'CI': ['github_actions'],
       },
       options: ['--skip-external-setup'],
@@ -2583,15 +2614,15 @@ void main() {
     // so come before its question; the look of the app, its languages and
     // its theme; the push messages, before the notifications that their
     // role requires, which come after the two screens that the
-    // notifications role adds to; what is under the hood, the preferences
-    // that the localization, the theme, the onboarding and the
-    // notifications require, the DI container, the state manager and the
-    // events; what the app talks to, the authentication, the REST API and
-    // the purchases; what tells how it runs, the crash reporting and the
-    // analytics; and last what gets it released, its icon, its splash screen
-    // and CI. The choices of the roles come once the modules are known, and
-    // the question about a step that the user may leave for later once the
-    // app is rendered.
+    // notifications role adds to; the store reviews; what is under the hood,
+    // the preferences that the localization, the theme, the onboarding, the
+    // notifications and the store reviews require, the DI container, the
+    // state manager and the events; what the app talks to, the
+    // authentication, the REST API and the purchases; what tells how it runs,
+    // the crash reporting and the analytics; and last what gets it released,
+    // its icon, its splash screen and CI. The choices of the roles come once
+    // the modules are known, and the question about a step that the user may
+    // leave for later once the app is rendered.
     expect(run.asked.map((question) => question.message), [
       'Features: which do you want?',
       'Infrastructure: which do you want?',
@@ -2600,6 +2631,7 @@ void main() {
       'Localization: which module provides it?',
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
+      'Store reviews: which module provides it?',
       'Dependency injection: which module provides it?',
       equals(
         'State management: sign_in requires the state management role. '

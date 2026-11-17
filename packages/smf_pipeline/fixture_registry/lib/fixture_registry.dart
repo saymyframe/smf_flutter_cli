@@ -39,6 +39,7 @@ import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_in_app_review/smf_in_app_review.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
@@ -238,7 +239,11 @@ List<ModuleId> everyFixture({
 /// the purchases of RevenueCat: that of the paywall, whose entry of the
 /// subscription the settings screen shows below the entries of the other
 /// features, and that of its step of the onboarding, which comes after the
-/// steps of the fixture steps and of the notifications role.
+/// steps of the fixture steps and of the notifications role. After them
+/// comes in_app_review, the provider of the review role that the CLI has, for
+/// the app test that it keeps and for the tests of that role that the CLI
+/// keeps, of the role and of its entry of the settings screen, which reads
+/// the App Store ID from the values of .env and shows on iOS only with one.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -287,5 +292,6 @@ List<SmfModule> severalProvidersModules() => const [
       DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      InAppReviewModule(),
       LauncherIconsModule(),
     ];
