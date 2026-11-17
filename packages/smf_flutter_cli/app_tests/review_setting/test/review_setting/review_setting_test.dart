@@ -5,31 +5,37 @@
 // scripts what a provider answers. On Android the screen shows the entry
 // once, with its title in each language of the app. A tap opens exactly the
 // Google Play page of the app, for a review, and never asks for the review
-// dialog, which the stores forbid from a button. When no app of the device
-// opens the page, a snack bar says so in the language of the app. On iOS the
+// dialog, which the stores forbid from a button, also while a review is
+// due. When no app of the device opens the page, a snack bar says so in the
+// language of the app. On iOS the
 // entry shows exactly when the App Store ID of the app in .env is all
 // digits, which the tests of the apps leave empty. On a small phone with a
 // large text size, the title keeps its words whole and stays in the row of
 // the entry, in full: it is as large as the text size asks, or, where its
 // longest word would not fit, as large as that word allows.
 //
-// It knows only the two roles, and the env role that the review role
-// requires, and starts the app once, since the start-up of an app may not
-// run twice. The matrix writes setting.dart next to it, from the entries of
+// It knows only the two roles, and the env role and the preferences role
+// that the review role requires, and starts the app once, since the start-up
+// of an app may not run twice. The matrix writes setting.dart next to it, from the entries of
 // the settings screen role and the languages of the localization role of
 // the app: the type of the widget of the entry and its texts in each
 // language. It opens the settings screen as the tests of the settings screen
 // role do, and takes the service of the tests, which scripts what a provider
-// answers, from the files of the test of the review role. Both of those
-// tests run in every app that this one runs in. Each expectation gives its
-// reason.
+// answers, and the state of a review that is due from the files of the test
+// of the review role. Both of those tests run in every app that this one
+// runs in. Before the reviews start with that service, the test saves that
+// state through the preferences of the app and restores it: on the second
+// launch of a fresh app no review is due, and a tap that asked for the
+// dialog would then reach nothing. Each expectation gives its reason.
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/env/app_env.dart';
+import 'package:{{app_name}}/core/preferences/app_preferences.dart';
 import 'package:{{app_name}}/core/review/app_review.dart';
 
-import '../review_role/review_role.dart' show ScriptedReview, inRealTime;
+import '../review_role/review_role.dart'
+    show ScriptedReview, inRealTime, saveDueState;
 import '../settings_screen_role/open_settings.dart';
 import 'setting.dart';
 
@@ -63,9 +69,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // A service of the test, which the app takes as it takes the service
-      // of the provider at its start.
+      // of the provider at its start. The device keeps the state of an app
+      // on which a review is due, so that a tap that also asked for the
+      // review dialog would reach the service: on the second launch of a
+      // fresh app no review is due, and such a tap would ask for nothing.
       final service = ScriptedReview();
       await inRealTime(tester, 'the start of the reviews', () async {
+        await saveDueState(now: DateTime.now());
+        restoreReview(createAppPreferences());
         await appReview.start(service);
       });
       await tester.pumpAndSettle();
@@ -160,8 +171,9 @@ void main() {
       expect(
         service.requests,
         0,
-        reason: 'The entry never asks for the review dialog: the stores '
-            'forbid it from a button, and point a button to the page.',
+        reason: 'The entry never asks for the review dialog, though a review '
+            'is due: the stores forbid it from a button, and point a button '
+            'to the page.',
       );
       expect(
         service.pages,
@@ -173,6 +185,18 @@ void main() {
         List.filled(1 + reviewTexts.length, 'openStorePage'),
         reason: 'Each tap on the entry opens the page once, and does nothing '
             'else.',
+      );
+
+      // The control: a review was due all along, so a tap that asked for
+      // the review dialog would have reached the service.
+      await inRealTime(tester, 'requestIfDue()', appReview.requestIfDue);
+      expect(
+        service.requests,
+        1,
+        reason: 'A review was due while the test tapped the entry: '
+            'appReview.requestIfDue() asks the service of the test for the '
+            'review dialog now, so a tap that asked for it would have asked '
+            'too.',
       );
 
       // On iOS the app has its App Store page only with the App Store ID in

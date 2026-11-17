@@ -1778,13 +1778,14 @@ Map<String, String> _reviewValuesOf(MatrixApp app) => {
 /// the CLI keeps in its `app_tests/review_setting`, for the apps with the
 /// review role and the settings screen role, whichever modules provide them.
 /// Over a service of reviews of the test that scripts what a provider
-/// answers:
+/// answers, while a review is due:
 /// - on Android, the settings screen shows the entry once, with its title in
 ///   each language of the app;
 /// - a tap opens exactly the Google Play page of the app, for a review, and
 ///   never asks for the review dialog, which the stores forbid from a
-///   button; when no app of the device opens the page, a snack bar says so
-///   in the language of the app;
+///   button, though `appReview.requestIfDue()` asks for it after the taps;
+///   when no app of the device opens the page, a snack bar says so in the
+///   language of the app;
 /// - on iOS the entry shows exactly when the App Store ID of the app in
 ///   `.env` is all digits, which the tests of the apps leave empty, so there
 ///   the screen shows no entry;
@@ -1793,16 +1794,18 @@ Map<String, String> _reviewValuesOf(MatrixApp app) => {
 ///   text size asks, or, where its longest word would not fit, as large as
 ///   that word allows.
 ///
-/// The test knows only the two roles, and the env role that the review role
-/// requires. The matrix writes the type of the widget of the entry for it
-/// into [reviewSettingFile], from the entries of the settings screen role of
-/// the app, with the texts of the entry in each language of the app, from
-/// the localization role. It opens the settings screen with the helper of
-/// the tests of the settings screen role, and takes the service of the test
-/// from the files of the test of the review role ([reviewRoleAppTest]),
-/// which runs in every app that this test runs in. It has no probe for the
-/// start check: a tap would open the store on a device, and the walk of the
-/// routes goes to the settings screen there.
+/// The test knows only the two roles, and the env role and the preferences
+/// role that the review role requires. The matrix writes the type of the
+/// widget of the entry for it into [reviewSettingFile], from the entries of
+/// the settings screen role of the app, with the texts of the entry in each
+/// language of the app, from the localization role. It opens the settings
+/// screen with the helper of the tests of the settings screen role, and
+/// takes the service of the test and the state of a review that is due,
+/// which it saves through the preferences of the app, from the files of the
+/// test of the review role ([reviewRoleAppTest]), which runs in every app
+/// that this test runs in. It has no probe for the start check: a tap would
+/// open the store on a device, and the walk of the routes goes to the
+/// settings screen there.
 Future<MatrixAppTest> reviewSettingAppTest() async => MatrixAppTest(
       '${await appTestsDirectoryOf('smf_flutter_cli')}/review_setting',
       appliesTo: (app) => app.hook!.presentRoles
