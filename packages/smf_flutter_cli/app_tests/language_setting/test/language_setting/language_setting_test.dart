@@ -350,6 +350,60 @@ void main() {
         await expectWholeRow(code, languageLabels[code]!);
       }
       await tester.runAsync(() => appLocale.choose(null));
+      await tester.pumpAndSettle();
+
+      // The sheet on the small phone, in each language of the app, which
+      // the device asks for: its title and the label of each option, each
+      // option once the sheet scrolled to it. A tap outside closes it.
+      for (final code in settingTitles.keys) {
+        tester.platformDispatcher.localesTestValue = [Locale(code)];
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byType(languageSetting, skipOffstage: false),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(setting);
+        await tester.pumpAndSettle();
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'The sheet of the setting fits a small phone with a large '
+              'text size, in $code.',
+        );
+        _expectInPlace(
+          tester,
+          option(settingTitles[code]!),
+          sheet,
+          'the sheet',
+          language: code,
+        );
+        for (final label in [
+          deviceOptions[code]!,
+          for (final locale in appLocales) languageLabels[locale.languageCode]!,
+        ]) {
+          await tester.scrollUntilVisible(
+            option(label),
+            100,
+            scrollable:
+                find.descendant(of: sheet, matching: find.byType(Scrollable)),
+          );
+          await tester.pumpAndSettle();
+          _expectInPlace(
+            tester,
+            option(label),
+            find.ancestor(of: option(label), matching: find.byType(ListTile)),
+            'its option',
+            language: code,
+          );
+        }
+        await tester.tapAt(const Offset(10, 10));
+        await tester.pumpAndSettle();
+        expect(
+          sheet,
+          findsNothing,
+          reason: 'A tap outside the sheet closes it, in $code.',
+        );
+      }
       tester.platformDispatcher.clearLocalesTestValue();
       await tester.pumpAndSettle();
       expect(
@@ -359,6 +413,10 @@ void main() {
             'language that it asked for at the start.',
       );
 
+      await tester.ensureVisible(
+        find.byType(languageSetting, skipOffstage: false),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(setting);
       await tester.pumpAndSettle();
       expect(
@@ -367,34 +425,6 @@ void main() {
         reason: 'The sheet of the setting fits a small phone with a large '
             'text size.',
       );
-      // The title of the sheet and the label of each option on the small
-      // phone, each option once the sheet scrolled to it.
-      _expectInPlace(
-        tester,
-        option(settingTitles[device]!),
-        sheet,
-        'the sheet',
-        language: device,
-      );
-      for (final label in [
-        deviceOptions[device]!,
-        for (final locale in appLocales) languageLabels[locale.languageCode]!,
-      ]) {
-        await tester.scrollUntilVisible(
-          option(label),
-          100,
-          scrollable:
-              find.descendant(of: sheet, matching: find.byType(Scrollable)),
-        );
-        await tester.pumpAndSettle();
-        _expectInPlace(
-          tester,
-          option(label),
-          find.ancestor(of: option(label), matching: find.byType(ListTile)),
-          'its option',
-          language: device,
-        );
-      }
       // The last option of the sheet, which the sheet scrolls to where its
       // options do not fit.
       final last = option(languageLabels[appLocales.last.languageCode]!);
@@ -439,11 +469,12 @@ void main() {
 
 /// Checks that [shown], a text that [place] shows in [placed], keeps its
 /// words whole on the small phone in [language] and stays in [placed], in
-/// full: no line starts between two letters or digits, or at a no-break
-/// space. The text is as large as the text size of the device asks for its
-/// style, or, where its longest word would not fit the width that the text
-/// has at that size, as large as that word allows: smaller, with that word
-/// on a line of its own.
+/// full: it is laid out in the width that it has and drawn at the size of
+/// its layout, and no line starts between two letters or digits, or at a
+/// no-break space. The text is as large as the text size of the device, as
+/// [placed] has it, asks for its style, or, where its longest word would not
+/// fit the width that the text has at that size, as large as that word
+/// allows: smaller, with that word on a line of its own.
 void _expectInPlace(
   WidgetTester tester,
   Finder shown,
@@ -472,6 +503,21 @@ void _expectInPlace(
     (false, false),
     reason: '"$text" shows in full in $place, on as many lines as it needs, '
         'on a small phone with a large text size, in $language.',
+  );
+  // The text is laid out in the width that it has and drawn at the size of
+  // its layout: a FittedBox would lay it out in a width without a limit,
+  // on one line, and draw it smaller.
+  expect(
+    paragraph.constraints.maxWidth.isFinite,
+    isTrue,
+    reason: '"$text" is laid out in the width that it has, in $language, '
+        'and not in ${paragraph.constraints}, where it would not wrap.',
+  );
+  expect(
+    tester.getRect(shown).width,
+    closeTo(paragraph.size.width, 0.01),
+    reason: '"$text" is drawn at the size of its layout, in $language, and '
+        'nothing scales it.',
   );
   // The boxes of the characters from [start] to [end].
   List<TextBox> boxesOf(int start, int end) => paragraph.getBoxesForSelection(
@@ -513,11 +559,13 @@ void _expectInPlace(
     if (width > widest) widest = width;
   }
   // The size that the text size of the device asks for the style of the
-  // text, and the size of the text.
+  // text, the text size as placed has it: a text that clamps the text size
+  // for itself is smaller than that. And the size of the text, 14 for a
+  // style that gives none, as in Flutter.
   final element = tester.element(shown);
-  final largest = MediaQuery.textScalerOf(element)
+  final largest = MediaQuery.textScalerOf(tester.element(placed))
       .scale(DefaultTextStyle.of(element).style.fontSize ?? 14);
-  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
+  final size = paragraph.textScaler.scale(paragraph.text.style?.fontSize ?? 14);
   final room = paragraph.constraints.maxWidth;
   expect(
     size <= largest + 0.01 &&

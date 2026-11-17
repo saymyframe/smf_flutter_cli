@@ -268,11 +268,12 @@ void main() {
 
 /// Checks that [shown], a text that [place] shows in [placed], keeps its
 /// words whole on the small phone in [language] and stays in [placed], in
-/// full: no line starts between two letters or digits, or at a no-break
-/// space. The text is as large as the text size of the device asks for its
-/// style, or, where its longest word would not fit the width that the text
-/// has at that size, as large as that word allows: smaller, with that word
-/// on a line of its own.
+/// full: it is laid out in the width that it has and drawn at the size of
+/// its layout, and no line starts between two letters or digits, or at a
+/// no-break space. The text is as large as the text size of the device, as
+/// [placed] has it, asks for its style, or, where its longest word would not
+/// fit the width that the text has at that size, as large as that word
+/// allows: smaller, with that word on a line of its own.
 void _expectInPlace(
   WidgetTester tester,
   Finder shown,
@@ -301,6 +302,21 @@ void _expectInPlace(
     (false, false),
     reason: '"$text" shows in full in $place, on as many lines as it needs, '
         'on a small phone with a large text size, in $language.',
+  );
+  // The text is laid out in the width that it has and drawn at the size of
+  // its layout: a FittedBox would lay it out in a width without a limit,
+  // on one line, and draw it smaller.
+  expect(
+    paragraph.constraints.maxWidth.isFinite,
+    isTrue,
+    reason: '"$text" is laid out in the width that it has, in $language, '
+        'and not in ${paragraph.constraints}, where it would not wrap.',
+  );
+  expect(
+    tester.getRect(shown).width,
+    closeTo(paragraph.size.width, 0.01),
+    reason: '"$text" is drawn at the size of its layout, in $language, and '
+        'nothing scales it.',
   );
   // The boxes of the characters from [start] to [end].
   List<TextBox> boxesOf(int start, int end) => paragraph.getBoxesForSelection(
@@ -342,11 +358,13 @@ void _expectInPlace(
     if (width > widest) widest = width;
   }
   // The size that the text size of the device asks for the style of the
-  // text, and the size of the text.
+  // text, the text size as placed has it: a text that clamps the text size
+  // for itself is smaller than that. And the size of the text, 14 for a
+  // style that gives none, as in Flutter.
   final element = tester.element(shown);
-  final largest = MediaQuery.textScalerOf(element)
+  final largest = MediaQuery.textScalerOf(tester.element(placed))
       .scale(DefaultTextStyle.of(element).style.fontSize ?? 14);
-  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
+  final size = paragraph.textScaler.scale(paragraph.text.style?.fontSize ?? 14);
   final room = paragraph.constraints.maxWidth;
   expect(
     size <= largest + 0.01 &&

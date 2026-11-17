@@ -298,6 +298,12 @@ void main() {
         final language = locale.toLanguageTag();
         tester.platformDispatcher.localesTestValue = [locale];
         await tester.pumpAndSettle();
+        expect(
+          Localizations.localeOf(tester.element(entry)).languageCode,
+          locale.languageCode,
+          reason: 'The app is in the language that the device asks for, '
+              '$language, one of its languages.',
+        );
         final names = find
             .descendant(of: control, matching: find.byType(Text))
             .evaluate()
@@ -345,7 +351,7 @@ void main() {
               'lines as it needs, on a small phone with a large text size, '
               'in $language.',
         );
-        _expectWholeWords(tester, title, language: language);
+        _expectWholeWords(tester, title, entry, language: language);
       }
       tester.platformDispatcher.clearLocalesTestValue();
       await tester.pumpAndSettle();
@@ -360,15 +366,18 @@ void main() {
   );
 }
 
-/// Checks that [shown], a text of the entry, keeps its words whole on the
-/// small phone in [language]: no line starts between two letters or digits,
-/// or at a no-break space. The text is as large as the text size of the
-/// device asks for its style, or, where its longest word would not fit the
-/// width that the text has at that size, as large as that word allows:
-/// smaller, with that word on a line of its own.
+/// Checks that [shown], a text of [row], the row of the entry, keeps its
+/// words whole on the small phone in [language]: it is laid out in the
+/// width that it has and drawn at the size of its layout, and no line
+/// starts between two letters or digits, or at a no-break space. The text is
+/// as large as the text size of the device, as the row has it, asks for its
+/// style, or, where its longest word would not fit the width that the text
+/// has at that size, as large as that word allows: smaller, with that word
+/// on a line of its own.
 void _expectWholeWords(
   WidgetTester tester,
-  Finder shown, {
+  Finder shown,
+  Finder row, {
   required String language,
 }) {
   final paragraph = tester.renderObject<RenderParagraph>(
@@ -376,6 +385,21 @@ void _expectWholeWords(
         of: shown, matching: find.byType(RichText), matchRoot: true),
   );
   final text = paragraph.text.toPlainText();
+  // The text is laid out in the width that it has and drawn at the size of
+  // its layout: a FittedBox would lay it out in a width without a limit,
+  // on one line, and draw it smaller.
+  expect(
+    paragraph.constraints.maxWidth.isFinite,
+    isTrue,
+    reason: '"$text" is laid out in the width that it has, in $language, '
+        'and not in ${paragraph.constraints}, where it would not wrap.',
+  );
+  expect(
+    tester.getRect(shown).width,
+    closeTo(paragraph.size.width, 0.01),
+    reason: '"$text" is drawn at the size of its layout, in $language, and '
+        'nothing scales it.',
+  );
   // The boxes of the characters from [start] to [end].
   List<TextBox> boxesOf(int start, int end) => paragraph.getBoxesForSelection(
         TextSelection(baseOffset: start, extentOffset: end),
@@ -416,11 +440,13 @@ void _expectWholeWords(
     if (width > widest) widest = width;
   }
   // The size that the text size of the device asks for the style of the
-  // text, and the size of the text.
+  // text, the text size as row has it: a text that clamps the text size
+  // for itself is smaller than that. And the size of the text, 14 for a
+  // style that gives none, as in Flutter.
   final element = tester.element(shown);
-  final largest = MediaQuery.textScalerOf(element)
+  final largest = MediaQuery.textScalerOf(tester.element(row))
       .scale(DefaultTextStyle.of(element).style.fontSize ?? 14);
-  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
+  final size = paragraph.textScaler.scale(paragraph.text.style?.fontSize ?? 14);
   final room = paragraph.constraints.maxWidth;
   expect(
     size <= largest + 0.01 &&
