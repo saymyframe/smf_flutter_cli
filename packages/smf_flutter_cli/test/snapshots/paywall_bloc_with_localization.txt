@@ -286,7 +286,7 @@ With `flutter_bloc`:
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
 
-- The values that controllers of the app keep, such as the theme mode, have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `LocalizationLocaleCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `LocalizationLocaleCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Values in .env
 
@@ -7466,7 +7466,8 @@ class _Row extends StatelessWidget {
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart' show BlocProvider;
 import 'package:my_app/core/l10n/app_locale.dart';
-import 'package:my_app/core/state/shared_state_cubits.dart';
+import 'package:my_app/core/state/shared_state_cubits.dart'
+    show SharedStateCubits;
 import 'package:my_app/features/paywall/paywall_composition.dart'
     show createPremiumCubit;
 

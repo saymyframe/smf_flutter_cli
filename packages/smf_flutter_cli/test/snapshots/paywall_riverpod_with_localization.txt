@@ -287,7 +287,7 @@ With `flutter_riverpod`:
 - A widget talks only to providers, never to a service or a DI container. A provider gets a service through another provider, which a test overrides.
 - `ProviderScope` is around the root widget in `runApp()`, in `lib/main.dart`: keep it above every widget that reads a provider.
 
-- The values that controllers of the app keep, such as the theme mode, have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
+- The values that controllers of the app keep have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
 
 ## Values in .env
 
