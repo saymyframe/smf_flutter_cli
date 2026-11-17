@@ -166,7 +166,12 @@ void main() {
       expect(
         _messages(result).single,
         'home: home contributes data to the routes role, but does not provide, '
-        'require or use it.',
+        'require, use or feed it.',
+      );
+      expect(
+        result.issues.single.hint,
+        'Add the role to the feeds of the contributor if it gives the role '
+        'data alone, and to its uses otherwise.',
       );
       // The template does not see it.
       expect(template.validated.single.data, isEmpty);
@@ -397,6 +402,149 @@ void main() {
         equals('role:service: role:service puts code into the socket '
             'nav.observers, but does not provide, require or use the nav '
             'role.'),
+      ]);
+    });
+  });
+
+  group('a role that a module or the template of a role feeds', () {
+    /// The data of [input], each as `<origin>: <value>`.
+    List<String> dataOf(RoleHookInput<String> input) =>
+        [for (final data in input.data) '${data.origin}: ${data.value}'];
+
+    test(
+        'takes data alone from a module or the template of a role that feeds '
+        'it, and its module rules check the modules among them', () {
+      final template = TestTemplate<String>();
+      final bridges = TestRole<String>(
+        'bridges',
+        template: template,
+        moduleRules: const [
+          ModuleRule(id: 'bridges.count', description: 'Counts', check: _count),
+        ],
+      );
+      final provider = TestProvider<String>(bridges);
+      final theme = TestRole<NoDsl>(
+        'theme',
+        feeds: {bridges},
+        template: TestTemplate<NoDsl>(
+          contributions: [bridges.data('from theme')],
+        ),
+      );
+      final home = TestModule(
+        'home',
+        feeds: {bridges},
+        contributions: [bridges.data('from home')],
+      );
+      final material = TestModule(
+        'material',
+        providers: [RoleProvider.plain(theme)],
+      );
+
+      final result = _validate([
+        entry,
+        home,
+        material,
+        TestModule('riverpod', providers: [provider]),
+      ]);
+
+      // The rule of the role checks home, and nothing else speaks.
+      expect(_messages(result), ['home: home has 1 data']);
+      expect(result.hasErrors, isFalse);
+      const fed = ['home: from home', 'role:theme: from theme'];
+      expect(dataOf(template.validated.single), fed);
+      expect(dataOf(provider.validated.single), fed);
+      // Without a provider of the role, the data does not apply.
+      expect(_validate([entry, home, material]).issues, isEmpty);
+    });
+
+    test(
+        'gives a module or the template of a role that feeds it no '
+        'condition, variable, socket, presence flag or step by hand of it', () {
+      final sockets = <SocketRef>[];
+      final bridges = TestRole<String>('bridges', sockets: sockets);
+      final listeners =
+          SocketRef<CodeSocket>.role(bridges, 'listeners', const CodeSocket());
+      sockets.add(listeners);
+      final chosen = ChoiceCondition(
+        bridges,
+        'the bridges are lazy',
+        holdsFor: (choice) => choice == 'lazy',
+        withoutRole: false,
+      );
+      final theme = TestRole<NoDsl>(
+        'theme',
+        feeds: {bridges},
+        template: TestTemplate<NoDsl>(
+          contributions: [
+            bridges.data('from theme'),
+            CodegenRequest(when: {bridges}),
+          ],
+        ),
+      );
+
+      final result = _validate([
+        entry,
+        TestModule('material', providers: [RoleProvider.plain(theme)]),
+        TestModule(
+          'home',
+          feeds: {bridges},
+          contributions: [
+            bridges.data('from home'),
+            CodegenRequest(when: {bridges}),
+            BrickContribution(
+              bundle('lazy', paths: ['lib/lazy.dart']),
+              whenChosen: {chosen},
+            ),
+            BrickContribution(
+              bundle(
+                'home',
+                files: {
+                  'lib/home.dart': '{{#has_bridges}}a{{/has_bridges}}\n'
+                      '{{{of_bridges}}}\n',
+                },
+              ),
+              vars: {
+                'of_bridges': RoleVar(bridges, present: 'a', absent: 'b'),
+              },
+            ),
+            SocketContribution.code(listeners, const Fragment('listen();')),
+            ManualStep(ManualStepId.role(bridges, 'key'), 'Add the key'),
+          ],
+        ),
+      ]);
+
+      expect(_messages(result), [
+        equals(
+          'home: home lists the bridges role in the condition of a '
+          'contribution, but does not provide, require or use it.',
+        ),
+        equals(
+          'home: home makes a contribution depend on what the bridges role '
+          'chose (the bridges are lazy), but does not provide, require or '
+          'use it.',
+        ),
+        equals(
+          'home: The variable of_bridges of the brick home of home depends '
+          'on the bridges role, but home does not provide, require or use '
+          'it.',
+        ),
+        equals(
+          'home: home puts code into the socket bridges.listeners, but does '
+          'not provide, require or use the bridges role.',
+        ),
+        equals(
+          'home: home lists the step by hand bridges.key of the bridges '
+          'role, but does not provide, require or use it.',
+        ),
+        equals(
+          'role:theme: role:theme lists the bridges role in the condition of '
+          'a contribution, but does not provide, require or use it.',
+        ),
+        equals(
+          'home: The section has_bridges in lib/home.dart:1 of home is the '
+          'flag of the bridges role, which home does not provide, require or '
+          'use, so the pipeline does not set it.',
+        ),
       ]);
     });
   });
