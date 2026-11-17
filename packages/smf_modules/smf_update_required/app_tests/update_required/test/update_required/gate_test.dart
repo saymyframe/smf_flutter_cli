@@ -12,9 +12,12 @@
 // store page that did not open shows the failure and "Not now" at once.
 // Another lowest version takes the place of the app again, and so does the
 // next launch, updateStatus.start() again, which forgets that the user let
-// a lowest version pass. On iOS without the App Store ID of the app, which
-// the tests leave empty, the app has no store page, and the screen never
-// shows: a debug build says why.
+// a lowest version pass. On iOS, the store page needs the App Store ID of
+// the app, which controllers of the reviews of the test script: without an
+// ID the app has no store page, and the screen never shows, which a debug
+// build says; with one, it shows, and "Update" opens the page of the app in
+// the App Store. A store page that does not answer within
+// UpdateStatus.storeWait counts as opened, so the screen offers "Not now".
 //
 // The screen only changes what the guard of the routes of the module reads:
 // the router of the app, whichever module provides it, shows the screen and
@@ -24,11 +27,16 @@
 //
 // It also runs the probe of the module, which the start check runs on a
 // device (integration_test/update_required/probe.dart): it finds no problem
-// in each state of the screen, and reports a version of the app that is not
-// numbers between dots.
+// in each state of the screen, and reports a screen that does not agree
+// with the store page, and a version of the app that is not numbers between
+// dots. A version that the app cannot read at all, which only a device
+// whose platform side fails gives, no test reaches: package_info_plus keeps
+// the values of the mocks and has no way to forget them.
 //
 // The test starts the app once, since the start-up of an app may not run
 // twice, and each expectation gives its reason.
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/review/app_review.dart';
@@ -252,38 +260,123 @@ void main() {
             'of the launch before.',
       );
 
-      // On iOS, the store page needs the App Store ID of the app.
+      // A store page that does not answer: once the screen waited for it
+      // long enough, the visit counts as made, and the screen offers "Not
+      // now" without a failure, so that nobody is locked out.
+      review.answer = Completer<bool>().future;
+      await tester.tap(updateButton());
+      await tester.pump();
+      expect(
+        laterButton(),
+        findsNothing,
+        reason: 'While the store page is opening, the screen does not offer '
+            '"Not now" yet.',
+      );
+      await tester.pump(UpdateStatus.storeWait);
+      await tester.pumpAndSettle();
+      expect(
+        updateStatus.storeVisit.value,
+        StoreVisit.opened,
+        reason: 'A store page that does not answer within '
+            '${UpdateStatus.storeWait.inSeconds} seconds counts as opened.',
+      );
+      expect(
+        laterButton(),
+        findsOneWidget,
+        reason: 'Once the screen waited for a store page that does not '
+            'answer, it offers "Not now".',
+      );
+      expect(
+        storeFailed(),
+        findsNothing,
+        reason: 'A store page that does not answer is no failure that the '
+            'screen tells of.',
+      );
+      review
+        ..answer = null
+        ..opens = true;
+
+      // On iOS, the store page needs the App Store ID of the app, which
+      // controllers of the reviews of the test script, one without an ID and
+      // one with one, over the service of the test.
       await publishMinimum(tester, '');
       await expectApp(tester, 'the lowest version is empty again');
+      final withoutId = AppReviewController(appStoreId: () => null);
+      final withId = AppReviewController(appStoreId: () => '1234567890');
+      await inRealTime(tester, 'starting the reviews of the test', () async {
+        await withoutId.start(review);
+        await withId.start(review);
+      });
+      await startStatusAgain(tester, review: withoutId);
+      // On Android, the app has its page in Google Play without an ID.
+      await publishMinimum(tester, '1.0.3');
+      await expectGate(tester, 'the lowest version is 1.0.3 on Android');
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       try {
+        expect(
+          updateStatus.hasStorePage,
+          isFalse,
+          reason: 'On iOS without the App Store ID, the app has no store page.',
+        );
+        // The platform changed behind the status, which still keeps the
+        // user on the screen: the probe reports that.
+        expect(
+          await probe(tester),
+          [
+            allOf(
+              contains('shows the screen "Update required"'),
+              contains('no store page'),
+              contains('it should run'),
+            ),
+          ],
+          reason: 'The probe reports a screen that does not agree with the '
+              'store page: on iOS without the App Store ID, the app should '
+              'run.',
+        );
         final printed = await printedBy(
           tester,
-          'publishing 1.0.3 on iOS',
-          () async {
-            remoteConfig.publish({minimumParameter: '1.0.3'});
-            await aMoment();
-          },
+          'updateStatus.start() on iOS without the App Store ID',
+          () => updateStatus.start(review: withoutId),
         );
         await tester.pumpAndSettle();
-        if (appReview.hasStorePage) {
-          await expectGate(tester, 'the lowest version is 1.0.3 on iOS');
-        } else {
-          await expectApp(
-            tester,
-            'the lowest version is 1.0.3 on iOS without the App Store ID',
-          );
-          expect(
-            printed,
-            contains(contains(appStoreIdKey)),
-            reason: 'On iOS without the App Store ID, a debug build says why '
-                'the screen does not show, and names the key of .env.',
-          );
-        }
-        await publishMinimum(tester, '');
+        await expectApp(
+          tester,
+          'the lowest version is 1.0.3 on iOS without the App Store ID',
+        );
+        expect(
+          printed,
+          contains(contains(appStoreIdKey)),
+          reason: 'On iOS without the App Store ID, a debug build says why '
+              'the screen does not show, and names the key of .env.',
+        );
+
+        await startStatusAgain(tester, review: withId);
+        expect(
+          updateStatus.hasStorePage,
+          isTrue,
+          reason: 'On iOS with the App Store ID, the app has its page in the '
+              'App Store.',
+        );
+        await expectGate(
+          tester,
+          'the lowest version is 1.0.3 on iOS with the App Store ID',
+        );
+        await tester.tap(updateButton());
+        await tester.pumpAndSettle();
+        expect(
+          review.pages.last,
+          withId.storePage(),
+          reason: 'On iOS, "Update" opens the page of the App Store ID in the '
+              'App Store.',
+        );
+        expect(review.pages.last.host, 'apps.apple.com');
+        expect(laterButton(), findsOneWidget);
       } finally {
         debugDefaultTargetPlatformOverride = null;
       }
+      await publishMinimum(tester, '');
+      await startStatusAgain(tester);
+      await expectApp(tester, 'the app has its own reviews again');
 
       // A version of the app that is no version keeps the app running, and
       // the probe reports it.

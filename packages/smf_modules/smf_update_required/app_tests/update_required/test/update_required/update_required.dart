@@ -133,10 +133,15 @@ final class ScriptedRemoteConfig implements RemoteConfigService {
 
 /// A service of the reviews of the tests, which a test gives
 /// appReview.start() to script whether an app of the device opens the page
-/// of the app in its store. It notes each page that it opened.
+/// of the app in its store, or whether the page answers at all. It notes
+/// each page that it opened.
 final class ScriptedReview implements ReviewService {
   /// Whether an app of the device opens a page.
   bool opens = true;
+
+  /// What a page answers with, if set: a page whose future never completes
+  /// does not answer.
+  Future<bool>? answer;
 
   /// The pages that the service opened, in their order.
   final List<Uri> pages = [];
@@ -148,9 +153,9 @@ final class ScriptedReview implements ReviewService {
   Future<void> requestReview() async {}
 
   @override
-  Future<bool> openStorePage(Uri page) async {
+  Future<bool> openStorePage(Uri page) {
     pages.add(page);
-    return opens;
+    return answer ?? Future.value(opens);
   }
 
   @override
@@ -194,9 +199,17 @@ Future<void> publishMinimum(WidgetTester tester, String minimum) async {
 }
 
 /// Runs updateStatus.start() again, as the next launch of the app does, in
-/// real time.
-Future<void> startStatusAgain(WidgetTester tester) async {
-  await inRealTime(tester, 'updateStatus.start()', updateStatus.start);
+/// real time, with [review], a controller of the reviews of the test, if
+/// any, in place of appReview.
+Future<void> startStatusAgain(
+  WidgetTester tester, {
+  AppReviewController? review,
+}) async {
+  await inRealTime(
+    tester,
+    'updateStatus.start()',
+    () => updateStatus.start(review: review),
+  );
   await tester.pumpAndSettle();
 }
 

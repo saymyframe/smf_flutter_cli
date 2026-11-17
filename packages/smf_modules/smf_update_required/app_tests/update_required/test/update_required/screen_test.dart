@@ -12,7 +12,8 @@
 // is a picture that does not grow. For a screen reader, the title is a
 // header that names the screen, and the failure a live region, which it
 // reads as it comes. The screen comes in when it is first shown, and an app
-// that asks for less motion has it in place in its first frame.
+// that asks for less motion has it in place in its first frame. Over another
+// page, it has neither an app bar nor a back button.
 //
 // The test starts the app once, since the start-up of an app may not run
 // twice, gives the reviews a service of its own on which no app of the
@@ -145,6 +146,20 @@ void main() {
         lessThan(20),
         reason: 'The screen comes in within two seconds.',
       );
+      // Over another page, where a screen with an app bar would get a back
+      // button: the back button of the system leaves the app instead.
+      expect(
+        shown(find.byType(AppBar)),
+        findsNothing,
+        reason: 'The screen has no app bar.',
+      );
+      for (final back in [BackButton, BackButtonIcon, CloseButton]) {
+        expect(
+          shown(find.byType(back)),
+          findsNothing,
+          reason: 'The screen has no back button, also over another page.',
+        );
+      }
       final cell = cellTexts(tester);
       expect(
         cell,

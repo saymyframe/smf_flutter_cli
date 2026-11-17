@@ -521,17 +521,23 @@ void main() {
     test(
         'starts its status in the last phase of the start-up, once the '
         'values of remote config and the reviews are there', () {
+      // The values of remote config start in an earlier phase.
       expect(
         _contributionsTo(result, AppEntryRole.bootstrapPlatform),
         contains('role:remote_config: await initRemoteConfig();'),
       );
+      // A module comes after the templates of the roles it requires, so the
+      // reviews start before the status in the same phase.
+      final late = _contributionsTo(result, AppEntryRole.bootstrapLate);
+      const status = 'update_required: await updateStatus.start();';
+      const reviews = 'role:review: await initReview();';
+      expect(late, containsAll([status, reviews]));
       expect(
-        _contributionsTo(result, AppEntryRole.bootstrapLate),
-        containsAll([
-          'update_required: await updateStatus.start();',
-          'role:review: await initReview();',
-        ]),
+        late.indexOf(reviews),
+        lessThan(late.indexOf(status)),
+        reason: '$late',
       );
+      expect(late.last, status, reason: '$late');
     });
 
     test(
@@ -656,6 +662,8 @@ void main() {
           'appReview.openStorePage()',
           'appRemoteConfig.start()',
           'appReview.start()',
+          'updateStatus.start(review: ...)',
+          'AppReviewController',
         ]),
       );
       for (final path in code.where(_isFile)) {

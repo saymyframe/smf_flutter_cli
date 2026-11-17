@@ -44,6 +44,15 @@ final class UpdateStatus {
   /// How long [start] waits at most for the version of the app.
   static const versionWait = Duration(seconds: 2);
 
+  /// How long [openStore] waits at most for the store page to open. A page
+  /// that does not answer in that time counts as opened, so that the screen
+  /// offers "Not now" and nobody is locked out.
+  static const storeWait = Duration(seconds: 10);
+
+  /// The reviews of the app, whose store page the screen opens: [appReview],
+  /// or the controller that a test gives [start].
+  AppReviewController _review = appReview;
+
   final ValueNotifier<bool> _supported = ValueNotifier(true);
 
   final ValueNotifier<StoreVisit> _storeVisit = ValueNotifier(
@@ -87,17 +96,24 @@ final class UpdateStatus {
   /// now", or `null`.
   String? get waived => _waived;
 
+  /// Whether the app has a page in its store to update from: without one,
+  /// the screen never shows.
+  bool get hasStorePage => _review.hasStorePage;
+
   /// Reads the version of the app, within [versionWait], and starts to
   /// follow the lowest version that may run in remote config: when it
   /// returns, [supported] tells whether the version may run, before the
   /// first frame of the app.
   ///
-  /// `bootstrap()` calls it once the services of the app are ready. It may
-  /// be called again, as at the next launch of the app in a test: the screen
-  /// is then hard again, and a lowest version that the user let pass counts
-  /// again. A version that it cannot read leaves the app running, and a
-  /// debug build prints why.
-  Future<void> start() async {
+  /// `bootstrap()` calls it once the services of the app are ready, and the
+  /// store page is that of [appReview]. It may be called again, as at the
+  /// next launch of the app in a test: the screen is then hard again, and a
+  /// lowest version that the user let pass counts again. A test gives it
+  /// [review], a controller of the reviews of its own, such as one with an
+  /// App Store ID that it scripts. A version that it cannot read leaves the
+  /// app running, and a debug build prints why.
+  Future<void> start({AppReviewController? review}) async {
+    _review = review ?? appReview;
     _waived = null;
     _storeVisit.value = StoreVisit.none;
     String? version;
@@ -126,13 +142,17 @@ final class UpdateStatus {
 
   /// Opens the page of the app in its store, outside the app, and offers
   /// "Not now" on the screen from then on: once the page opened, or at once
-  /// if no app of the device opened it, which the screen says. A tap while
-  /// the page is opening opens it once.
+  /// if no app of the device opened it, which the screen says. A page that
+  /// does not answer within [storeWait] counts as opened. A tap while the
+  /// page is opening opens it once.
   Future<void> openStore() =>
       _opening ??= _openStore().whenComplete(() => _opening = null);
 
   Future<void> _openStore() async {
-    final opened = await appReview.openStorePage();
+    final opened = await _review.openStorePage().timeout(
+      storeWait,
+      onTimeout: () => true,
+    );
     _storeVisit.value = opened ? StoreVisit.opened : StoreVisit.failed;
   }
 
@@ -162,7 +182,7 @@ final class UpdateStatus {
           'not numbers between dots, such as 1.4.0, so the app runs.',
         );
       } else if (versionBelow(version, minimum) && minimum != _waived) {
-        if (appReview.hasStorePage) {
+        if (_review.hasStorePage) {
           supported = false;
         } else {
           _tell(

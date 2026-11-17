@@ -6,13 +6,13 @@
 // It uses no test framework and only reads, in well under a second: the
 // version that the app read must be numbers between dots, as the module
 // compares them, and whether the version may run must agree with the lowest
-// version that remote config has, with the store page of the reviews and
-// with the lowest version that the user let pass for this launch. It assumes
+// version that remote config has, with whether the app has a store page to
+// update from and with the lowest version that the user let pass for this
+// launch. It assumes
 // nothing of the screen that the app shows or of the probes that ran before
 // it, and it never shows the screen "Update required" itself.
 //
 // The tests of the module run it too (update_required/gate_test.dart).
-import 'package:{{app_name}}/core/review/app_review.dart';
 import 'package:{{app_name}}/features/update_required/update_status.dart';
 import 'package:{{app_name}}/features/update_required/version_compare.dart';
 
@@ -37,14 +37,14 @@ Future<List<String>> probeUpdateRequired(
   }
   final minimum = updateStatus.minimum;
   final below = version != null && versionBelow(version, minimum);
-  final expected =
-      !(below && appReview.hasStorePage && minimum != updateStatus.waived);
+  final storePage = updateStatus.hasStorePage;
+  final expected = !(below && storePage && minimum != updateStatus.waived);
   final supported = updateStatus.supported.value;
   if (supported != expected) {
     problems.add(
       'The app ${supported ? 'runs' : 'shows the screen "Update required"'} '
-      'with the version $version and the lowest version "$minimum", the store '
-      'page ${appReview.hasStorePage ? '' : 'missing '}and the lowest version '
+      'with the version $version, the lowest version "$minimum", '
+      '${storePage ? 'a store page' : 'no store page'} and the lowest version '
       '"${updateStatus.waived}" let pass: it should '
       '${expected ? 'run' : 'show the screen'}.',
     );
