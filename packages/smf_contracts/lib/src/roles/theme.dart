@@ -138,6 +138,21 @@ final class ThemeRole extends Role<NoDsl> {
   /// `dark`.
   static const modeKey = 'theme.mode';
 
+  /// The theme mode as an entry of the [StateManagementRole], which the
+  /// template gives the role: in an app with a state manager, a bridge of
+  /// the provider of that role follows `appThemeMode`, through
+  /// `themeModeListenable()` of [themeModeFile].
+  static const modeState = SharedState(
+    'themeMode',
+    listenable: FunctionRef('themeModeListenable', import: _themeMode),
+    type: TypeRef(
+      'ThemeMode',
+      import: ImportRef('package:flutter/material.dart'),
+    ),
+    description: 'The theme mode that the user selected; '
+        '`appThemeMode.choose()` changes it.',
+  );
+
   @override
   String get id => 'theme';
 
@@ -152,6 +167,9 @@ final class ThemeRole extends Role<NoDsl> {
 
   @override
   Set<Role> get uses => {settingsScreenRole, localizationRole};
+
+  @override
+  Set<Role> get feeds => {stateManagementRole};
 
   @override
   RoleInterface get interface => const RoleInterface(
@@ -265,6 +283,7 @@ final class _ThemeTemplate extends RoleTemplate<NoDsl> {
           themeRoleSettingBundle,
           when: const {settingsScreenRole},
         ),
+        stateManagementRole.data(ThemeRole.modeState),
         settingsScreenRole.data(
           const SettingsEntry(
             widget: TypeRef(

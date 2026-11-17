@@ -37,7 +37,10 @@ String compilerQuoteOf(String text) {
 
 /// A stand-in for the part of Flutter's foundation library that the
 /// templates of the roles use, with the signatures of Flutter 3.44: the app
-/// runs in debug mode, and what it prints goes to `debugPrinted`.
+/// runs in debug mode, and what it prints goes to `debugPrinted`. Its
+/// `ValueListenable` declares the members of a `Listenable` itself, so that
+/// a notifier of another stand-in, such as the `ChangeNotifier` of the
+/// material library, implements it.
 const _foundation = r'''
 /// What the app printed with [debugPrint], in order.
 final List<String> debugPrinted = [];
@@ -46,6 +49,16 @@ const bool kDebugMode = true;
 
 void debugPrint(String? message, {int? wrapWidth}) =>
     debugPrinted.add('$message');
+
+abstract class ValueListenable<T> {
+  const ValueListenable();
+
+  void addListener(void Function() listener);
+
+  void removeListener(void Function() listener);
+
+  T get value;
+}
 ''';
 
 /// A stand-in for the part of Flutter's material library that the templates

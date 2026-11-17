@@ -634,6 +634,8 @@ With `flutter_native_splash`:
 
 ## State management
 
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 With `flutter_riverpod`:
 
 - The state of a screen is a provider in the directory of its feature: a `NotifierProvider.autoDispose` with its `Notifier`, so the state lasts as long as the screen. Write it by hand: the app has no code generation for providers.
@@ -642,6 +644,8 @@ With `flutter_riverpod`:
 - After an `await`, a `Notifier` checks `ref.mounted` before it sets `state`. The user may have left the screen while the call was on its way, and a provider that is disposed of throws when its `Notifier` reads from `ref` or sets `state`. So the `Notifier` reads what the call needs from `ref` before the `await`.
 - A widget talks only to providers, never to a service or a DI container. A provider gets a service through another provider, which a test overrides.
 - `ProviderScope` is around the root widget in `runApp()`, in `lib/main.dart`: keep it above every widget that reads a provider.
+
+- The values that controllers of the app keep have providers in `lib/core/state/shared_state_providers.dart`, one for each value and named after it, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
 
 ## Theme
 
@@ -2416,6 +2420,10 @@ final appSession = AppSessionController(
   mode: authMode,
   takeGuestData: takeGuestData,
 );
+
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
 
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
@@ -4832,6 +4840,7 @@ class GoogleSignInIcon extends StatelessWidget {
   }
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../preferences/app_preferences.dart';
@@ -4861,7 +4870,8 @@ final appLocale = AppLocaleController._();
 
 /// Keeps the language that the user chose for the app, and saves each
 /// choice in the preferences of the app.
-final class AppLocaleController extends ChangeNotifier {
+final class AppLocaleController extends ChangeNotifier
+    implements ValueListenable<Locale?> {
   AppLocaleController._();
 
   Locale? _locale;
@@ -4871,6 +4881,7 @@ final class AppLocaleController extends ChangeNotifier {
 
   /// The language that the user chose, one of [appLocales], or `null` while
   /// the app follows the languages of the device.
+  @override
   Locale? get value => _locale;
 
   /// Chooses the language of [locale] as the language of the app, or with
@@ -4920,6 +4931,11 @@ Locale? _ofApp(String? code) {
   }
   return null;
 }
+
+/// The language that the user chose, as a [ValueListenable] for the state
+/// manager of the app: [appLocale], which changes it only through
+/// [AppLocaleController.choose].
+ValueListenable<Locale?> localizationLocaleListenable() => appLocale;
 
 /// Restores the language that the user chose from [preferences], which the
 /// app opened, and keeps them for the choices to come: a restorer of the
@@ -5402,6 +5418,12 @@ const String notificationOwnerKey = 'notifications.owner';
 /// notifications that the app shows now or at a time to come, and the taps
 /// of the user on them.
 final appNotifications = NotificationsController._();
+
+/// Whether the app may show notifications, as a [ValueListenable] for the
+/// state manager of the app: [NotificationsController.permission] of
+/// [appNotifications], which [NotificationsController.request] changes.
+ValueListenable<NotificationPermission> notificationsPermissionListenable() =>
+    appNotifications.permission;
 
 /// Shows the notifications of the app through the service of the provider
 /// of notifications, keeps the permission to show them up to date, and
@@ -6513,6 +6535,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -7958,6 +7985,11 @@ export 'push_service.dart' show PushMessage;
 /// that arrive while the app is in the foreground, and the taps of the user
 /// on them.
 final appPush = AppPushController._();
+
+/// The address of the device for push messages, as a [ValueListenable] for
+/// the state manager of the app: [AppPushController.address] of [appPush],
+/// `null` while the platform gives none.
+ValueListenable<String?> pushAddressListenable() => appPush.address;
 
 /// Receives the push messages of the app through the service of the
 /// provider of push messages. The app has one, [appPush].
@@ -11709,6 +11741,85 @@ class _DashedEdge extends CustomPainter {
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
 }
+=== lib/core/state/shared_state_providers.dart (riverpod) ===
+// The providers that follow the values that controllers of the app
+// keep, one for each value, which the riverpod module generates for the
+// state management role. A widget reads one with ref.watch, and code
+// changes the value only through the controller that the doc of its
+// provider names.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/material.dart' as state0;
+import 'package:flutter/widgets.dart' as state2;
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show Notifier, NotifierProvider;
+import 'package:my_app/core/auth/app_session.dart' as state6;
+import 'package:my_app/core/l10n/app_locale.dart' as state3;
+import 'package:my_app/core/notifications/app_notifications.dart' as state4;
+import 'package:my_app/core/purchases/app_purchases.dart' as state7;
+import 'package:my_app/core/push/app_push.dart' as state5;
+import 'package:my_app/core/theme/theme_mode.dart' as state1;
+
+/// The theme mode that the user selected; `appThemeMode.choose()` changes it.
+final NotifierProvider<ListenableNotifier<state0.ThemeMode>, state0.ThemeMode>
+themeModeProvider = NotifierProvider(
+  () => ListenableNotifier(state1.themeModeListenable),
+);
+
+/// The language that the user chose, `null` to follow the device;
+/// `appLocale.choose()` changes it.
+final NotifierProvider<ListenableNotifier<state2.Locale?>, state2.Locale?>
+localizationLocaleProvider = NotifierProvider(
+  () => ListenableNotifier(state3.localizationLocaleListenable),
+);
+
+/// Whether the app may show notifications; `appNotifications.request()` changes
+/// it.
+final NotifierProvider<
+  ListenableNotifier<state4.NotificationPermission>,
+  state4.NotificationPermission
+>
+notificationsPermissionProvider = NotifierProvider(
+  () => ListenableNotifier(state4.notificationsPermissionListenable),
+);
+
+/// The address of the device that `appPush.address` keeps, `null` while the
+/// platform gives none.
+final NotifierProvider<ListenableNotifier<String?>, String?>
+pushAddressProvider = NotifierProvider(
+  () => ListenableNotifier(state5.pushAddressListenable),
+);
+
+/// Who uses the app; the calls of `appSession` change it.
+final NotifierProvider<ListenableNotifier<state6.AppSession>, state6.AppSession>
+authSessionProvider = NotifierProvider(
+  () => ListenableNotifier(state6.authSessionListenable),
+);
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final NotifierProvider<ListenableNotifier<state7.AppAccess>, state7.AppAccess>
+purchasesAccessProvider = NotifierProvider(
+  () => ListenableNotifier(state7.purchasesAccessListenable),
+);
+
+/// A notifier whose state is the value of a [ValueListenable], from the first
+/// read of its provider until the `ProviderScope` disposes of it. It only
+/// follows the value: code changes it through the controller of the
+/// listenable.
+final class ListenableNotifier<T> extends Notifier<T> {
+  /// Creates the notifier of the listenable that [listenable] returns.
+  ListenableNotifier(this._listenable);
+
+  final ValueListenable<T> Function() _listenable;
+
+  @override
+  T build() {
+    final listenable = _listenable();
+    void follow() => state = listenable.value;
+    listenable.addListener(follow);
+    ref.onDispose(() => listenable.removeListener(follow));
+    return listenable.value;
+  }
+}
 === lib/core/theme/app_theme.dart (material_theme) ===
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
@@ -12020,6 +12131,7 @@ ThemeData _themeOf(Brightness brightness) {
   );
 }
 === lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -12035,7 +12147,8 @@ final appThemeMode = AppThemeModeController._();
 /// Keeps the theme mode that the user selected for the app, tells its
 /// listeners when the mode changes, and saves each choice in the
 /// preferences of the app. The app has one, [appThemeMode].
-final class AppThemeModeController extends ChangeNotifier {
+final class AppThemeModeController extends ChangeNotifier
+    implements ValueListenable<ThemeMode> {
   AppThemeModeController._();
 
   /// The key of the mode in the preferences, which keep it by its name.
@@ -12048,6 +12161,7 @@ final class AppThemeModeController extends ChangeNotifier {
 
   /// The mode of the app: [ThemeMode.system], which follows the device,
   /// unless the user selected another.
+  @override
   ThemeMode get value => _mode;
 
   /// Chooses [mode] as the mode of the app, at once, and saves the choice:
@@ -12078,6 +12192,11 @@ final class AppThemeModeController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// The theme mode that the user selected, as a [ValueListenable] for the
+/// state manager of the app: [appThemeMode], which changes it only through
+/// [AppThemeModeController.choose].
+ValueListenable<ThemeMode> themeModeListenable() => appThemeMode;
 
 /// Restores the theme mode that the user selected from [preferences], which
 /// the app opened, and keeps them for the choices to come: a restorer of

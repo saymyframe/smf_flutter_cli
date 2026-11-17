@@ -21,7 +21,7 @@ void main() {
 
     expect(registry.modules, hasLength(3));
     // The app entry uses the router, which brings the roles that it uses,
-    // and those bring theirs.
+    // and those bring theirs, also the roles that they feed.
     expect(registry.roles, [
       appEntryRole,
       routerRole,
@@ -30,6 +30,7 @@ void main() {
       preferencesRole,
       diRole,
       settingsScreenRole,
+      stateManagementRole,
       layout,
       router,
     ]);

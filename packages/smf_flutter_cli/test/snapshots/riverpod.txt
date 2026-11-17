@@ -78,6 +78,8 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 
 ## State management
 
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 With `flutter_riverpod`:
 
 - The state of a screen is a provider in the directory of its feature: a `NotifierProvider.autoDispose` with its `Notifier`, so the state lasts as long as the screen. Write it by hand: the app has no code generation for providers.

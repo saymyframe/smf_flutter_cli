@@ -679,7 +679,18 @@ final class _StateKit extends SmfModule {
           stateManagementRole.description,
           AgentNote(note),
         ),
+        stateManagementRole.data(const _StateKitBridges()),
       ];
+}
+
+/// How a widget reads a bridge of [_StateKit], which every provider of the
+/// state management role tells the role.
+final class _StateKitBridges extends StateBridges {
+  const _StateKitBridges();
+
+  @override
+  Fragment watch(SharedState entry, String child) =>
+      Fragment('($child)(${entry.name})');
 }
 
 /// A module `counter` with a variant for [_StateKit], which generates

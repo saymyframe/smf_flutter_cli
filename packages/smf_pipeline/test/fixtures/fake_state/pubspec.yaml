@@ -9,6 +9,7 @@ environment:
 resolution: workspace
 
 dependencies:
+  mason: ^0.1.1
   smf_contracts: ^0.8.0
 
 dev_dependencies:

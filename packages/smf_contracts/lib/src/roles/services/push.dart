@@ -142,6 +142,22 @@ final class PushRole extends Role<RoleImplementation> {
   /// The path of the file with `appPush`, which the code of the app uses.
   static const controllerFile = 'lib/core/push/app_push.dart';
 
+  /// The address of the device as an entry of the [StateManagementRole],
+  /// which the template gives the role: in an app with a state manager, a
+  /// bridge of the provider of that role follows `appPush.address`, through
+  /// `pushAddressListenable()` of [controllerFile].
+  static const addressState = SharedState(
+    'pushAddress',
+    listenable: FunctionRef(
+      'pushAddressListenable',
+      import: ImportRef.app('core/push/app_push.dart'),
+    ),
+    type: TypeRef('String'),
+    nullable: true,
+    description: 'The address of the device that `appPush.address` keeps, '
+        '`null` while the platform gives none.',
+  );
+
   /// The heading of the section of the README of the app in which the
   /// template tells how the app receives push messages. The section of a
   /// provider can refer to it.
@@ -184,6 +200,9 @@ final class PushRole extends Role<RoleImplementation> {
   /// in the foreground, and whose permission lets the app show messages.
   @override
   Set<Role> get requires => {notificationsRole};
+
+  @override
+  Set<Role> get feeds => {stateManagementRole};
 
   @override
   List<SocketRef> get sockets => const [implementations];
@@ -332,6 +351,7 @@ final class _PushTemplate extends _ServiceTemplate<RoleImplementation> {
           role.description,
           AgentNote.ofRole(agentNote),
         ),
+        stateManagementRole.data(PushRole.addressState),
         AppEntryRole.readmeSections.entry(PushRole.readmeHeading, _pushReadme),
         // Xcode takes the value of the provisioning profile when it exports
         // the app for distribution. Only a paid team signs the entitlement,
