@@ -98,9 +98,9 @@ void main() {
     });
 
     // The deadline fails a report that waits for good, such as on a future
-    // that never completes. It does not catch the processor above: its error
-    // stops the isolate, so no timer fires, and the test of the processor is
-    // the one that fails on it.
+    // that never completes. It does not catch the processor above: with the
+    // old start on Windows, neither this deadline nor the timeout of the test
+    // fired, so the test of the processor is the one that fails on it.
     test('completes a report in time, wherever the app is', () async {
       await reporter
           .recordError(StateError('wherever the app is'), StackTrace.current)
