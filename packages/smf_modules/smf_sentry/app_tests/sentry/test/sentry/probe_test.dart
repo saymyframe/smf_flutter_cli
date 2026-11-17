@@ -5,9 +5,9 @@
 // module and writes a request with its id, its nonce and its environment,
 // which the answer of CI looks up in Sentry; without a DSN it writes its
 // verdict in place of a request; a release build writes neither, and no file
-// has the DSN. The test asks problemsOf, whose problems the probe returns,
-// and checkDelivery with a directory of its own, since the probe starts the
-// check in the temporary directory of the app.
+// has the DSN. The probe starts its check once in a run of the app, in the
+// temporary directory of the app, so the test gives it a directory of its own
+// first, and runs checkDelivery with one of its own too.
 //
 // Sentry starts as the start-up of the app starts it, with the mocks of
 // Sentry, which keep the events (sentry_mocks.dart), and in real time.
@@ -29,6 +29,20 @@ import 'sentry.dart';
 
 /// 32 hexadecimal digits in lower case, as the id of an event and a nonce.
 final _hex32 = RegExp(r'^[0-9a-f]{32}$');
+
+/// The text of the file [name] in [directory], once the check that the probe
+/// started has written it, which it does after it sent its event: waits for
+/// it for at most 10 seconds, and then a moment longer, so that what a second
+/// check would send has come too.
+Future<String> _fileIn(Directory directory, String name) async {
+  final file = File('${directory.path}/$name');
+  final until = DateTime.now().add(const Duration(seconds: 10));
+  while (!file.existsSync() && DateTime.now().isBefore(until)) {
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  await Future<void>.delayed(const Duration(milliseconds: 500));
+  return file.readAsStringSync().trim();
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -75,7 +89,32 @@ void main() {
     setUp(sentryEvents.clear);
 
     test(
-        'the probe finds no problem once Sentry started, and its check sends an '
+        'the probe finds no problem once Sentry started, and starts its check '
+        'once, which sends one event and writes one request', () async {
+      exchangeDirectory = directory;
+
+      expect(await probeSentry(() async {}), isEmpty);
+      expect(await probeSentry(() async {}), isEmpty);
+
+      final request = await _fileIn(directory, 'smf_start_request_sentry');
+      expect(files(), ['smf_start_request_sentry']);
+      final asked = jsonDecode(request) as Map<String, Object?>;
+      final checks = [
+        for (final event in sentryEvents)
+          if (exceptionOf(event).type == 'SentryStartCheck') event,
+      ];
+      expect(
+        checks,
+        hasLength(1),
+        reason: 'The probe starts the check of the event once in a run of the '
+            'app, however often the start check runs it.',
+      );
+      expect('${checks.single.eventId}', asked['eventId']);
+      expect(exceptionOf(checks.single).value, contains('${asked['nonce']}'));
+    });
+
+    test(
+        'the check sends an '
         'event through the reporter of the module and asks for the check of it, '
         'with neither the DSN nor a verdict', () async {
       expect(
@@ -130,9 +169,36 @@ void main() {
       expect(files(), isEmpty);
       expect(sentryEvents, isEmpty);
     });
+
+    // Last, since it ends Sentry for the tests after it.
+    test('the probe reports a DSN with which Sentry does not run', () async {
+      await Sentry.close();
+
+      expect(await probeSentry(() async {}), [
+        'The app has a SENTRY_DSN in this build, but Sentry is not enabled: '
+            'initSentryCrashReporter() failed, as the log of a debug build '
+            'tells.',
+      ]);
+      expect(files(), isEmpty, reason: 'The probe started its check before.');
+    });
   }, skip: hasDsn ? false : withoutDsn);
 
   group('Without a DSN', () {
+    test(
+        'the probe finds no problem, and starts its check once, which writes '
+        'one verdict and no request', () async {
+      exchangeDirectory = directory;
+
+      expect(await probeSentry(() async {}), isEmpty);
+      expect(await probeSentry(() async {}), isEmpty);
+
+      expect(
+        await _fileIn(directory, 'smf_start_report_sentry'),
+        startsWith('failed: SENTRY_DSN has no value in this build'),
+      );
+      expect(files(), ['smf_start_report_sentry']);
+    });
+
     test(
         'the probe finds no problem, and its check writes its verdict, which '
         'names the key, in place of a request', () async {

@@ -39,6 +39,11 @@ const String exchangeName = 'sentry';
 /// The check of the event that the probe started, if it started one.
 Future<String?>? _delivery;
 
+/// Where the check that the probe starts writes its files: the temporary
+/// directory of the app, which start_app.sh reads, unless a test gives
+/// another.
+Directory? exchangeDirectory;
+
 /// The probe of the start check: what is wrong with Sentry in the app as the
 /// start-up left it. It also starts [checkDelivery] the first time, without
 /// waiting for it. It waits for no screen, so it leaves [settle] out.
@@ -76,10 +81,10 @@ final class SentryStartCheck implements Exception {
 /// start_app.sh and the API of Sentry as its server: reports a
 /// [SentryStartCheck] with a new nonce through `SentryCrashReporter`, as an
 /// error that the code of the app caught, and writes the request of the
-/// check into [directory], the temporary directory of the app unless a test
-/// gives another. Returns what it wrote: the request, or the verdict
-/// `failed: ` and the problem when the app has no DSN or Sentry did not
-/// start, which it writes in place of a request.
+/// check into [directory], or into [exchangeDirectory] without one. Returns
+/// what it wrote: the request, or the verdict `failed: ` and the problem when
+/// the app has no DSN or Sentry did not start, which it writes in place of a
+/// request.
 ///
 /// A [release] build writes nothing and returns `null`, since the script of
 /// CI reads no file of one.
@@ -88,7 +93,7 @@ Future<String?> checkDelivery({
   bool release = kReleaseMode,
 }) async {
   if (release) return null;
-  final files = directory ?? Directory.systemTemp;
+  final files = directory ?? exchangeDirectory ?? Directory.systemTemp;
   String? problem;
   String? request;
   try {
