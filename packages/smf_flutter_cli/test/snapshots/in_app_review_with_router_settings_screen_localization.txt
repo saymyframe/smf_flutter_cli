@@ -1,0 +1,3180 @@
+=== .env (role:env) ===
+# The values that the app reads, each under a comment that says what goes
+# there. This file stays out of git; .env.example has the same keys without
+# values. Every value ends up in the app, where anyone can read it, so never
+# put a secret here. An empty value counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
+REVIEW_APP_STORE_ID=
+=== .env.example (role:env) ===
+# This file lists the keys of the values that the app reads, each under a
+# comment that says what goes there. After a clone, copy it to .env and fill
+# in the values there; .env stays out of git. Every value ends up in the app,
+# where anyone can read it, so never put a secret into one. An empty value
+# counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
+REVIEW_APP_STORE_ID=
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# The values of the app, which each developer fills in from .env.example
+.env
+=== .run/dev.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app dev" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor dev --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/prod.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app prod" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor prod --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/staging.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app staging" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor staging --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (role:env) ===
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "my_app dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file=.env"
+      ],
+      "templateFor": ""
+    },
+    {
+      "name": "my_app staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "staging",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "my_app prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file=.env"
+      ]
+    }
+  ]
+}
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
+
+- The section "Finish the setup" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Every screen is below it, so create no other `MaterialApp` in `lib/`. The only other one is in `FailedStartApp`, which `main()` runs in its place when the start-up fails.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+- The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
+
+## Localization
+
+- Show the user no text but the name of the app from a string literal. Read each text as `context.l10n.<name>`, with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app. Such an expression is no constant, so the widget around it cannot be `const`.
+- `lib/core/l10n/app_locale.dart` has `appLocales`, the languages of the app, and `appLocale`, the one that the user chose. Change the language only with `appLocale.choose(locale)`, which also saves the choice in the preferences, and write nothing under the key `localization.locale` yourself. The root `MaterialApp` gets its `locale` and its `supportedLocales` from that file: leave both as they are.
+- Every delegate among the `localizationsDelegates` of the root has to support each language of `appLocales`. A new language, one in which Flutter has the texts of its own widgets, goes into `appLocales`, into `CFBundleLocalizations` in the Info.plist of the iOS app, and into the texts of the app.
+
+- A new language also needs its name in `_names` in `lib/core/l10n/language_setting.dart`: the setting of the language on the settings screen shows a language by that name, and by its code without one. Each name there is a string literal, the name of the language in that language, which is the same whatever language the app is in.
+
+With `gen-l10n` of Flutter:
+
+- The texts of the app are in the ARB files of `lib/l10n`. `lib/l10n/app_en.arb` has every text in English, and `lib/l10n/app_<code>.arb` the translations into another language. A text that such a file lacks reads in English there.
+- To add a text, add it to `lib/l10n/app_en.arb` under a name in lowerCamelCase, and its translations under the same name to the other files.
+- After every change of the ARB files, a new file included, run `flutter gen-l10n`, which generates `context.l10n.<name>`. Do not edit `lib/l10n/app_localizations*.dart`: `gen-l10n` writes those files from the ARB files, as `l10n.yaml` says.
+- Write an apostrophe in a text once: `l10n.yaml` turns the escapes of `gen-l10n` off (`use-escaping: false`).
+
+## Preferences
+
+- `AppPreferences` in `lib/core/preferences/app_preferences.dart` remembers the settings of the app between its launches, such as the theme mode. It is not encrypted: never save a token, a password, an API key or an encryption key in it.
+- To remember a setting, write a function that takes the `AppPreferences` and add it to `_restorers` in that file. In it, read the setting, put it into the state that the widgets listen to, and keep the preferences in that state for its writes. The function awaits nothing, and keeps the current value when nothing is saved.
+- Name a key `<owner id>.<setting>`, such as `theme.mode`, where the owner is the feature or the concern whose code keeps the setting.
+- In the code of the app, do not call `createAppPreferences()` or `initPreferences()`. `bootstrap()` opens the preferences, and code gets them as the argument of its function in `_restorers`, or, with a DI container in the app, from the container. Widgets use the state and do not touch the preferences. A test may call both: `initPreferences()` opens the preferences again, as the next launch of the app does, and `createAppPreferences()` returns them.
+
+With `shared_preferences`:
+
+- In `lib/`, only `lib/core/preferences/shared_app_preferences.dart` imports the package. Other code uses `AppPreferences`.
+- A number is read only as the type that it was saved as: `getDouble()` returns `null` for a key with an `int`, and `getInt()` for a key with a `double`.
+- In a test that runs `bootstrap()`, first set `SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.empty()`. Without it, opening the preferences throws. Both names are from the package `shared_preferences_platform_interface`: add it as a dev dependency.
+- `pubspec.yaml` keeps `shared_preferences_android` at 2.5.2 or later. With 2.5.0 and 2.5.1, a release build fails to open the preferences on Android, because R8 renames Kotlin classes that the package looks up by name. Before you change the constraint, check that a release build of the app starts on Android.
+
+## Router
+
+- Navigate with `context.nav.<feature>.<route>(...)`, never with the package of the router. It returns a `NavLink`, whose `go()`, `push<T>()` and `replace()` show the location. In `context.nav` both names are in lowerCamelCase; elsewhere `<feature>` is the id of the feature.
+- A route is in three places, which agree on its name, `<feature>.<route>`, and on its path, which starts with `/<feature>`:
+  1. its screen, a widget in `lib/features/<feature>/` whose `const` constructor takes each value of the route as a named parameter;
+  2. `lib/core/router/navigation.dart`: its location class, which extends the sealed `AppLocation` with its `routeName`, its `path` and, below another route, its `parent`, and a method that returns its `NavLink` in the class of the routes of its feature. `AppNav` returns that class from a getter with the name of the feature, and both classes pass on the `BuildContext` that `NavLink` takes;
+  3. the route itself, where the provider of the router declares its routes.
+- A value of a route is a `String`, an `int`, a `double` or a `bool`, from a `:<name>` segment of its path or from the query.
+- `appRouter` of `lib/core/router/app_router.dart` is the one router of the app: create no other.
+- `NotFoundScreen` in `lib/core/router/not_found_screen.dart` is the page that the router shows for a location that it cannot show, such as a link to a page that the app does not have. Change its look there, and keep its `const` constructor without arguments. `appRouter.navigatorOf(context).goToStart()` shows the screen that the app starts on, as `go()` shows a location.
+
+With `go_router`:
+
+- `lib/core/router/app_router_factory.dart` has the one `GoRouter` of the app. A route is a `GoRoute` in its `routes`, or in the `routes` of its parent: `path` is the full path of a top-level route and the path from its parent otherwise, and `name` is `<feature>.<route>`. The values of a route come from `state.pathParameters` and `state.uri.queryParameters`. Parse one that is not a `String` with `tryParse`, and throw a `GoException` in the `redirect` of the route when a required value is missing or does not parse, so that the router shows its error screen.
+- The app opens at `initialLocation`, and the route `/` leads to the same screen: change both together.
+- To follow the screen that the user sees, add a function to `_screenListeners`.
+
+## Settings screen
+
+- The settings screen is a list with an entry for each setting of the app. An entry is a widget in a file of the code that owns the setting, such as one in `lib/core/<concern>/` or `lib/features/<feature>/`, and not in the file of the screen. It reads and changes its setting itself.
+- To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
+- The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
+
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. An entry may show only at times, such as one that hides on a platform: the screen asks it each time it builds. While no module of the app has a setting, or while none of its entries shows, the screen shows a note for the developer of the app in place of the group: the first entry that shows replaces that note.
+- With a main navigation in the app, the screen is one of its destinations.
+- Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
+
+## Store reviews
+
+- `appReview` in `lib/core/review/app_review.dart` asks for the review dialog of the App Store or Google Play only where the code of the app calls `appReview.requestIfDue()`. Call it at a natural break, such as after the user has finished a task: `unawaited(appReview.requestIfDue());`. It asks only when `ReviewPolicy` says that a review is due: never on the first launch, in the flow of a guard of the routes, twice in a version or twice in 14 days. It returns nothing, since the store tells nothing.
+- Never call it from a button or after a question of your own, and show nothing around the dialog. Nothing in the app may depend on whether the app asked.
+- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, also from a build of another flavor.
+- A new provider implements `ReviewService` of `lib/core/review/review_service.dart`, and only the files of that implementation import it. The code of the app calls neither `initReview()`, `createReviewService()` nor `appReview.start()`, and writes nothing under the keys `review.*`.
+
+- `ReviewSetting` in `lib/core/review/review_setting.dart`, an entry of the settings screen, opens the page of the app in its store for a review. It shows only where the app has a store page, and it never asks for the review dialog.
+
+With `in_app_review`:
+
+- `InAppReviewService` in `lib/core/review/in_app_review_service.dart` implements `ReviewService` of `lib/core/review/review_service.dart`: it asks for the review dialog with `InAppReview.instance.requestReview()`, opens the page of the app in its store with `launchUrl` of url_launcher, and reads the version of the app with `PackageInfo.fromPlatform()` of package_info_plus. In `lib/`, only that file imports in_app_review.
+- Keep `openStoreListing()` of in_app_review out of the app: on Android it opens the page of the id of the build that runs, such as that of the flavor `dev`, which has no page in Google Play. `appReview.openStorePage()` opens the right page.
+- The app asks for the dialog only where its code calls `appReview.requestIfDue()`. Google Play shows the dialog only in an app that it installed, such as from an internal test track, and the README of the app tells how to see it there. A test review is never sent, since Google Play shows no dialog to an account that has reviewed the app.
+
+## Values in .env
+
+- Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
+- Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
+- `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- A release build of an app with keys stops with an error unless its command gives the app the values of `.env`; the note of the provider names the arguments. Never remove or work around the check in `lib/core/env/env_check.dart`, which `bootstrap()` calls in its first phase: give the build the arguments. `AppEnv.supplied` tells whether a build has the values.
+- `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
+
+With `--dart-define-from-file`:
+
+- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`, and a release build stops with an error.
+- A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
+- The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
+- `AppEnv.supplied` is `true` once `--dart-define-from-file=.env` declared one of the keys that it names, so a new key needs no change there. An app without keys has `true` there: with its first key, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
+## Finish the setup
+
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=review.app_store_id) shows each one click by click:
+
+1. Copy the App Store ID of the app from App Store Connect into .env
+
+Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which has one only after a `flutter` command that builds or runs the iOS app with a flavor. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
+
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
+
+## When the start-up fails
+
+`bootstrap()` in `lib/bootstrap.dart` runs before the first frame. When it throws, `main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.
+
+## Run, test and build with .env
+
+`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, a debug or profile build has every getter of `AppEnv` `null` and says so, and a release build stops with an error that names the argument, so give it to each such command:
+
+```bash
+flutter run --dart-define-from-file=.env
+flutter test --dart-define-from-file=.env
+flutter build apk --flavor prod --dart-define-from-file=.env
+flutter build appbundle --flavor prod --dart-define-from-file=.env
+flutter build ipa --flavor prod --dart-define-from-file=.env
+```
+
+A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
+
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`. Only a `flutter` command that builds or runs the iOS app writes them there, and in a fresh app the file has no values. So before Product > Archive, run `flutter build ios --config-only --flavor prod --dart-define-from-file=.env`, or archive with `flutter build ipa` as above.
+
+A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. An app without keys has `true` there, since nothing can tell. With the first key of your own, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, so that a release build without the argument stops.
+
+To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
+
+```dart
+static String? get myServiceKey {
+  const value = String.fromEnvironment('MY_SERVICE_KEY');
+  return value.isEmpty ? null : value;
+}
+```
+
+The section "Values in .env" tells what goes into `.env`, lists the keys of the app and names the run configurations that pass the argument.
+
+## Texts
+
+The texts of the app are in the ARB files of `lib/l10n`, one for each language. `lib/l10n/app_en.arb` has every text in English, and the file of another language, such as `app_uk.arb`, has the translations into it. [gen-l10n](https://docs.flutter.dev/ui/internationalization) of Flutter generates the `AppLocalizations` class from these files, as `l10n.yaml` says, and writes it into `app_localizations.dart` and a file for each language in the same directory. Run `flutter gen-l10n` after every change of the ARB files. In a fresh clone of the app, `flutter pub get` generates those files, so you can commit them or leave them out of the repository. Code reads a text as `context.l10n.<name>` with `lib/core/l10n/l10n.dart` imported, where `context` is a `BuildContext` below the root of the app.
+
+To add a text, add it to `lib/l10n/app_en.arb` under a name of its own, and its translations under the same name to the files of the other languages. Then run `flutter gen-l10n`. A text without a translation into a language reads in English there.
+
+The texts of a new language, such as German, go into a file of their own:
+
+1. Add `lib/l10n/app_de.arb` with `"@@locale": "de"` and the translations.
+2. Run `flutter gen-l10n`.
+
+The section "Languages" tells where else the new language goes.
+
+## Values in .env
+
+`.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+A release build needs `.env`: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out by mistake from a command that did not give it `.env`. A debug or profile build without it starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
+
+`.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
+
+The keys of the app:
+
+- `REVIEW_APP_STORE_ID`, read as `AppEnv.reviewAppStoreId`, from the store reviews role: The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
+
+To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
+
+## in_app_review
+
+The app asks for the review dialog of its store with [in_app_review](https://pub.dev/packages/in_app_review): `lib/core/review/in_app_review_service.dart` implements the reviews of the app on it, as the section "Store reviews" tells. On iOS the dialog is that of StoreKit, and on Android that of the In-App Review API of Google Play. The page of the app in its store opens with [url_launcher](https://pub.dev/packages/url_launcher), and the version of the app, in which the app asks at most once, comes from [package_info_plus](https://pub.dev/packages/package_info_plus).
+
+The app asks only where its code calls `appReview.requestIfDue()`, and nothing asks on its own.
+
+Google Play shows the dialog only in an app that it installed. To see it before the app is published ([Test in-app reviews](https://developer.android.com/guide/playcore/in-app-review/test)):
+
+1. Upload a build of the flavor `prod` to the internal test track in Play Console.
+2. Add a Gmail account to the testers of that track. It is the primary account of the Play Store on the device: an account of Google Workspace does not work.
+3. Install the app once from the internal test track with that account. From then on, local builds of the flavor `prod` may show the dialog on that device: uninstall the copy from Google Play first, since a local build has another signature. Google Play does not limit how often it shows the dialog to an app from the internal test track.
+4. Never send the review of a test, or delete it in the Play Store: Google Play shows no dialog to an account that has reviewed the app.
+
+An app from internal app sharing shows the dialog too, but its review cannot be sent. Anywhere else, such as on an emulator without the Play Store, the request fails, the app records nothing, and the next call of `appReview.requestIfDue()` asks again.
+
+Through the dialog, Google Play collects the rating and the text of the review, which become a public review on Google Play, or which only you see for an app on a closed test track: see the section "Data Safety" of [the In-App Review API](https://developer.android.com/guide/playcore/in-app-review). The privacy manifest of in_app_review on iOS declares no data that it collects.
+
+Both stores require a link to a privacy policy in the listing of the app and inside the app.
+
+## Languages
+
+The app is in the languages of `appLocales` in `lib/core/l10n/app_locale.dart`. It shows its texts in the language that the device prefers among them, and in the first of the list when the device asks for none of them. `appLocale.choose()` puts the app into another of its languages, whatever the device prefers, and the app remembers that choice between its launches. `appLocale.choose(null)` follows the device again. The entry `LanguageSetting` of the settings screen, in `lib/core/l10n/language_setting.dart`, lets the user choose.
+
+To add a language in which Flutter has the texts of its own widgets, such as German, add the texts of the app in German, and then:
+
+1. Add `Locale('de')` to `appLocales`, one locale for each language, since the app tells its languages apart by their codes.
+2. Add `de` to `CFBundleLocalizations` in `ios/Runner/Info.plist`, which tells iOS the languages of the app.
+3. Add `'de': 'Deutsch'` to `_names` in `lib/core/l10n/language_setting.dart`, the name that the setting shows for the language. Without it, the setting shows `de`.
+
+## Store reviews
+
+The app asks for a review only where its code calls `appReview.requestIfDue()` of `lib/core/review/app_review.dart`. Call it at a natural break, such as when the user has finished a task:
+
+```dart
+await saveNote(note);
+unawaited(appReview.requestIfDue());
+```
+
+When a review is due, the call asks the App Store or Google Play for its own review dialog, and the app shows nothing around it. It returns nothing: the store tells no app whether the dialog showed or what the user did, so nothing in the app may depend on it. Never call it from a button, and never after a question of your own, such as "Do you like the app?": Google Play forbids both, and the App Store allows no prompt but its own.
+
+A review is due as `ReviewPolicy` in that file says: from the third launch of the app (`ReviewPolicy.launches`), three days after its first launch (`ReviewPolicy.sinceFirstLaunch`), and at most once a version of the app and once in 14 days (`ReviewPolicy.between`). Change the numbers there. The app counts its launches and remembers its last request in the preferences, under the keys `review.*`, so write nothing there.
+
+The store decides whether the dialog shows. iOS shows it in a debug build each time, never in TestFlight, and at most three times in 365 days. Google Play shows it only in an app that it installed, such as from an internal test track. Elsewhere the request fails and the app records nothing, so the next call of `appReview.requestIfDue()` asks again, also in the same launch.
+
+`appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page where the user writes a review. On Android that is the Google Play page of `com.example.my_app` (`googlePlayId`), the id of the flavor for a release, also from a build of another flavor. On iOS it is the App Store page of `REVIEW_APP_STORE_ID` in `.env`, the Apple ID of the app in App Store Connect. While that key is empty, the app has no App Store page, and `appReview.hasStorePage` is `false` on iOS.
+
+The entry `ReviewSetting` of the settings screen, in `lib/core/review/review_setting.dart`, opens the page for a review, and shows only where the app has a store page. It never asks for the review dialog.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="${appName}"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.1.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/AppDelegate.swift (flutter_core) ===
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(APP_DISPLAY_NAME)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>uk</string>
+	</array>
+</dict>
+</plist>
+=== ios/Runner/Runner.entitlements (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
+=== l10n.yaml (gen_l10n) ===
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+nullable-getter: false
+use-escaping: false
+# The code that gen-l10n of Flutter 3.50 writes still uses the localizations
+# of Material and Cupertino of flutter_localizations, which Flutter 3.50
+# deprecates for those of material_ui and cupertino_ui. The header keeps
+# flutter analyze from reporting them in the files that gen-l10n writes.
+header: '// ignore_for_file: deprecated_member_use'
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'
+    as flutter_localizations;
+import 'package:my_app/core/app/status_bar_icons.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/l10n/app_localizations.dart';
+
+import 'core/router/app_router.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp.router(
+    title: 'My App',
+    locale: AppLocaleScope.of(context),
+    localizationsDelegates: [
+      AppLocalizations.delegate,
+      flutter_localizations.GlobalMaterialLocalizations.delegate,
+      flutter_localizations.GlobalWidgetsLocalizations.delegate,
+      flutter_localizations.GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: [...appLocales],
+    routerConfig: appRouter.config,
+    builder: (context, child) => StatusBarIcons(child: child!),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/env/env_check.dart';
+import 'package:my_app/core/preferences/app_preferences.dart';
+import 'package:my_app/core/review/app_review.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  checkEnvValues(debugPrint);
+  await initPreferences();
+  await initReview();
+}
+=== lib/core/app/failed_start.dart (role:app_entry) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'status_bar_icons.dart';
+
+/// Shows why the app could not start, in place of the splash screen of the
+/// system, which would otherwise stay, and reports [error] with its
+/// [stackTrace] to the handler of the errors of Flutter.
+///
+/// `main()` calls it when `bootstrap()` throws, and then returns: the app
+/// does not start. The screen comes first, so a handler that throws cannot
+/// keep it away. The handlers that the start-up set up before it failed,
+/// such as those of crash reporting, hear of the error, and so does a test
+/// that runs `main()`.
+void showFailedStart(Object error, StackTrace stackTrace) {
+  runApp(FailedStartApp(error: error, stackTrace: stackTrace));
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'the start-up of the app',
+      context: ErrorDescription('while main() awaited bootstrap()'),
+    ),
+  );
+}
+
+/// The app that runs when the start-up failed: a screen that says so, with
+/// [error] and [stackTrace] in a debug build.
+///
+/// It needs nothing of the start-up: it has neither the theme nor the texts
+/// nor the root wrappers of the app, which the start-up sets up, and so its
+/// texts are in English. Change them here.
+class FailedStartApp extends StatelessWidget {
+  /// Creates the app of a start-up that failed with [error] at
+  /// [stackTrace].
+  const FailedStartApp({
+    required this.error,
+    required this.stackTrace,
+    this.showsError = kDebugMode,
+    super.key,
+  });
+
+  /// What `bootstrap()` threw.
+  final Object error;
+
+  /// Where `bootstrap()` threw [error].
+  final StackTrace stackTrace;
+
+  /// Whether the screen shows [error] and [stackTrace]: only in a debug
+  /// build, since the message of an error may hold data of the user and
+  /// means nothing to a user.
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(),
+    darkTheme: ThemeData(brightness: Brightness.dark),
+    builder: (context, child) => StatusBarIcons(child: child!),
+    home: _FailedStartScreen(
+      error: error,
+      stackTrace: stackTrace,
+      showsError: showsError,
+    ),
+  );
+}
+
+class _FailedStartScreen extends StatelessWidget {
+  const _FailedStartScreen({
+    required this.error,
+    required this.stackTrace,
+    required this.showsError,
+  });
+
+  final Object error;
+
+  final StackTrace stackTrace;
+
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final code = texts.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Courier'],
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'The app could not start',
+                style: texts.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (showsError) ...[
+              Text(
+                'bootstrap() in lib/bootstrap.dart threw:',
+                style: texts.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText('$error', style: code),
+              const SizedBox(height: 16),
+              SelectableText('$stackTrace', style: code),
+            ] else
+              Text('Close the app and open it again.', style: texts.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => FallbackStartView(
+    hint: context.l10n.flutterCoreFallbackHint,
+    copied: context.l10n.flutterCoreFallbackCopied,
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/status_bar_icons.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Asks the system for the icons of the status bar that suit the theme,
+/// around [child]: dark icons on a light theme, light ones on a dark theme.
+///
+/// The root of the app puts it around the content of every route, below
+/// the `MaterialApp` whose theme it reads. It leaves the navigation bar of
+/// the system as the platform has it. A screen with an `AppBar` gets the
+/// icons that suit its bar, since the bar tells them for the top of the
+/// screen itself.
+class StatusBarIcons extends StatelessWidget {
+  /// Creates the widget around [child].
+  const StatusBarIcons({required this.child, super.key});
+
+  /// What the icons suit: the content of a route.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // iOS takes the brightness of the bar, and Android that of its icons.
+      value: SystemUiOverlayStyle(
+        statusBarBrightness: brightness,
+        statusBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: child,
+    );
+  }
+}
+=== lib/core/env/app_env.dart (dart_define) ===
+/// The values of `.env`, each through a static getter that returns the
+/// value, or `null` while it is empty or missing.
+///
+/// A command of the `flutter` tool that builds, runs or tests the app reads
+/// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
+/// each value into the app, where `String.fromEnvironment` reads it as a
+/// constant. Without that argument every value is empty, so every getter
+/// is `null`, and a release build of an app with keys stops, since
+/// [supplied] is `false` then.
+abstract final class AppEnv {
+  /// Whether the command that built the app gave it the values of `.env`:
+  /// `--dart-define-from-file=.env` declares each key that `.env` has a line
+  /// of, also with an empty value, and this is `true` once it declared one
+  /// of the keys below. A key of your own needs no change here.
+  static const bool supplied = bool.hasEnvironment('REVIEW_APP_STORE_ID');
+
+  /// The App Store ID of the app, its Apple ID in App Store Connect, such as
+  /// 1234567890.
+  static String? get reviewAppStoreId {
+    const value = String.fromEnvironment('REVIEW_APP_STORE_ID');
+    return value.isEmpty ? null : value;
+  }
+}
+=== lib/core/env/env_check.dart (role:env) ===
+// The check that the command that built the app gave it .env, which
+// bootstrap() calls in its first phase. It does not look at whether the values
+// are filled in. It is plain Dart, so that a test compiles it with the Dart
+// SDK alone.
+import 'app_env.dart';
+
+/// Whether this is a release build, which the compiler of a release build
+/// declares.
+const _release = bool.fromEnvironment('dart.vm.product');
+
+/// Whether the command that built the app gave it the values of `.env`, as
+/// [AppEnv.supplied] says. A release build without them cannot evaluate
+/// this constant, so it stops here, and the compiler quotes the text.
+const bool _supplied = AppEnv.supplied || !_release
+    ? AppEnv.supplied
+    : ('A release build of this app needs the values of .env: build it '
+              'with --dart-define-from-file=.env, from a .env with the keys of '
+              '.env.example.'
+          as bool);
+
+/// Tells a debug or profile build that has none of the values of `.env`,
+/// through [report], that every getter of [AppEnv] is `null`, and how to
+/// give the values; `bootstrap()` calls it in its first phase, with
+/// `debugPrint`.
+void checkEnvValues(void Function(String message) report) {
+  if (_supplied) return;
+  report(
+    'This build has none of the values of .env, so every getter of AppEnv is '
+    'null. Run it with --dart-define-from-file=.env, from a .env with the '
+    'keys of .env.example, as the run configurations in .vscode/launch.json '
+    'and .run/ do.',
+  );
+}
+=== lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/widgets.dart';
+
+import '../preferences/app_preferences.dart';
+
+/// The languages of the app. The app shows its texts in the language that
+/// the device prefers among them, and in the first of the list when the
+/// device asks for none of them.
+///
+/// A language has one locale here. The app tells its languages apart by
+/// their codes alone, so of two locales of one language, such as
+/// `Locale('pt', 'BR')` and `Locale('pt', 'PT')`, `appLocale.choose()`
+/// takes the first, whichever of them it is given.
+const appLocales = <Locale>[Locale('en'), Locale('uk')];
+
+/// The key of the preferences of the app under which the app saves the
+/// language that the user chose, as the code of the language, such as `uk`.
+/// Nothing is saved under it while the app follows the languages of the
+/// device.
+const _key = 'localization.locale';
+
+/// The language that the user chose for the app, which the app remembers
+/// between its launches.
+///
+/// The root of the app reads it through [AppLocaleScope], and rebuilds in
+/// the new language when the choice changes.
+final appLocale = AppLocaleController._();
+
+/// Keeps the language that the user chose for the app, and saves each
+/// choice in the preferences of the app.
+final class AppLocaleController extends ChangeNotifier {
+  AppLocaleController._();
+
+  Locale? _locale;
+
+  /// The preferences of the app, once it opened them.
+  AppPreferences? _preferences;
+
+  /// The language that the user chose, one of [appLocales], or `null` while
+  /// the app follows the languages of the device.
+  Locale? get value => _locale;
+
+  /// Chooses the language of [locale] as the language of the app, or with
+  /// `null` lets the app follow the languages of the device again.
+  ///
+  /// The choice is the one of [appLocales] with the language of [locale],
+  /// so `Locale('uk', 'UA')` chooses `Locale('uk')`. A locale of a language
+  /// that the app is not in is refused: the future completes with an
+  /// [ArgumentError], and nothing changes.
+  ///
+  /// The language of the app changes at once, and the choice is then saved
+  /// in the preferences once the app opened them: before that, it changes
+  /// only memory. When saving fails, the future completes with the error of
+  /// the preferences. The app stays in the new language while it runs, and
+  /// its next launch starts with what was saved before; choosing the
+  /// language again saves it again.
+  Future<void> choose(Locale? locale) async {
+    final chosen = locale == null ? null : _ofApp(locale.languageCode);
+    if (locale != null && chosen == null) {
+      throw ArgumentError.value(
+        '$locale',
+        'locale',
+        'The app is not in the language of this locale',
+      );
+    }
+    _set(chosen);
+    final preferences = _preferences;
+    if (preferences == null) return;
+    if (chosen == null) {
+      await preferences.remove(_key);
+    } else {
+      await preferences.setString(_key, chosen.languageCode);
+    }
+  }
+
+  void _set(Locale? locale) {
+    if (locale == _locale) return;
+    _locale = locale;
+    notifyListeners();
+  }
+}
+
+/// The one of [appLocales] with the language of the code [code], or `null`.
+Locale? _ofApp(String? code) {
+  for (final locale in appLocales) {
+    if (locale.languageCode == code) return locale;
+  }
+  return null;
+}
+
+/// Restores the language that the user chose from [preferences], which the
+/// app opened, and keeps them for the choices to come: a restorer of the
+/// preferences, which the app calls before its first frame.
+///
+/// When nothing is saved, or what is saved is not the code of one of
+/// [appLocales], the choice stays as it is.
+void restoreAppLocale(AppPreferences preferences) {
+  appLocale._preferences = preferences;
+  final saved = _ofApp(preferences.getString(_key));
+  if (saved != null) appLocale._set(saved);
+}
+
+/// Gives the root of the app the language that the user chose, and rebuilds
+/// the root when the choice changes.
+class AppLocaleScope extends InheritedNotifier<AppLocaleController> {
+  /// Creates the scope of [notifier] around [child].
+  const AppLocaleScope({
+    required AppLocaleController super.notifier,
+    required super.child,
+    super.key,
+  });
+
+  /// The language that the user chose, or `null` to follow the device; the
+  /// widget of [context] rebuilds when the choice changes.
+  static Locale? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<AppLocaleScope>()!
+      .notifier!
+      .value;
+}
+=== lib/core/l10n/l10n.dart (gen_l10n) ===
+import 'package:flutter/widgets.dart';
+
+import '../../l10n/app_localizations.dart';
+
+/// The texts of the app in the language of a context: `context.l10n`.
+extension AppTexts on BuildContext {
+  /// The texts of the app in the language of this context, which is below
+  /// the root of the app.
+  ///
+  /// gen-l10n of Flutter generates [AppLocalizations] from the ARB files in
+  /// `lib/l10n`: run `flutter gen-l10n` after every change of those files.
+  AppLocalizations get l10n => AppLocalizations.of(this);
+}
+=== lib/core/l10n/language_setting.dart (role:localization) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'app_locale.dart';
+
+/// The names of the languages of the app, each in its own language, by the
+/// code of the language. The setting shows a language of the app without a
+/// name here by its code: add the name of such a language.
+const _names = <String, String>{'en': 'English', 'uk': 'Українська'};
+
+/// The setting of the language of the app, an entry of the settings screen:
+/// it shows the language that the user chose, and opens a sheet in which
+/// the user chooses one of the languages of the app, or follows the
+/// languages of the device.
+///
+/// The entry does not wait until a choice is saved. If the preferences fail
+/// to save it, the app is in the chosen language while it runs, its next
+/// launch starts with what was saved before, and the error is one that
+/// nothing here catches: it reaches the handlers of the uncaught errors of
+/// the app.
+class LanguageSetting extends StatelessWidget {
+  /// Creates the setting.
+  const LanguageSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final chosen = AppLocaleScope.of(context);
+    final choice = Text(
+      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
+      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
+    );
+    final arrow = Icon(Icons.chevron_right, color: muted);
+    // At a large text size, the choice goes below the title, where it has
+    // the width of the row.
+    final below = MediaQuery.textScalerOf(context).scale(10) > 13;
+    return ListTile(
+      leading: const Icon(Icons.language),
+      title: Text(context.l10n.localizationLanguage),
+      subtitle: below ? choice : null,
+      trailing: below
+          ? arrow
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [choice, const SizedBox(width: 4), arrow],
+            ),
+      onTap: () => showModalBottomSheet<void>(
+        context: context,
+        // Over the main navigation of the app too.
+        useRootNavigator: true,
+        showDragHandle: true,
+        builder: (context) => const _LanguageSheet(),
+      ),
+    );
+  }
+}
+
+/// The name of the language of [locale] in that language, or its code.
+String _nameOf(Locale locale) =>
+    _names[locale.languageCode] ?? locale.languageCode;
+
+/// The sheet of the setting: the choice between the languages of the app
+/// and those of the device. It scrolls where its options do not fit.
+class _LanguageSheet extends StatelessWidget {
+  const _LanguageSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final chosen = AppLocaleScope.of(context);
+    return SafeArea(
+      child: ListView(
+        // A drag of options that fit closes the sheet, as a drag of its
+        // handle does.
+        primary: false,
+        shrinkWrap: true,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Semantics(
+              header: true,
+              child: Text(
+                context.l10n.localizationLanguage,
+                style: theme.textTheme.headlineSmall,
+              ),
+            ),
+          ),
+          for (final Locale? locale in [null, ...appLocales])
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 4,
+              ),
+              title: Text(
+                locale == null
+                    ? context.l10n.localizationSystem
+                    : _nameOf(locale),
+                // Larger than the text of a row of the screen.
+                style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+              ),
+              selected: locale == chosen,
+              trailing: locale == chosen
+                  ? Icon(
+                      Icons.check_rounded,
+                      color: theme.colorScheme.secondary,
+                    )
+                  : null,
+              onTap: () async {
+                Navigator.of(context).pop();
+                await appLocale.choose(locale);
+              },
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+=== lib/core/preferences/app_preferences.dart (role:preferences) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+import 'package:my_app/core/review/app_review.dart';
+
+/// The settings of the app that are no secret, which it remembers between
+/// its launches: the theme mode, the language, whether the user has seen
+/// the onboarding.
+///
+/// Nothing here is encrypted, and a backup of the device carries it: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A key is `<owner id>.<setting>`, such as `theme.mode`, where the owner
+/// is the module or the role whose code keeps the setting. A key has one
+/// value: a write replaces what the key had, a value of another type too.
+///
+/// A read is synchronous, from memory, and never throws: it returns `null`
+/// when the key has no value of the type it asks for. Whether a number
+/// saved as an `int` is read as a `double`, or the other way round, is up
+/// to the provider of the preferences. Once the future of a write
+/// completes, reads return what it saved, in this run of the app and after
+/// its next launch.
+abstract interface class AppPreferences {
+  /// The text saved under [key], or `null` if it has none.
+  String? getString(String key);
+
+  /// The flag saved under [key], or `null` if it has none.
+  bool? getBool(String key);
+
+  /// The whole number saved under [key], or `null` if it has none.
+  int? getInt(String key);
+
+  /// The number saved under [key], or `null` if it has none.
+  double? getDouble(String key);
+
+  /// A copy of the list of texts saved under [key], or `null` if it has
+  /// none: a change of the list changes nothing that is saved.
+  List<String>? getStringList(String key);
+
+  /// Saves the text [value] under [key].
+  Future<void> setString(String key, String value);
+
+  /// Saves the flag [value] under [key].
+  Future<void> setBool(String key, bool value);
+
+  /// Saves the whole number [value] under [key].
+  Future<void> setInt(String key, int value);
+
+  /// Saves the number [value] under [key].
+  Future<void> setDouble(String key, double value);
+
+  /// Saves a copy of the list of texts [value] under [key]: a later change
+  /// of [value] changes nothing that is saved.
+  Future<void> setStringList(String key, List<String> value);
+
+  /// Removes what is saved under [key], which puts its setting back to its
+  /// default: the reads of [key] return `null` again.
+  Future<void> remove(String key);
+}
+
+/// Returns the preferences of the app, which [initPreferences] opened:
+/// `bootstrap()` awaits it before the first frame, and there are none to
+/// return before that.
+AppPreferences createAppPreferences() => _appPreferences;
+
+late AppPreferences _appPreferences;
+
+/// Opens the preferences of the app and gives them to the restorers of its
+/// parts; `bootstrap()` awaits it before the first frame, and nothing else
+/// in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// reads: it opens the preferences anew, with what is saved, and calls the
+/// restorers again.
+Future<void> initPreferences() async {
+  _appPreferences = await impl0.openSharedAppPreferences();
+  _restore(_appPreferences);
+}
+
+/// The functions of the parts of the app that restore what they keep in the
+/// preferences, such as the theme mode. [initPreferences] calls each with
+/// the preferences once they are open, so that every part has its settings
+/// before the first frame.
+///
+/// A restorer reads its settings, and keeps the preferences for the writes
+/// of its part. It is synchronous and awaits nothing: nothing waits for an
+/// asynchronous one, and what such a one throws is not caught. It may run
+/// again, with preferences that were opened anew.
+final List<void Function(AppPreferences preferences)> _restorers = [
+  restoreAppLocale,
+  restoreReview,
+];
+
+/// Calls each of [_restorers] with [preferences] on its own: what one
+/// throws, an error or an exception, keeps no other from restoring and does
+/// not stop the start-up of the app, which goes on with the defaults of
+/// that part. In debug mode it is printed, so that a restorer that fails
+/// shows in the console.
+void _restore(AppPreferences preferences) {
+  for (final restore in _restorers) {
+    try {
+      restore(preferences);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('A restorer of the preferences failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/preferences/shared_app_preferences.dart (shared_preferences) ===
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'app_preferences.dart';
+
+/// Opens the preferences of the app with the shared_preferences package: it
+/// reads what is saved into memory, which the reads then answer from.
+///
+/// The app has one object of its preferences, which
+/// `createAppPreferences()` returns once `initPreferences()` opened them.
+Future<AppPreferences> openSharedAppPreferences() async => SharedAppPreferences(
+  await SharedPreferencesWithCache.create(
+    cacheOptions: const SharedPreferencesWithCacheOptions(),
+  ),
+);
+
+/// The settings of the app that are no secret, with the shared_preferences
+/// package, which keeps them in DataStore on Android and in `UserDefaults`
+/// on iOS.
+///
+/// Neither is encrypted, and a backup of the device carries them: never
+/// store a token, a password, an API key or an encryption key in the
+/// preferences.
+///
+/// A number is read only as the type that it was saved as: `getDouble`
+/// returns `null` for a key with an `int`, and `getInt` for a key with a
+/// `double`, a whole number too.
+///
+/// A write puts its value into memory before it saves it. If the platform
+/// refuses the save, as Android does for a text that starts with the prefix
+/// that shared_preferences marks a list with, the write fails, and the
+/// reads of this run return the value all the same. The next launch reads
+/// what was saved before the write, or nothing if the key had no value.
+final class SharedAppPreferences implements AppPreferences {
+  /// Creates the preferences on [SharedPreferencesWithCache], which has
+  /// read what is saved.
+  SharedAppPreferences(this._preferences);
+
+  final SharedPreferencesWithCache _preferences;
+
+  @override
+  String? getString(String key) => _read<String>(key);
+
+  @override
+  bool? getBool(String key) => _read<bool>(key);
+
+  @override
+  int? getInt(String key) => _read<int>(key);
+
+  @override
+  double? getDouble(String key) => _read<double>(key);
+
+  @override
+  List<String>? getStringList(String key) => switch (_preferences.get(key)) {
+    final List<Object?> list => _textsOf(list),
+    _ => null,
+  };
+
+  @override
+  Future<void> setString(String key, String value) =>
+      _preferences.setString(key, value);
+
+  @override
+  Future<void> setBool(String key, bool value) =>
+      _preferences.setBool(key, value);
+
+  @override
+  Future<void> setInt(String key, int value) => _preferences.setInt(key, value);
+
+  @override
+  Future<void> setDouble(String key, double value) =>
+      _preferences.setDouble(key, value);
+
+  /// shared_preferences keeps the list that it is given, so it gets a copy.
+  @override
+  Future<void> setStringList(String key, List<String> value) =>
+      _preferences.setStringList(key, List.of(value));
+
+  @override
+  Future<void> remove(String key) => _preferences.remove(key);
+
+  /// The value of [key] if it is a [T], or `null`. The reads of
+  /// shared_preferences cast the value instead, and throw on a value of
+  /// another type.
+  T? _read<T>(String key) => switch (_preferences.get(key)) {
+    final T value => value,
+    _ => null,
+  };
+
+  /// A copy of [list] as a list of texts, or `null` if an item of it is no
+  /// text.
+  ///
+  /// When the preferences are opened, the platform returns a list in a form
+  /// of its own: a list of objects on iOS, and on Android a list that casts
+  /// each item to a text as it is read, and so throws on an item that is
+  /// none. Cast to objects, either gives its items as they are.
+  static List<String>? _textsOf(List<Object?> list) {
+    final items = list.cast<Object?>();
+    return items.every((item) => item is String)
+        ? List<String>.from(items)
+        : null;
+  }
+}
+=== lib/core/review/app_review.dart (role:review) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/review/in_app_review_service.dart' as impl0;
+
+import '../env/app_env.dart';
+import '../preferences/app_preferences.dart';
+import 'review_service.dart';
+
+/// When a review is due. The stores ask an app not to ask on its first
+/// launch, nor too often, and to ask once the user has used it. Change the
+/// numbers here.
+abstract final class ReviewPolicy {
+  /// How many launches of the app, this one included, there are at least
+  /// once a review is due. At least 2, so that the app never asks on its
+  /// first launch.
+  static const int launches = 3;
+
+  /// How long after the first launch of the app a review is due.
+  static const Duration sinceFirstLaunch = Duration(days: 3);
+
+  /// How long after a request the next review is due, also in a new
+  /// version of the app. The app asks at most once a version.
+  static const Duration between = Duration(days: 14);
+}
+
+/// The application id of the app in Google Play: that of the flavor for a
+/// release, also in a build of another flavor, whose own id has no page
+/// there. Change it here if you change the application id of the app.
+const String googlePlayId = 'com.example.my_app';
+
+/// The reviews of the app in its store: the review dialog, which the app
+/// asks for when a review is due, and the page of the app in its store.
+final AppReviewController appReview = AppReviewController();
+
+/// Asks the store of the platform for its review dialog when a review is
+/// due, and opens the page of the app in its store. The app has one,
+/// [appReview].
+///
+/// It counts the launches of the app and remembers its last request in the
+/// preferences of the app. It asks for nothing on its own: only a call of
+/// [requestIfDue] asks.
+final class AppReviewController {
+  /// Creates the controller, which reads the time from [now] and the App
+  /// Store ID of the app from [appStoreId], by default the value of
+  /// `REVIEW_APP_STORE_ID` in `.env`. A test creates one with a clock and
+  /// an ID of its own, gives it the preferences with [restore], and starts
+  /// it with a service of its own.
+  AppReviewController({
+    this._now = DateTime.now,
+    this._appStoreId = _appStoreIdOfEnv,
+  });
+
+  /// The keys under which the preferences keep what the controller
+  /// remembers: the launches of the app, the time of its first launch, and
+  /// the time and the version of its last request.
+  static const _launchesKey = 'review.launches';
+  static const _firstLaunchKey = 'review.first_launch';
+  static const _askedAtKey = 'review.asked_at';
+  static const _askedVersionKey = 'review.asked_version';
+
+  /// An App Store ID: digits, and nothing else.
+  static final RegExp _appStoreIdPattern = RegExp(r'^[0-9]+$');
+
+  final DateTime Function() _now;
+  final String? Function() _appStoreId;
+
+  /// The service of the provider, once the controller has started.
+  ReviewService? _service;
+
+  /// The preferences that keep what the controller remembers, once the app
+  /// opened them.
+  AppPreferences? _preferences;
+
+  /// The launches of the app, this one included.
+  int _launches = 0;
+
+  /// The time of the first launch of the app.
+  DateTime? _firstLaunch;
+
+  /// The time of the last request, if the app asked.
+  DateTime? _askedAt;
+
+  /// The version of the app in which it last asked, if it asked.
+  String? _askedVersion;
+
+  /// The request that is on its way, if any.
+  Future<void>? _request;
+
+  /// Whether the controller told in debug mode that the app has no App
+  /// Store ID, or that its version is unknown.
+  bool _toldOfStoreId = false;
+  bool _toldOfVersion = false;
+
+  /// Whether the app has a page in the store of the platform: on Android
+  /// always, and on iOS once `REVIEW_APP_STORE_ID` in `.env` has the App
+  /// Store ID of the app.
+  bool get hasStorePage => storePage() != null;
+
+  /// The page of the app in the store of the platform, or `null` where it
+  /// has none: on Android the Google Play page of [googlePlayId], on iOS
+  /// the App Store page of the App Store ID, which is all digits, and none
+  /// on any other platform. With [review], the page on which the user
+  /// writes a review, which only the App Store has apart.
+  Uri? storePage({bool review = false}) => switch (defaultTargetPlatform) {
+    TargetPlatform.android => Uri.https(
+      'play.google.com',
+      '/store/apps/details',
+      {'id': googlePlayId},
+    ),
+    TargetPlatform.iOS => switch (_appStoreId()) {
+      final id? when _appStoreIdPattern.hasMatch(id) => Uri.https(
+        'apps.apple.com',
+        '/app/id$id',
+        review ? {'action': 'write-review'} : null,
+      ),
+      _ => null,
+    },
+    _ => null,
+  };
+
+  /// Opens the page of the app in its store, outside the app, or with
+  /// [review] the page on which the user writes a review (see
+  /// [storePage]), and returns whether an app of the device opened it:
+  /// `false` where the app has no store page, and before the app started.
+  /// Never throws.
+  Future<bool> openStorePage({bool review = false}) async {
+    final page = storePage(review: review);
+    final service = _service;
+    if (page == null || service == null) return false;
+    try {
+      return await service.openStorePage(page);
+    } on Object catch (error) {
+      _tell('The page of the app in its store did not open: $error');
+      return false;
+    }
+  }
+
+  /// Asks the store for its review dialog when a review is due, and does
+  /// nothing otherwise. Call it at a natural break of the app, such as when
+  /// the user has finished a task:
+  ///
+  /// ```dart
+  /// await saveNote(note);
+  /// unawaited(appReview.requestIfDue());
+  /// ```
+  ///
+  /// Never call it from a button, nor after a question of your own, such
+  /// as whether the user likes the app: the stores forbid both. The app
+  /// shows nothing around the dialog.
+  ///
+  /// A review is due once the app has had [ReviewPolicy.launches] launches,
+  /// this one included, [ReviewPolicy.sinceFirstLaunch] has passed since
+  /// its first launch and [ReviewPolicy.between] since its last request, and
+  /// it did not ask in this version of the app, while the store of the
+  /// device can show the dialog and the user is in no flow of a guard of the
+  /// routes, such as the onboarding or a sign-in.
+  ///
+  /// It completes once the store took the request, and the app then
+  /// remembers it. It returns nothing, since the store tells no app whether
+  /// the dialog showed, so nothing may depend on it. It never throws: an
+  /// error of the store counts as no dialog, and a later call asks again. A
+  /// call while a request is on its way gets that request.
+  Future<void> requestIfDue() =>
+      _request ??= _askIfDue().whenComplete(() => _request = null);
+
+  /// Takes what the controller remembers from [preferences], and keeps it
+  /// as it is for a key that has nothing saved. It keeps [preferences] for
+  /// the writes of the controller.
+  void restore(AppPreferences preferences) {
+    _preferences = preferences;
+    _launches = preferences.getInt(_launchesKey) ?? _launches;
+    _firstLaunch = _timeOf(preferences.getInt(_firstLaunchKey)) ?? _firstLaunch;
+    _askedAt = _timeOf(preferences.getInt(_askedAtKey)) ?? _askedAt;
+    _askedVersion = preferences.getString(_askedVersionKey) ?? _askedVersion;
+  }
+
+  /// Starts with [service]: counts this launch of the app, and the time of
+  /// its first launch if it has none, and saves them.
+  ///
+  /// `initReview()` calls it in `bootstrap()`. It may be called again, with
+  /// the service that the app has from then on: `initReview()` does so in a
+  /// test of the next launch of the app, and a test gives it a service of
+  /// its own. A failed save is told in debug mode and stops nothing.
+  Future<void> start(ReviewService service) async {
+    _service = service;
+    _launches++;
+    final saved = _firstLaunch;
+    final firstLaunch = _firstLaunch ??= _now().toUtc();
+    try {
+      await _preferences?.setInt(_launchesKey, _launches);
+      if (saved == null) {
+        await _preferences?.setInt(
+          _firstLaunchKey,
+          firstLaunch.millisecondsSinceEpoch,
+        );
+      }
+    } on Object catch (error) {
+      _tell('The launch of the app was not saved for the reviews: $error');
+    }
+    if (!_toldOfStoreId &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        !hasStorePage) {
+      _toldOfStoreId = true;
+      _tell(
+        'REVIEW_APP_STORE_ID in .env has no App Store ID, so the app has no '
+        'App Store page: appReview.hasStorePage is false on iOS, and '
+        'appReview.openStorePage() opens nothing there. Put the Apple ID of '
+        'the app in App Store Connect there.',
+      );
+    }
+  }
+
+  /// Asks the store for its dialog if a review is due, and remembers the
+  /// request once the store took it. Never throws.
+  Future<void> _askIfDue() async {
+    try {
+      final service = _service;
+      if (service == null || !_dueByTime() || _inAGuardFlow()) return;
+      final version = await _versionOf(service);
+      if (version == null || version == _askedVersion) return;
+      if (!await _isAvailable(service) || _inAGuardFlow()) return;
+      try {
+        await service.requestReview();
+      } on Object catch (error) {
+        _tell('The store did not take the request for a review: $error');
+        return;
+      }
+      final askedAt = _askedAt = _now().toUtc();
+      _askedVersion = version;
+      try {
+        await _preferences?.setInt(_askedAtKey, askedAt.millisecondsSinceEpoch);
+        await _preferences?.setString(_askedVersionKey, version);
+      } on Object catch (error) {
+        _tell('The request for a review was not saved: $error');
+      }
+    } on Object catch (error) {
+      _tell('The request for a review failed: $error');
+    }
+  }
+
+  /// Whether a review is due by the launches and the times that the
+  /// controller remembers. A request whose time is to come, as after the
+  /// clock of the device went back, counts as recent.
+  bool _dueByTime() {
+    final firstLaunch = _firstLaunch;
+    if (_launches < ReviewPolicy.launches || firstLaunch == null) return false;
+    final now = _now();
+    if (now.difference(firstLaunch) < ReviewPolicy.sinceFirstLaunch) {
+      return false;
+    }
+    final askedAt = _askedAt;
+    if (askedAt == null) return true;
+    final since = now.difference(askedAt);
+    return !since.isNegative && since >= ReviewPolicy.between;
+  }
+
+  /// The version of the app that [service] gives, or `null` if it is
+  /// unknown, which makes no review due.
+  Future<String?> _versionOf(ReviewService service) async {
+    String? version;
+    try {
+      version = (await service.appVersion())?.trim();
+    } on Object catch (error) {
+      _tell('The version of the app is unknown: $error');
+    }
+    if (version != null && version.isNotEmpty) return version;
+    if (!_toldOfVersion) {
+      _toldOfVersion = true;
+      _tell(
+        'The version of the app is unknown, so the app asks for no review.',
+      );
+    }
+    return null;
+  }
+
+  /// Whether the store of the device can show the review dialog, as
+  /// [service] tells: `false` if it fails to tell.
+  Future<bool> _isAvailable(ReviewService service) async {
+    try {
+      return await service.isAvailable();
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Prints [message] in debug mode, for the developer of the app.
+  static void _tell(String message) {
+    if (kDebugMode) debugPrint(message);
+  }
+
+  /// The time of [milliseconds] since the epoch, in UTC, or `null`.
+  static DateTime? _timeOf(int? milliseconds) => milliseconds == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+}
+
+/// The App Store ID of the app, as `REVIEW_APP_STORE_ID` in `.env` has it,
+/// or `null` while it is empty.
+String? _appStoreIdOfEnv() => AppEnv.reviewAppStoreId;
+
+/// Restores from [preferences] what [appReview] remembers, and keeps them
+/// for its writes: a restorer of the preferences, which the app calls
+/// before its first frame.
+void restoreReview(AppPreferences preferences) =>
+    appReview.restore(preferences);
+
+/// Returns the service of the provider of the reviews, which [initReview]
+/// created: `bootstrap()` awaits it before the first frame, and there is
+/// none to return before that.
+///
+/// The code of the app does not call it: it uses [appReview].
+ReviewService createReviewService() => _reviewService;
+
+/// Whether the user is in the flow of a guard of the routes: never, since
+/// the app has no guards.
+bool _inAGuardFlow() => false;
+
+late ReviewService _reviewService;
+
+/// Creates the service of the provider of the reviews and starts
+/// [appReview] with it, which counts this launch of the app; `bootstrap()`
+/// awaits it in its last phase, and nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew and starts [appReview] with it.
+Future<void> initReview() async {
+  _reviewService = impl0.createInAppReviewService();
+  await appReview.start(_reviewService);
+}
+=== lib/core/review/in_app_review_service.dart (in_app_review) ===
+import 'package:in_app_review/in_app_review.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'review_service.dart';
+
+/// Creates the reviews of the app on in_app_review, with the app. It asks
+/// the user nothing.
+ReviewService createInAppReviewService() => const InAppReviewService._();
+
+/// The reviews of the app on in_app_review: the review dialog of StoreKit
+/// on iOS and of the In-App Review API of Google Play on Android.
+///
+/// The page of the app in its store opens with url_launcher, exactly as
+/// `appReview` gives it, and never through `openStoreListing()` of
+/// in_app_review, which on Android opens the page of the id of the build
+/// that runs, such as that of a flavor that has no page in Google Play.
+/// The version of the app comes from package_info_plus.
+///
+/// Google Play shows the dialog only in an app that it installed, such as
+/// from an internal test track. Elsewhere [requestReview] fails, and the
+/// app records no request.
+final class InAppReviewService implements ReviewService {
+  const InAppReviewService._();
+
+  @override
+  Future<bool> isAvailable() async {
+    try {
+      return await InAppReview.instance.isAvailable();
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> requestReview() => InAppReview.instance.requestReview();
+
+  @override
+  Future<bool> openStorePage(Uri page) async {
+    try {
+      return await launchUrl(page, mode: LaunchMode.externalApplication);
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  Future<String?> appVersion() async {
+    try {
+      final version = (await PackageInfo.fromPlatform()).version.trim();
+      return version.isEmpty ? null : version;
+    } on Object {
+      return null;
+    }
+  }
+}
+=== lib/core/review/review_service.dart (role:review) ===
+/// The store of the platform for the reviews of the app: what the provider
+/// of the review role implements. The code of the app uses `appReview` of
+/// app_review.dart, which decides when a review is due.
+abstract interface class ReviewService {
+  /// Whether the store of this device can show its review dialog, such as
+  /// `false` on Android without Google Play. Never throws: `false` when it
+  /// cannot tell.
+  Future<bool> isAvailable();
+
+  /// Asks the store for its review dialog, and shows nothing of its own
+  /// around it: no question, no text and no screen. Completes once the
+  /// store took the request. Whether the dialog showed, and what the user
+  /// did, the store tells nobody. Throws when the platform refused the
+  /// request.
+  Future<void> requestReview();
+
+  /// Opens [page], a page of the app in its store, outside the app, and
+  /// returns whether an app of the device opened it. Never throws.
+  Future<bool> openStorePage(Uri page);
+
+  /// The version of the app, such as `1.2.0`, without its build number, or
+  /// `null` when the provider cannot tell. The app asks for a review at most
+  /// once a version. Never throws.
+  Future<String?> appVersion();
+}
+=== lib/core/review/review_setting.dart (role:review) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'app_review.dart';
+
+/// The entry of the settings screen that opens the page of the app in its
+/// store, on which the user writes a review: on Android its Google Play
+/// page, on iOS its App Store page, which takes the App Store ID in `.env`.
+///
+/// It never asks for the review dialog of the store: Google Play forbids
+/// the dialog from a button and points a button to the page. When no app of
+/// the device opens the page, a snack bar says so.
+class ReviewSetting extends StatelessWidget {
+  /// Creates the setting.
+  const ReviewSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return ListTile(
+      leading: const Icon(Icons.star_outline_rounded),
+      // At a large text size the title wraps in the row between its words.
+      title: _WholeWords(context.l10n.reviewSettingTitle),
+      // The page opens outside the app. The icon is a little smaller than
+      // the arrow of the other entries, in a box of the same size, so that
+      // the two have one centre.
+      trailing: SizedBox.square(
+        dimension: 24,
+        child: Icon(Icons.open_in_new_rounded, size: 20, color: muted),
+      ),
+      onTap: () async {
+        // Read before the await, while the entry is surely on the screen.
+        final failed = context.l10n.reviewSettingFailed;
+        final messenger = ScaffoldMessenger.of(context);
+        if (await appReview.openStorePage(review: true)) return;
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failed)));
+      },
+    );
+  }
+}
+
+/// Whether the settings screen shows [ReviewSetting]: only where the app has
+/// a page in its store, which on iOS takes the App Store ID in `.env`.
+bool reviewSettingShows() => appReview.hasStorePage;
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
+=== lib/core/router/app_router.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router_factory.dart';
+import 'navigation.dart';
+
+/// The router of the app, created on first use.
+final AppRouter appRouter = createAppRouter();
+
+/// The router of the app: its configuration for `MaterialApp.router` and the
+/// navigation that screens use through `context.nav`.
+abstract interface class AppRouter {
+  /// The configuration that `MaterialApp.router` takes as `routerConfig`.
+  RouterConfig<Object> get config;
+
+  /// The navigator that [context] navigates with.
+  AppNavigator navigatorOf(BuildContext context);
+}
+
+/// Moves between the locations of the app.
+abstract interface class AppNavigator {
+  /// Shows [location] with the chain of its parents below it as the stack.
+  ///
+  /// In the main navigation, it selects the branch of [location] and makes
+  /// the chain its stack; for a location outside the main navigation, the
+  /// chain replaces the whole stack, main navigation included.
+  void go(AppLocation location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  ///
+  /// In the main navigation, the current stack is that of the selected
+  /// branch, whichever branch [location] belongs to, and the selected
+  /// destination stays; a location outside the main navigation is shown
+  /// over it. A location in the main navigation goes only on top of the
+  /// main navigation itself: from a page shown over it, this throws a
+  /// [StateError] and leaves the stack as it is, so [go] to the location
+  /// instead. From a page with no main navigation below it, the main
+  /// navigation comes on top with the location.
+  Future<T?> push<T extends Object?>(AppLocation location);
+
+  /// Replaces the top of the current stack with [location].
+  ///
+  /// As with [push], a location in the main navigation cannot replace a
+  /// page shown over the main navigation: this throws a [StateError] and
+  /// leaves the stack as it is, so [go] to the location instead.
+  void replace(AppLocation location);
+
+  /// Shows the screen that the app starts on, as [go] shows a location: the
+  /// route that the app starts on, or the fallback start screen of the app
+  /// entry in an app that no route starts.
+  ///
+  /// The guards of the routes are asked about it as [go] asks about a
+  /// location: while a gate does not allow, its target shows instead.
+  void goToStart();
+}
+=== lib/core/router/app_router_factory.dart (go_router) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:go_router/go_router.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+import 'package:my_app/features/settings/settings_screen.dart' as screen0;
+
+import 'app_router.dart' show AppNavigator, AppRouter;
+import 'navigation.dart' show AppLocation;
+import 'not_found_screen.dart' show NotFoundScreen;
+
+/// Creates the router of the app: a [GoRouter] with the routes of the
+/// modules of the app.
+AppRouter createAppRouter() => _GoAppRouter();
+
+/// The router of the app with go_router, which navigates between the
+/// locations of the app too, and tells the listeners of the screen the user
+/// sees when it changes.
+final class _GoAppRouter implements AppRouter, AppNavigator {
+  /// The router, created once, on first use. Navigation goes through it
+  /// rather than through the router above a context, so that any context
+  /// can navigate, even one above the router.
+  @override
+  late final GoRouter config = _GoRouter(
+    initialLocation: '/',
+    observers: _observers(),
+    errorBuilder: _notFound,
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const FallbackStartScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings.settings',
+        builder: (context, state) => const screen0.SettingsScreen(),
+      ),
+    ],
+  )..routerDelegate.addListener(_pagesChanged);
+
+  /// The key of the page on top and its location, as the listeners of the
+  /// screen last heard of them.
+  (LocalKey?, String)? _screen;
+
+  /// The pages that pushes showed, by their keys, as the router last saw
+  /// them among the pages of go_router.
+  Map<LocalKey, ImperativeRouteMatch> _pushed = {};
+
+  /// For each completer that go_router gave a pushed page anew, the
+  /// completer of the push that showed the page.
+  final Expando<Completer<Object?>> _pushes = Expando();
+
+  @override
+  AppNavigator navigatorOf(BuildContext context) => this;
+
+  @override
+  void go(AppLocation location) => config.go(location.path);
+
+  @override
+  Future<T?> push<T extends Object?>(AppLocation location) {
+    if (_withoutPage) {
+      go(location);
+      return Future.value();
+    }
+    return config.push<T>(location.path);
+  }
+
+  @override
+  void replace(AppLocation location) {
+    if (_withoutPage) return go(location);
+    config.pushReplacement<Object?>(location.path);
+  }
+
+  /// Goes to `/`, which shows the screen that the app starts on: the route
+  /// that `/` redirects to, or the fallback start screen of the app entry.
+  @override
+  void goToStart() => config.go('/');
+
+  /// Whether go_router has no page of a route: before it shows its first
+  /// location, and while it shows its error screen in place of the whole
+  /// stack, as for a location that no route matches.
+  ///
+  /// It has no page to push over then, and none to replace.
+  /// `GoRouter.push` would keep the error screen and never complete, or
+  /// throw for a location in the main navigation, and before the first
+  /// location the app would start on the pushed page alone.
+  /// `GoRouter.pushReplacement` throws for want of a page. So [push] and
+  /// [replace] give go_router their location as [go] does: it shows with
+  /// the pages of its chain, in place of the error screen, and such a push
+  /// completes with `null`. An error screen that a push showed over a page
+  /// is a page of go_router, which pushes over it and replaces it like any
+  /// other.
+  bool get _withoutPage =>
+      config.routerDelegate.currentConfiguration.matches.isEmpty;
+
+  /// Follows the pages of go_router, whose delegate notifies its listeners
+  /// of each change of them: keeps each push completing with the value of
+  /// its page, and tells the listeners of the screen about the page on top.
+  void _pagesChanged() {
+    _keepPushes();
+    _showScreen();
+  }
+
+  /// Lets each push complete with the value that its page returns when it
+  /// closes, whatever completer go_router gives the page.
+  ///
+  /// go_router completes a push with the completer that it gives the page
+  /// it pushed, which the page completes when it closes. When go_router
+  /// shows its pages anew from their encoded form, as on [GoRouter.refresh],
+  /// such as when its `refreshListenable` notifies, it gives each pushed
+  /// page a new completer, though the page keeps its key and its location,
+  /// so the push would never complete
+  /// (https://github.com/flutter/flutter/issues/128122). So when a page
+  /// comes back at its location with another completer, the router passes
+  /// on the value of that completer to that of the push. A branch of the
+  /// main navigation that is not selected keeps its pages as they were, so
+  /// a page that comes back with its branch passes on its value as before.
+  /// Once go_router keeps the completers of its pages, this does nothing
+  /// and can go.
+  void _keepPushes() {
+    final pushed = {
+      for (final page in _pushedPages(
+        config.routerDelegate.currentConfiguration.matches,
+      ))
+        page.pageKey: page,
+    };
+    for (final page in pushed.values) {
+      final before = _pushed[page.pageKey];
+      if (before == null ||
+          before.completer == page.completer ||
+          before.matches.uri != page.matches.uri) {
+        continue;
+      }
+      final push = _pushes[before.completer] ?? before.completer;
+      _pushes[page.completer] = push;
+      unawaited(
+        page.completer.future.then((value) {
+          if (!push.isCompleted) push.complete(value);
+        }),
+      );
+    }
+    _pushed = pushed;
+  }
+
+  /// The pages that pushes showed among [matches], in the stacks of the
+  /// main navigation too.
+  static Iterable<ImperativeRouteMatch> _pushedPages(
+    List<RouteMatchBase> matches,
+  ) sync* {
+    for (final match in matches) {
+      if (match is ImperativeRouteMatch) yield match;
+      if (match is ShellRouteMatch) yield* _pushedPages(match.matches);
+    }
+  }
+
+  /// Tells the listeners of the screen about the page on top when another
+  /// page comes on top, or the page on top shows another location.
+  ///
+  /// The delegate of go_router notifies its listeners once for each change
+  /// of its configuration, a switch of branches included, and may do so
+  /// again without a change of the page on top, which the listeners of the
+  /// screen do not hear of twice. The location of a pushed page is its own,
+  /// as that of the configuration leaves pushed pages out. The error screen
+  /// of go_router has no route match, or, for a location pushed in error, a
+  /// route without a name.
+  void _showScreen() {
+    final configuration = config.routerDelegate.currentConfiguration;
+    final top = configuration.lastOrNull;
+    final location = switch (top) {
+      ImperativeRouteMatch(:final matches) => matches.uri.toString(),
+      _ => configuration.uri.toString(),
+    };
+    final screen = (top?.pageKey, location);
+    if (screen == _screen) return;
+    _screen = screen;
+    for (final listener in _screenListeners) {
+      _callAlone(listener, top?.route.name, location);
+    }
+  }
+}
+
+/// Creates the observers of a navigator. An observer can watch only one
+/// navigator, so each navigator gets instances of its own.
+List<NavigatorObserver> _observers() => [
+  for (final create in <NavigatorObserver Function()>[]) create(),
+];
+
+/// The listeners of the screen the user sees, which get the full name of
+/// the route of the screen, or `null` for a screen that is not a route of a
+/// module, and its location.
+final List<void Function(String? route, String location)> _screenListeners = [];
+
+/// Calls [listener] of the screen with [route] and [location] on its own:
+/// what it throws keeps no other listener from hearing the screen, and
+/// reaches neither the router nor the handlers of the errors of the app. In
+/// debug mode it is printed, so that a listener that fails shows in the
+/// console.
+void _callAlone(
+  void Function(String? route, String location) listener,
+  String? route,
+  String location,
+) {
+  try {
+    listener(route, location);
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('A listener of the screen failed: $error');
+    }
+  }
+}
+
+/// The page of go_router for a location that it cannot show, one that no
+/// route matches or that the redirect of a route refuses: the screen of the
+/// router role for such a location. go_router builds the page around it, so
+/// the page keeps the key, the name and the empty route match of the error
+/// screen of go_router.
+Widget _notFound(BuildContext context, GoRouterState state) =>
+    const NotFoundScreen();
+
+/// The [GoRouter] of the app, which hears of the back button of the system
+/// through [_BackButton]: go_router takes no dispatcher of the button, so
+/// the router has one of its own in place of that of [GoRouter].
+final class _GoRouter extends GoRouter {
+  /// Creates the router of [routes], as [GoRouter.new] does.
+  _GoRouter({
+    required List<RouteBase> routes,
+    super.initialLocation,
+    super.observers,
+    super.errorBuilder,
+  }) : super.routingConfig(
+         routingConfig: ValueNotifier(RoutingConfig(routes: routes)),
+       );
+
+  @override
+  BackButtonDispatcher get backButtonDispatcher => _backButton;
+
+  late final _BackButton _backButton = _BackButton(this);
+}
+
+/// The dispatcher of the back button of the system for go_router, which
+/// asks go_router to close the route on top only while go_router has a page
+/// of a route.
+///
+/// go_router shows its error screen in place of the whole stack, for a
+/// location that no route matches or that the redirect of a route refuses:
+/// it then has no page of a route. Asked to close the route on top, its
+/// delegate looks for the last of those pages and throws a [StateError]
+/// (https://github.com/flutter/flutter/issues/187616). So on that screen
+/// the dispatcher asks the root navigator, the only one there, itself: a
+/// route that is shown over the error screen, such as a dialog, closes, and
+/// with no route to close the button is left to the system, as on the
+/// first page of the app. An error screen that a push showed over a page is
+/// a page of go_router, which closes it. Once the delegate of go_router
+/// answers without a page, this can go.
+final class _BackButton extends RootBackButtonDispatcher {
+  /// Creates the dispatcher of the back button of [_router].
+  _BackButton(this._router);
+
+  final GoRouter _router;
+
+  /// For each callback that the dispatcher was given, the one that it
+  /// calls in its place.
+  final Map<ValueGetter<Future<bool>>, ValueGetter<Future<bool>>> _asked = {};
+
+  /// Takes [callback], with which the `Router` of Flutter asks the delegate
+  /// of go_router to close the route on top, and calls it only while
+  /// go_router has a page. A `BackButtonListener` below the router still
+  /// hears of the button first, on the error screen too.
+  @override
+  void addCallback(ValueGetter<Future<bool>> callback) => super.addCallback(
+    _asked[callback] = () {
+      final delegate = _router.routerDelegate;
+      if (delegate.currentConfiguration.matches.isNotEmpty) return callback();
+      return delegate.navigatorKey.currentState?.maybePop() ??
+          Future.value(false);
+    },
+  );
+
+  @override
+  void removeCallback(ValueGetter<Future<bool>> callback) =>
+      super.removeCallback(_asked.remove(callback) ?? callback);
+}
+=== lib/core/router/navigation.dart (role:router) ===
+import 'package:flutter/widgets.dart';
+
+import 'app_router.dart';
+
+/// A place in the app: a route with the values of its parameters.
+///
+/// Every route of the app has a location class, such as
+/// `HomeDetailsLocation` for the route `home.details`.
+sealed class AppLocation {
+  /// Allows the location classes to have constant constructors.
+  const AppLocation();
+
+  /// The full name of the route, such as `home.details`.
+  String get routeName;
+
+  /// The location as a path with its query, such as `/home/details/5`.
+  String get path;
+
+  /// The location of the parent route, or `null` for a top-level route.
+  AppLocation? get parent => null;
+
+  /// The locations from the top-level route down to this one: the stack
+  /// that [NavLink.go] shows.
+  List<AppLocation> get chain => [...?parent?.chain, this];
+}
+
+/// A location and the context that navigates to it, as the routes of
+/// `context.nav` return them.
+final class NavLink {
+  /// Creates the link to [location] from [context].
+  const NavLink(this._context, this.location);
+
+  final BuildContext _context;
+
+  /// The location to navigate to.
+  final AppLocation location;
+
+  /// Shows [location] with the chain of its parents below it as the stack.
+  void go() => appRouter.navigatorOf(_context).go(location);
+
+  /// Shows [location] on top of the current stack and completes with the
+  /// value the page returns when it closes.
+  Future<T?> push<T extends Object?>() =>
+      appRouter.navigatorOf(_context).push<T>(location);
+
+  /// Replaces the top of the current stack with [location].
+  void replace() => appRouter.navigatorOf(_context).replace(location);
+}
+
+/// The location of `settings.settings`: `/settings`.
+final class SettingsSettingsLocation extends AppLocation {
+  /// Creates the location.
+  const SettingsSettingsLocation();
+
+  @override
+  String get routeName => 'settings.settings';
+
+  @override
+  String get path => '/settings';
+}
+
+/// Typed navigation to the routes of the app.
+extension AppNavigation on BuildContext {
+  /// The routes of the app by module.
+  AppNav get nav => AppNav._(this);
+}
+
+/// The routes of the app by module, as `context.nav`.
+final class AppNav {
+  const AppNav._(this._context);
+
+  final BuildContext _context;
+
+  /// The routes of the module `settings`.
+  SettingsRoutes get settings => SettingsRoutes._(_context);
+}
+
+/// The routes of the module `settings`.
+final class SettingsRoutes {
+  const SettingsRoutes._(this._context);
+
+  final BuildContext _context;
+
+  /// The route `settings.settings`: `/settings`.
+  NavLink settings() => NavLink(_context, const SettingsSettingsLocation());
+}
+=== lib/core/router/not_found_screen.dart (role:router) ===
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'app_router.dart';
+
+/// The symbol of the app in its cell, as an element of the periodic table
+/// has one: the first letters of the first two words of its name, or the
+/// first two letters of a name of one word.
+const _appSymbol = 'Ma';
+
+/// The number in the cell of the app: how many letters and digits its name
+/// has.
+const _appNumber = 5;
+
+/// The monospaced font of the device, for the number of the cell.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen that the router shows for a location that it cannot show:
+/// one that no route of the app matches, such as a link to a page that the
+/// app does not have, and one without a value that its route requires.
+///
+/// It shows the cell of the app next to an empty cell, the page that is not
+/// there, says so in the language of the app, and its button shows the
+/// screen that the app starts on. Every router of the app shows this screen
+/// as `const NotFoundScreen()`, so change its look here, and keep its
+/// constructor `const` and without arguments.
+class NotFoundScreen extends StatelessWidget {
+  /// Creates the screen.
+  const NotFoundScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  const ExcludeSemantics(child: _Cells()),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    namesRoute: true,
+                    // The title grows at most by half with a larger text.
+                    child: MediaQuery.withClampedTextScaling(
+                      maxScaleFactor: 1.5,
+                      child: Text(
+                        context.l10n.routerNotFoundTitle,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // The button takes its look from the theme of the app.
+                  ElevatedButton(
+                    onPressed: () => appRouter.navigatorOf(context).goToStart(),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          // The label grows at most by half, so that its
+                          // words keep to the width of a phone.
+                          child: MediaQuery.withClampedTextScaling(
+                            maxScaleFactor: 1.5,
+                            child: Text(
+                              context.l10n.routerNotFoundAction,
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.arrow_forward_rounded, size: 18),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The cell of the app, as an element of a table, among smaller cells, next
+/// to an empty cell with a dashed edge and a question mark: the page that
+/// is not there.
+///
+/// The letters are part of the picture, so they keep their size with a
+/// larger text.
+class _Cells extends StatelessWidget {
+  const _Cells();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    Widget cell(
+      double left,
+      double top,
+      double side, {
+      Color? fill,
+      Color? edge,
+    }) => Positioned(
+      left: left,
+      top: top,
+      child: Container(
+        width: side,
+        height: side,
+        decoration: BoxDecoration(
+          color: fill,
+          border: edge == null ? null : Border.all(color: edge),
+        ),
+      ),
+    );
+
+    return MediaQuery.withNoTextScaling(
+      child: SizedBox(
+        width: 252,
+        height: 156,
+        child: Stack(
+          children: [
+            cell(0, 18, 40, fill: colors.secondaryContainer),
+            cell(168, 0, 28, edge: colors.outline),
+            cell(218, 122, 34, fill: colors.tertiaryContainer),
+            // The cell of the app.
+            Positioned(
+              left: 40,
+              top: 20,
+              child: Container(
+                width: 116,
+                height: 116,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLowest,
+                  border: Border.all(color: colors.onSurface, width: 1.5),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: 7,
+                      right: 10,
+                      child: Text(
+                        '$_appNumber',
+                        style: _mono.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colors.onSurface,
+                        ),
+                      ),
+                    ),
+                    Center(
+                      child: Text(
+                        _appSymbol,
+                        style: theme.textTheme.displayMedium?.copyWith(
+                          fontSize: 54,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: -2,
+                          color: colors.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // The empty cell of the page that is not there.
+            Positioned(
+              left: 168,
+              top: 44,
+              child: CustomPaint(
+                painter: _DashedEdge(colors.outline),
+                child: SizedBox.square(
+                  dimension: 72,
+                  child: Center(
+                    child: Text(
+                      '?',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Paints a dashed edge around the box that it is given, in [color].
+class _DashedEdge extends CustomPainter {
+  const _DashedEdge(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const dash = 6.0;
+    const gap = 4.0;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5;
+    final edge = (Offset.zero & size).deflate(0.75);
+    for (final (from, to) in [
+      (edge.topLeft, edge.topRight),
+      (edge.topRight, edge.bottomRight),
+      (edge.bottomRight, edge.bottomLeft),
+      (edge.bottomLeft, edge.topLeft),
+    ]) {
+      final length = (to - from).distance;
+      final along = (to - from) / length;
+      for (var start = 0.0; start < length; start += dash + gap) {
+        canvas.drawLine(
+          from + along * start,
+          from + along * math.min(start + dash, length),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
+}
+=== lib/features/settings/settings_screen.dart (settings) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+import 'package:my_app/core/l10n/language_setting.dart' as entry1;
+import 'package:my_app/core/review/review_setting.dart' as entry0;
+
+/// The settings of the app: an entry for each setting that a module of the
+/// app has, one below the other in one group. An entry with a condition
+/// shows only while the condition holds.
+///
+/// As a destination of the main navigation, the screen has no app bar.
+/// Shown on top of another screen, it has one, for the back button.
+class SettingsScreen extends StatelessWidget {
+  /// Creates the screen.
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Semantics(
+        header: true,
+        // A title that is too long for its line, as with a large text
+        // size, gets smaller rather than break inside a word.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: AlignmentDirectional.centerStart,
+          child: Text(
+            context.l10n.settingsTitle,
+            style: theme.textTheme.headlineLarge,
+          ),
+        ),
+      ),
+    );
+    // Whether a screen below this one is there to go back to.
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
+    return Scaffold(
+      appBar: back ? AppBar() : null,
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          children: [
+            title,
+            const SizedBox(height: 20),
+            _Group(
+              children: [
+                if (entry0.reviewSettingShows()) const entry0.ReviewSetting(),
+                const entry1.LanguageSetting(),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The group of the entries of the screen: its [children] one below the
+/// other on a card, with a line between them.
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    clipBehavior: Clip.antiAlias,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (index, child) in children.indexed) ...[
+          if (index > 0) const Divider(height: 1, indent: 56),
+          child,
+        ],
+      ],
+    ),
+  );
+}
+=== lib/l10n/app_en.arb (gen_l10n) ===
+{
+  "@@locale": "en",
+  "settingsTitle": "Settings",
+  "flutterCoreFallbackHint": "No start screen yet. Add a feature with a route, or replace this screen.",
+  "flutterCoreFallbackCopied": "Copied",
+  "reviewSettingTitle": "Rate the app",
+  "reviewSettingFailed": "Couldn't open the store.",
+  "routerNotFoundTitle": "Page not found",
+  "routerNotFoundAction": "Go to the start screen",
+  "localizationLanguage": "Language",
+  "localizationSystem": "System"
+}
+=== lib/l10n/app_uk.arb (gen_l10n) ===
+{
+  "@@locale": "uk",
+  "settingsTitle": "Налаштування",
+  "flutterCoreFallbackHint": "Стартового екрана ще немає. Додайте фічу з маршрутом або замініть цей екран.",
+  "flutterCoreFallbackCopied": "Скопійовано",
+  "reviewSettingTitle": "Оцінити застосунок",
+  "reviewSettingFailed": "Не вдалося відкрити магазин.",
+  "routerNotFoundTitle": "Сторінку не знайдено",
+  "routerNotFoundAction": "На стартовий екран",
+  "localizationLanguage": "Мова",
+  "localizationSystem": "Як у системі"
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/l10n/app_locale.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(AppLocaleScope(notifier: appLocale, child: const App()));
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  go_router: "^17.5.0"
+  in_app_review: "^2.0.12"
+  intl: "any"
+  package_info_plus: "any"
+  shared_preferences: "^2.5.5"
+  shared_preferences_android: "^2.5.2"
+  url_launcher: "any"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  default-flavor: "dev"
+  uses-material-design: true
+  generate: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}
+=== test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+/// What the widget asks the system for on a screen in [theme].
+Future<SystemUiOverlayStyle> _styleIn(
+  WidgetTester tester,
+  ThemeData theme,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: theme,
+      home: const StatusBarIcons(child: Text('A screen')),
+    ),
+  );
+  return tester
+      .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.descendant(
+          of: find.byType(StatusBarIcons),
+          matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        ),
+      )
+      .value;
+}
+
+void main() {
+  testWidgets('asks for dark icons on a light theme', (tester) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.statusBarIconBrightness, Brightness.dark);
+    expect(style.statusBarBrightness, Brightness.light);
+    expect(find.text('A screen'), findsOneWidget);
+  });
+
+  testWidgets('asks for light icons on a dark theme', (tester) async {
+    final style = await _styleIn(
+      tester,
+      ThemeData(brightness: Brightness.dark),
+    );
+
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+  });
+
+  testWidgets('leaves the navigation bar of the system as it is', (
+    tester,
+  ) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.systemNavigationBarColor, isNull);
+    expect(style.systemNavigationBarIconBrightness, isNull);
+  });
+}
