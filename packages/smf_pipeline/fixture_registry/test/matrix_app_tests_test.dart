@@ -1289,6 +1289,30 @@ void main() {
       expect(roleTest.startProbe!.function, 'probeReview');
       expect(flowsTest.values, isNull);
     }
+    // The test of the entry that opens the page of the app in its store is
+    // not registered for the fixtures: no app of their matrix has a settings
+    // screen next to the reviews, so it would apply to no app, which fails
+    // the run. Once an app of the matrix has both roles, such as with a
+    // fixture provider of the settings screen role, the test belongs among
+    // those of the fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'review_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({reviewRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register reviewSettingAppTest() in fixtureAppTests() for these '
+          'apps.',
+    );
   });
 
   test(
