@@ -187,9 +187,9 @@ void main() {
     test(
         'has contributors of settings entries next to the settings module of '
         'the CLI, two of them with a widget of one name and one with an entry '
-        'that shows only at times, so that the tests of the settings screen '
-        'role check a screen with entries on a provider that must work',
-        () async {
+        'that shows only at times, next to the entry of the review role, so '
+        'that the tests of the settings screen role check a screen with '
+        'entries on a provider that must work', () async {
       final (:apps, :failed) = await everyModuleAppsOf(
         severalProvidersModules(),
       );
@@ -222,14 +222,19 @@ void main() {
       );
       // The fixture setting that the screen leaves out on iOS, where the
       // tests of the role and of the module look at the screen once more,
-      // next to entries that always show.
+      // next to entries that always show; and the entry of the review role,
+      // which the screen shows on iOS only with the App Store ID of the app,
+      // which the tests of the apps leave empty.
       expect(
         [
           for (final entry in entries)
             if (entry.showIf case final showIf?)
               '${entry.widget.name} if ${showIf.name}()',
         ],
-        ['FixtureHidingSetting if fixtureHidingSettingShows()'],
+        [
+          'FixtureHidingSetting if fixtureHidingSettingShows()',
+          'ReviewSetting if reviewSettingShows()',
+        ],
         reason: 'Without an entry that shows only at times, the tests of the '
             'settings screen role do not show that a screen leaves it out: '
             'add a module with such an entry to severalProvidersModules().',
