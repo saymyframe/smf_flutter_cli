@@ -82,9 +82,14 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   /// sent.
   final Map<String, Map<String, Object?>> people = {};
 
-  /// A future that the reads of the device wait for, as an SDK that does not
-  /// answer at once, or `null` for one that answers at once.
+  /// A future that the calls of the methods in [held] wait for before they
+  /// answer, as an SDK that does not answer at once, or `null` for one that
+  /// answers at once.
   Future<void>? hold;
+
+  /// The methods whose calls wait for [hold]: the reads of the device, unless
+  /// a test names others.
+  Set<String> held = {'isOptOut', 'getDistinctId'};
 
   int _anonymous = 1;
 
@@ -124,7 +129,7 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   @override
   Future<bool> isOptOut() async {
     calls.add(['isOptOut']);
-    await hold;
+    if (held.contains('isOptOut')) await hold;
     return optedOut;
   }
 
@@ -172,6 +177,7 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
     Map<String, Object>? userPropertiesSetOnce,
   }) async {
     calls.add(['capture', eventName, properties]);
+    if (held.contains('capture')) await hold;
     _record(eventName, properties);
     if (optedOut || eventName != r'$set') return;
     final unset = properties?[r'$unset'];
@@ -217,13 +223,14 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   @override
   Future<String> getDistinctId() async {
     calls.add(['getDistinctId']);
-    await hold;
+    if (held.contains('getDistinctId')) await hold;
     return distinctId;
   }
 
   @override
   Future<void> flush() async {
     calls.add(['flush']);
+    if (held.contains('flush')) await hold;
   }
 
   @override

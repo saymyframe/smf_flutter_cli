@@ -21,9 +21,11 @@
 // the device and the flavor of the build. The script copies the request and
 // runs the command that it was given for posthog, a test of the module that
 // asks the query API of PostHog for that event in the project of CI. Without
-// a project token, when PostHog did not start or while it collects nothing,
-// the check writes its verdict instead, smf_start_report_posthog there:
-// `failed: ` and the problem. A release build writes neither, since the
+// a project token, when PostHog did not start, while it collects nothing or
+// when PostHog does not answer one of its calls within a second, the check
+// writes its verdict instead, smf_start_report_posthog there: `failed: `
+// and the problem. So it never waits for PostHog for good, and the script
+// gets a request or a verdict. A release build writes neither, since the
 // script reads no file of one. Each file is written next to its place and
 // renamed, so that it is there only whole. Neither file has the token.
 import 'dart:async';
@@ -42,7 +44,8 @@ import 'package:{{app_name}}/core/env/app_env.dart';
 /// the names of its files and of the answer that the script is given.
 const String exchangeName = 'posthog';
 
-/// How long the probe waits for each read of PostHog.
+/// How long the probe, and the check that it starts, wait for each answer
+/// of PostHog.
 const Duration readWait = Duration(seconds: 1);
 
 /// The check of the event that the probe started, if it started one.
@@ -139,7 +142,8 @@ List<String> problemsOf({
 /// request of the check into [directory], or into [exchangeDirectory]
 /// without one. Returns what it wrote: the request, or the verdict
 /// `failed: ` and the problem when the app has no project token, PostHog did
-/// not start or it collects nothing, which it writes in place of a request.
+/// not start, it collects nothing or it did not answer a call of the check
+/// within [readWait], which it writes in place of a request.
 ///
 /// A [release] build writes nothing and returns `null`, since the script of
 /// CI reads no file of one.
@@ -160,16 +164,23 @@ Future<String?> checkDelivery({
       problem = 'PostHog did not start with the POSTHOG_PROJECT_TOKEN of this '
           'build, so no event reaches it: initPostHogAnalytics() failed, as '
           'the log of the app tells.';
-    } else if (await Posthog().isOptOut()) {
+    } else if (await _answer(
+        'whether it is opted out', () => Posthog().isOptOut())) {
       problem = 'PostHog collects nothing on this device, so the event of the '
           'check would reach nobody: the app collects nothing before its code '
           'chose, or its code turned collection off.';
     } else {
       final nonce = _nonce();
-      await const PostHogAnalyticsService()
-          .logEvent('smf_start_check', parameters: {'smf_check': nonce});
-      await Posthog().flush();
-      final distinctId = await Posthog().getDistinctId();
+      await _answer(
+        'it to record the event',
+        () => const PostHogAnalyticsService()
+            .logEvent('smf_start_check', parameters: {'smf_check': nonce}),
+      );
+      await _answer('it to send the event at once', () => Posthog().flush());
+      final distinctId = await _answer(
+        'for the distinct id of the user',
+        () => Posthog().getDistinctId(),
+      );
       if (distinctId.isEmpty) {
         problem = 'PostHog has no distinct id for the user of the device, so '
             'the event of the check cannot be found.';
@@ -181,6 +192,9 @@ Future<String?> checkDelivery({
         });
       }
     }
+  } on _NoAnswer catch (noAnswer) {
+    problem = 'PostHog did not answer within a second when the check asked '
+        '${noAnswer.what}.';
   } on Object catch (error) {
     problem = 'the check threw ${'$error'.trim().split('\n').first}';
   }
@@ -199,6 +213,20 @@ Future<String?> checkDelivery({
     debugPrint('The check of PostHog wrote nothing: $error');
     return null;
   }
+}
+
+/// What [call] of PostHog answers, which the check waits for at most
+/// [readWait]: throws a [_NoAnswer] with [what] the check asked once that
+/// time is over.
+Future<T> _answer<T>(String what, Future<T> Function() call) =>
+    call().timeout(readWait, onTimeout: () => throw _NoAnswer(what));
+
+/// That PostHog did not answer within [readWait] when the check asked [what].
+final class _NoAnswer implements Exception {
+  const _NoAnswer(this.what);
+
+  /// What the check asked PostHog, such as `whether it is opted out`.
+  final String what;
 }
 
 /// 32 random hexadecimal digits.

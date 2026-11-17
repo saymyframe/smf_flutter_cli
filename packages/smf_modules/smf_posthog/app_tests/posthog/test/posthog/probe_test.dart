@@ -6,9 +6,10 @@
 // debug build with a token and collection on, the check of the probe records
 // an event through the service of the module, has PostHog send it at once
 // and writes a request with its nonce, the distinct id and the flavor, which
-// the answer of CI looks up in PostHog; without a token, or while PostHog
-// collects nothing, it writes its verdict in place of a request; a release
-// build writes neither, and no file has the token. The probe starts its check
+// the answer of CI looks up in PostHog; without a token, while PostHog
+// collects nothing, or when PostHog does not answer one of its calls within
+// a second, it writes its verdict in place of a request; a release build
+// writes neither, and no file has the token. The probe starts its check
 // once in a run of the app, in the temporary directory of the app, so the
 // test gives it a directory of its own first, and runs checkDelivery with one
 // of its own too.
@@ -125,7 +126,9 @@ void main() {
     });
 
     tearDown(() async {
-      postHogDevice.hold = null;
+      postHogDevice
+        ..hold = null
+        ..held = {'isOptOut', 'getDistinctId'};
       await service.setAnalyticsCollectionEnabled(_collectedFromFirstStart);
       postHogDevice.events.clear();
     });
@@ -226,6 +229,52 @@ void main() {
 
       expect(files(), isEmpty);
       expect(_checks, isEmpty);
+    });
+
+    test(
+        'the check waits for each answer of PostHog at most a second, and '
+        'writes its verdict when one does not come', () async {
+      await service.setAnalyticsCollectionEnabled(true);
+      postHogDevice.hold = Completer<void>().future;
+      const methods = ['isOptOut', 'capture', 'flush', 'getDistinctId'];
+      final verdicts = <String?>[];
+
+      for (final method in methods) {
+        postHogDevice.held = {method};
+        verdicts.add(
+          await checkDelivery(
+            directory: Directory('${directory.path}/$method')..createSync(),
+            release: false,
+          ).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => 'no verdict after 5 seconds',
+          ),
+        );
+      }
+
+      expect(
+        verdicts,
+        [
+          'failed: PostHog did not answer within a second when the check '
+              'asked whether it is opted out.',
+          'failed: PostHog did not answer within a second when the check '
+              'asked it to record the event.',
+          'failed: PostHog did not answer within a second when the check '
+              'asked it to send the event at once.',
+          'failed: PostHog did not answer within a second when the check '
+              'asked for the distinct id of the user.',
+        ],
+        reason: 'The check never waits for PostHog for good, so the script of '
+            'CI gets a verdict rather than waiting until its time is over.',
+      );
+      for (final method in methods) {
+        expect(
+          File('${directory.path}/$method/smf_start_report_posthog')
+              .readAsStringSync(),
+          startsWith('failed: PostHog did not answer within a second'),
+          reason: method,
+        );
+      }
     });
 
     test(
