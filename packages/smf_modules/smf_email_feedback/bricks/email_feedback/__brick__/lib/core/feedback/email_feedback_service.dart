@@ -54,8 +54,9 @@ final class EmailFeedbackService implements FeedbackService {
     if (!has && kDebugMode && !_printed) {
       _printed = true;
       debugPrint(
-        '{{address_key}} in .env is empty or no email address, '
-        'so "Write to us" hides: see "{{values_heading}}" in the README.',
+        '{{address_key}} in .env is empty or no email address, so '
+        'the app does not offer the way to write: appFeedback.available '
+        'is false. See "{{values_heading}}" in the README.',
       );
     }
     return has;

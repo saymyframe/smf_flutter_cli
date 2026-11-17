@@ -519,6 +519,25 @@ void main() {
       );
     });
 
+    test(
+        'prints in a debug build without an address which key to fill in, '
+        'in words that hold with a settings screen and without one', () {
+      for (final rendered in [app, localized]) {
+        expect(
+          rendered.files[serviceFile]!.text,
+          contains(
+            "'EMAIL_FEEDBACK_ADDRESS in .env is empty or no email address, so "
+            "'\n"
+            "        'the app does not offer the way to write: "
+            "appFeedback.available '\n"
+            "        'is false. See \"${EnvRole.readmeHeading}\" in the "
+            "README.',",
+          ),
+        );
+        expect(_codeIn(rendered, serviceFile), isNot(contains('Write to us')));
+      }
+    });
+
     test('has url_launcher only in the file of the service', () {
       expect(
         [
@@ -543,7 +562,8 @@ void main() {
           readmeSection,
           allOf(
             contains('as the section "${FeedbackRole.readmeHeading}" tells'),
-            contains('as the section "${EnvRole.readmeHeading}" says'),
+            contains('the section "${EnvRole.readmeHeading}" leads to how the '
+                'values of `${EnvRole.dotEnvFile}` get into the app'),
           ),
         );
         expect(
@@ -573,8 +593,8 @@ void main() {
           allOf([
             contains('The address goes into the app, where anyone can read '
                 'it, so use an address for support with a filter of spam'),
-            contains('Until it has one, the app does not offer the way to '
-                'write'),
+            contains('Until it has an address, the app does not offer the '
+                'way to write'),
             contains('which the flavor for a release leaves out'),
             contains('so a space is `%20` and never `+`'),
             contains('no `<queries>` in the manifest of Android and no '
@@ -593,6 +613,70 @@ void main() {
             ('package_info_plus', 'https://pub.dev/packages/package_info_plus'),
             ('device_info_plus', 'https://pub.dev/packages/device_info_plus'),
           ],
+        );
+      });
+
+      test(
+          'tells of the row "Write to us" only for an app with a settings '
+          'screen, and of the texts of the app only for an app with '
+          'localization, as the plain app and the localized app have them', () {
+        for (final (rendered, name, l10n) in [
+          (app, 'the plain app', false),
+          (localized, 'the localized app', true),
+        ]) {
+          expect(
+            rendered.files[AppEntryRole.readmeFile]!.text,
+            contains('\n## $readmeHeading\n\n$readmeSection'),
+            reason: name,
+          );
+          expect(
+            rendered.files,
+            isNot(contains(FeedbackRole.settingFile)),
+            reason: 'In $name, no row "Write to us" can hide.',
+          );
+          for (final path in [serviceFile, sheetFile]) {
+            expect(
+              _codeIn(rendered, path).contains('context.l10n.emailFeedback'),
+              l10n,
+              reason: 'In $name, $path reads the texts of the module '
+                  '${l10n ? 'from the texts of the app' : 'as English '
+                      'literals'}.',
+            );
+          }
+        }
+        // Each sentence of the section that names the row or the texts of
+        // the app says for which apps it holds.
+        final sentences = readmeSection
+            .replaceAll('\n', ' ')
+            .split(RegExp(r'(?<=\.) (?=[A-Z`"])'));
+        expect(
+          [
+            for (final sentence in sentences)
+              if (sentence.contains('"Write to us"') ||
+                  sentence.contains('texts of the app') ||
+                  sentence.contains('languages of the app'))
+                sentence,
+          ],
+          [
+            'In an app with a settings screen, its row "Write to us" hides '
+                'then.',
+            'In an app with localization, they are texts of the app, which '
+                '`$serviceFile` and `$sheetFile` read from `context.l10n`: '
+                'change them where the provider of the localization keeps '
+                'the texts of the app, in each language.',
+            'In an app with a settings screen, tap "Write to us" there.',
+          ],
+        );
+        expect(
+          readmeSection,
+          allOf([
+            contains('In an app without one, `appFeedback.available` is '
+                'false, so hide your own button.'),
+            contains('In an app without it, they are the English texts in '
+                'those two files.'),
+            contains('In an app without one, tap your own button that calls '
+                '`appFeedback.open(context)`.'),
+          ]),
         );
       });
 

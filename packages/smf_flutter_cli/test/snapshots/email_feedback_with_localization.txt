@@ -344,13 +344,15 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
 
 ## Feedback by email
 
-"Write to us" opens a new mail to you in the mail app of the device, with [url_launcher](https://pub.dev/packages/url_launcher): `lib/core/feedback/email_feedback_service.dart` implements the feedback of the app on it, as the section "Feedback" tells. The mail goes to the address in `EMAIL_FEEDBACK_ADDRESS` of `.env`, such as `EMAIL_FEEDBACK_ADDRESS=support@example.com`. Until it has one, the app does not offer the way to write: the row "Write to us" hides, and a debug build prints which key to fill in. Then run the app again, as the section "Values in .env" says. The address goes into the app, where anyone can read it, so use an address for support with a filter of spam rather than your own.
+`appFeedback.open(context)` opens a new mail to you in the mail app of the device, with [url_launcher](https://pub.dev/packages/url_launcher): `lib/core/feedback/email_feedback_service.dart` implements the feedback of the app on it, as the section "Feedback" tells. The mail goes to the address in `EMAIL_FEEDBACK_ADDRESS` of `.env`, such as `EMAIL_FEEDBACK_ADDRESS=support@example.com`, and the section "Values in .env" leads to how the values of `.env` get into the app. Until it has an address, the app does not offer the way to write, and a debug build prints which key to fill in. In an app with a settings screen, its row "Write to us" hides then. In an app without one, `appFeedback.available` is false, so hide your own button. The address goes into the app, where anyone can read it, so use an address for support with a filter of spam rather than your own.
 
-The subject of the mail is "Feedback: " and `emailFeedbackAppName`, the name of the app in `lib/core/feedback/email_feedback_mail.dart`, the same in every flavor, so a filter of your mail finds it. The body leaves room for the message, then tells the name, the version and the build number of the app from [package_info_plus](https://pub.dev/packages/package_info_plus), the flavor of the build, which the flavor for a release leaves out, and the system and the model of the device from [device_info_plus](https://pub.dev/packages/device_info_plus). The user sees all of it and may change it before sending. `emailFeedbackLink()` in that file encodes each part as RFC 6068 asks, so a space is `%20` and never `+`.
+The subject of the mail is "Feedback: " in the language of the app and `emailFeedbackAppName`, the name of the app in `lib/core/feedback/email_feedback_mail.dart`, the same in every flavor, so a filter of your mail finds it. The body leaves room for the message, then tells the name, the version and the build number of the app from [package_info_plus](https://pub.dev/packages/package_info_plus), the flavor of the build, which the flavor for a release leaves out, and the system and the model of the device from [device_info_plus](https://pub.dev/packages/device_info_plus). The user sees all of it and may change it before sending. `emailFeedbackLink()` in that file encodes each part as RFC 6068 asks, so a space is `%20` and never `+`.
 
-The app asks the device nothing before it opens the mail, so it needs no `<queries>` in the manifest of Android and no `LSApplicationQueriesSchemes` in `Info.plist`. Where no mail app opens the mail, such as on the iOS simulator, which has no Mail, or on an Android emulator without a mail app, a sheet shows the address with a button that copies it (`lib/core/feedback/email_feedback_sheet.dart`). The texts of the mail and of the sheet are texts of the module, in the files of the languages of the app.
+The app asks the device nothing before it opens the mail, so it needs no `<queries>` in the manifest of Android and no `LSApplicationQueriesSchemes` in `Info.plist`. Where no mail app opens the mail, such as on the iOS simulator, which has no Mail, or on an Android emulator without a mail app, a sheet shows the address with a button that copies it (`lib/core/feedback/email_feedback_sheet.dart`).
 
-To see the mail, run the app on an iPhone, or on an Android device or emulator with a mail app and an account in it, such as Gmail, and tap "Write to us".
+The texts of the mail and of the sheet are texts of the module. In an app with localization, they are texts of the app, which `lib/core/feedback/email_feedback_service.dart` and `lib/core/feedback/email_feedback_sheet.dart` read from `context.l10n`: change them where the provider of the localization keeps the texts of the app, in each language. In an app without it, they are the English texts in those two files.
+
+To see the mail, run the app on an iPhone, or on an Android device or emulator with a mail app and an account in it, such as Gmail. In an app with a settings screen, tap "Write to us" there. In an app without one, tap your own button that calls `appFeedback.open(context)`.
 
 What the mail tells about the app and the device is read on the device, and leaves it only in a mail that the user sends from their own mail app: the app itself sends nothing.
 
@@ -1428,8 +1430,9 @@ final class EmailFeedbackService implements FeedbackService {
     if (!has && kDebugMode && !_printed) {
       _printed = true;
       debugPrint(
-        'EMAIL_FEEDBACK_ADDRESS in .env is empty or no email address, '
-        'so "Write to us" hides: see "Values in .env" in the README.',
+        'EMAIL_FEEDBACK_ADDRESS in .env is empty or no email address, so '
+        'the app does not offer the way to write: appFeedback.available '
+        'is false. See "Values in .env" in the README.',
       );
     }
     return has;

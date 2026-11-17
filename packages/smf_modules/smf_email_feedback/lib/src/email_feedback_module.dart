@@ -15,7 +15,8 @@ import 'package:smf_email_feedback/src/readme.dart';
 /// service in [serviceFile]:
 /// - the mail goes to the address in [addressKey] of `.env`, a key of the
 ///   module, which the developer fills in by hand ([addressStep]). Without
-///   an address the service is not available, so the entry hides;
+///   an address the service is not available, so the app does not offer the
+///   way to write;
 /// - its subject is "Feedback: " and the name of the app, in the language of
 ///   the app, and its body leaves room for the message, then tells the
 ///   name, the version, the build number and the flavor of the app, from
