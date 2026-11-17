@@ -76,8 +76,8 @@ void main() {
       expect(
         hanging,
         [
-          'A fetch of Firebase Remote Config did not end within '
-              '0:00:00.200000. $needs',
+          'A fetch of Firebase Remote Config did not end within 200 ms. '
+              '$needs',
         ],
         reason: 'The probes of the start check share a minute, so the probe '
             'waits for a fetch only as long as it says.',

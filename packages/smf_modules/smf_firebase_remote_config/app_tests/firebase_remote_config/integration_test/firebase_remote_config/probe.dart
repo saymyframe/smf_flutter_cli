@@ -95,7 +95,8 @@ Future<List<String>> problemsOfFetch({
     await createRemoteConfigService().fetch().timeout(timeout);
   } on TimeoutException {
     return [
-      'A fetch of Firebase Remote Config did not end within $timeout. $needs',
+      'A fetch of Firebase Remote Config did not end within '
+          '${_timeOf(timeout)}. $needs',
     ];
   } on Object catch (error) {
     return [

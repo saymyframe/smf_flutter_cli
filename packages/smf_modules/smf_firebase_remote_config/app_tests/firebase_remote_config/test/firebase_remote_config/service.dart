@@ -28,13 +28,6 @@ final String? withoutParameters = RemoteValues.defaults.isEmpty
         'starts asking with its first parameter.'
     : null;
 
-/// Why a test of an app without parameters is skipped in an app with them,
-/// or `null` in an app without them.
-final String? withParameters = RemoteValues.defaults.isEmpty
-    ? null
-    : 'The app has parameters of remote config, so it follows the values '
-        'that the project publishes.';
-
 /// A text that the type of the default [fallback] of a parameter of the app
 /// takes, which differs from the text of the default.
 String publishedTextOf(Object fallback) => switch (fallback) {
