@@ -155,7 +155,7 @@ Map<String, MethodDeclaration> _methodsOf(CompilationUnit unit, String name) {
 
 /// The doc comment of [declaration] as one line of text, without its `///`.
 String _docOf(AnnotatedNode declaration) => [
-      for (final token in declaration.documentationComment?.tokens ?? const [])
+      for (final token in [...?declaration.documentationComment?.tokens])
         token.lexeme.replaceFirst(RegExp(r'^///\s?'), ''),
     ].join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
 
