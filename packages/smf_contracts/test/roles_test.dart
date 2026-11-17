@@ -22,6 +22,7 @@ const List<Role> _roles = [
   purchasesRole,
   restRole,
   remoteConfigRole,
+  reviewRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -67,6 +68,7 @@ void main() {
       'purchases role',
       'REST API role',
       'remote config role',
+      'store reviews role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -177,6 +179,16 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
+    });
+    // The app counts its launches and remembers its last request for a
+    // review in the preferences, and the App Store ID is a value of the
+    // app. The guards of the routes keep the request out of their flows,
+    // and the template gives the settings screen an entry that opens the
+    // page of the app in its store, with texts in the language of the app.
+    expect(shape(reviewRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'preferences', 'env'},
+      'uses': {'router', 'settings_screen', 'localization'},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -331,6 +343,7 @@ void main() {
           'purchases',
           'rest',
           'remote_config',
+          'review',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -553,6 +566,12 @@ void main() {
         'analytics_collected_from_first_start',
         'remote_config_defaults',
         'remote_config_getters',
+        'launches_key',
+        'first_launch_key',
+        'asked_at_key',
+        'asked_version_key',
+        'google_play_id',
+        'guard_flows',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};

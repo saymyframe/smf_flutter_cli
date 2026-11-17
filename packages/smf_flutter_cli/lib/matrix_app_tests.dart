@@ -1658,6 +1658,76 @@ Future<MatrixAppTest> purchasesDeviceAppTest() async => MatrixAppTest(
       roles: {purchasesRole},
     );
 
+/// The test of the review role that the CLI keeps in its
+/// `app_tests/review_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them:
+/// - controllers of the test over the preferences of the app, each with a
+///   clock of its own and a service of the test that scripts what a
+///   provider answers: no review is due before the third launch of the app,
+///   nor before three days have passed since its first launch; the app asks
+///   once a version, and not again within 14 days, also in a new version; a
+///   request that the store does not take saves nothing, nor does one in an
+///   unknown version; two calls at once make one request; a time that is
+///   to come, after the clock of the device went back, counts as recent;
+///   and the next launch counts one more launch and keeps the rest;
+/// - the pages of the app in its store: on Android the Google Play page of
+///   the id of the flavor for a release, also in the build of another
+///   flavor, and on iOS the App Store page of an App Store ID of digits,
+///   which `appReview` reads from `.env`, and none without one; opening a
+///   page gives the service exactly that page;
+/// - a launch of the app counts itself, and asks for no review on its own,
+///   also a launch through `main()` on which a review is due, once its first
+///   screen is shown: the app asks only where its code calls
+///   `appReview.requestIfDue()`;
+/// - `appReview.requestIfDue()` over the service of the provider, on a
+///   launch on which a review is due, asks the store at once, and the app
+///   saves the request once the store took it;
+/// - the provider shows nothing of its own around the review dialog: no new
+///   text and no new modal barrier, and neither does a request of
+///   `appReview`.
+///
+/// The test knows only the role. It relies on the convention of the mocks of
+/// every provider, which the role writes down: the store of the device can
+/// show its dialog, a request completes at once and shows nothing, and the
+/// version of the app is `1.0.0`. The matrix fills in the keys of the role
+/// and what the ids of the flavors of the app entry add to the id of the
+/// app, which the roles publish. Its probe, `probeReview()` of
+/// `integration_test/review_role/probe.dart`, only reads, for the start
+/// check on a device: the service of the provider tells within five seconds
+/// whether the store can show its dialog, which it may not, and the launch
+/// counted itself, with the time of the first launch, which is not to come,
+/// and asked for no review on a first launch. The test runs the probe too.
+Future<MatrixAppTest> reviewRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/review_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(reviewRole) &&
+          (among?.call(app) ?? true),
+      values: _reviewValuesOf,
+      roles: {reviewRole},
+      startProbe: const MatrixStartProbe(
+        'integration_test/review_role/probe.dart',
+        'probeReview',
+      ),
+    );
+
+/// The values of the files of the test of the review role, the same in
+/// every app: the keys of the role, and `flavor_suffixes`, what the ids of
+/// the flavors of the app entry add to the id of the app, but for the flavor
+/// for a release, separated by commas.
+Map<String, String> _reviewValuesOf(MatrixApp app) => {
+      'launches_key': ReviewRole.launchesKey,
+      'first_launch_key': ReviewRole.firstLaunchKey,
+      'asked_at_key': ReviewRole.askedAtKey,
+      'asked_version_key': ReviewRole.askedVersionKey,
+      'flavor_suffixes': [
+        for (final flavor in AppEntryRole.flavors)
+          if (flavor.idSuffix.isNotEmpty) flavor.idSuffix,
+      ].join(','),
+    };
+
 /// The test of the env role that the CLI keeps in its `app_tests/env_role`,
 /// for the apps with the role that have keys, whichever module provides the
 /// role, that [among] accepts, or all of them: for each key of

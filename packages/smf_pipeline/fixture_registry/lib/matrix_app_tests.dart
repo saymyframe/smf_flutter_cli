@@ -17,8 +17,9 @@ import 'package:smf_flutter_cli/matrix_app_tests.dart';
 /// role, the app entry role, whose provider builds the root that follows
 /// the theme mode and shows the screen of a failed start, the auth role,
 /// the onboarding screen role, the notifications role, the push role, the
-/// purchases role, the env role, the REST role, the remote config role and
-/// the analytics role, whose providers keep the setting of collection.
+/// purchases role, the env role, the REST role, the remote config role, the
+/// review role and the analytics role, whose providers keep the setting of
+/// collection.
 ///
 /// They select the apps with a provider of a role by the roles of the app,
 /// whichever module provides it, and name the fixture modules whose files
@@ -456,6 +457,34 @@ Future<MatrixAppTests> fixtureAppTests() async {
       // purchases alone, with the texts of the app and without them, since
       // every app with every module has the fixture sign-in.
       await purchasesDeviceAppTest(),
+      // The reviews of the apps with the review role, whichever module
+      // provides it, the test that the CLI keeps: only in the apps with
+      // every module, which run flutter test for other tests already.
+      // There the fixture reviews provide the role, next to the fixture
+      // preferences and the fixture values of .env, which the role
+      // requires.
+      await reviewRoleAppTest(among: (app) => app.everyModuleWith != null),
+      // No review is due while the user is in the flow of a guard of the
+      // routes, whichever modules provide the router and the review role:
+      // while a gate of the fixture gates does not allow, and while the
+      // target of the guard of the badge, which stands for a condition, is
+      // open over a page, the router telling the listener of the screen
+      // that the template of the review role gives it; and the app asks
+      // once out of every flow. So the test is one of the router role too.
+      // Only in the apps with every module that have the gates, which run
+      // flutter test for other tests already, and whose tests of the
+      // review role, of router_screens, of router_guards and of
+      // router_conditions it uses the helpers of.
+      MatrixAppTest(
+        '$appTests/review_flows',
+        appliesTo: (app) =>
+            app.everyModuleWith != null &&
+            app.hook!.presentRoles.contains(reviewRole) &&
+            _hearsScreens(app) &&
+            _hasGates(app) &&
+            app.modules.contains(const ModuleId('fake_second')),
+        roles: {reviewRole, routerRole},
+      ),
       // The values of .env in the apps with the env role whose modules give
       // the role keys, whichever module provides it, the test that the CLI
       // keeps: only in the apps with every module, which run flutter test
@@ -556,6 +585,7 @@ Future<MatrixAppTests> fixtureAppTests() async {
       envRole,
       restRole,
       remoteConfigRole,
+      reviewRole,
       analyticsRole,
     },
   );

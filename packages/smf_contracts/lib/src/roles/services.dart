@@ -14,6 +14,8 @@ import 'package:smf_contracts/bundles/push_role_bundle.dart';
 import 'package:smf_contracts/bundles/remote_config_role_bundle.dart';
 import 'package:smf_contracts/bundles/rest_role_bundle.dart';
 import 'package:smf_contracts/bundles/rest_role_session_bundle.dart';
+import 'package:smf_contracts/bundles/review_role_bundle.dart';
+import 'package:smf_contracts/bundles/review_role_setting_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/brick_templates.dart';
 import 'package:smf_contracts/src/roles/contributors.dart';
@@ -29,13 +31,14 @@ part 'services/purchases.dart';
 part 'services/push.dart';
 part 'services/remote_config.dart';
 part 'services/rest.dart';
+part 'services/review.dart';
 
 /// The implementation of a service role that a provider contributes as its
 /// data, such as the Firebase implementation of `AnalyticsService`.
 ///
 /// The service roles are [eventsRole], [preferencesRole], [analyticsRole],
 /// [crashReportingRole], [authRole], [notificationsRole], [pushRole],
-/// [purchasesRole], [restRole] and [remoteConfigRole].
+/// [purchasesRole], [restRole], [remoteConfigRole] and [reviewRole].
 /// Each generates the interface of its service and a factory that returns
 /// the implementation, or, for a role with many providers, one service that
 /// forwards every call to all of them. Every provider contributes exactly
@@ -53,13 +56,13 @@ part 'services/rest.dart';
 /// The factory takes no services: the services work without a DI
 /// container. The role registers its service in the DI container when one
 /// is present, but for the [authRole], the [notificationsRole], the
-/// [pushRole], the [purchasesRole], the [restRole] and the
-/// [remoteConfigRole], which register nothing: the code of an app does not
-/// use the service of their provider, only the controller that the role
+/// [pushRole], the [purchasesRole], the [restRole], the [remoteConfigRole]
+/// and the [reviewRole], which register nothing: the code of an app does
+/// not use the service of their provider, only the controller that the role
 /// generates over it, the session of [AuthRole], the notifications of
 /// [NotificationsRole], the push messages of [PushRole], the purchases of
-/// [PurchasesRole], the client of [RestRole] and the values of remote config
-/// of [RemoteConfigRole].
+/// [PurchasesRole], the client of [RestRole], the values of remote config of
+/// [RemoteConfigRole] and the reviews of [ReviewRole].
 ///
 /// A role that an app can have several providers of creates each
 /// implementation on its own: one whose factory throws, or whose
@@ -478,7 +481,7 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
         ),
         if (bootstrap(hasAsync: asynchronous.isNotEmpty) case final code?)
           SocketContribution.code(
-            AppEntryRole.bootstrapPlatform,
+            _bootstrapSocket,
             Fragment(code, imports: [import]),
             when: _bootstrapWhen(input),
           ),
@@ -486,10 +489,15 @@ abstract base class _ServiceTemplate<D extends Object> extends RoleTemplate<D> {
     );
   }
 
-  /// The code of the platform phase of `bootstrap()`, or `null` if the role
-  /// needs none.
+  /// The code of `bootstrap()` that starts the role, in the phase of
+  /// [_bootstrapSocket], or `null` if the role needs none.
   String? bootstrap({required bool hasAsync}) =>
       hasAsync ? 'await $initFunction();' : null;
+
+  /// The phase of `bootstrap()` in which the code of [bootstrap] runs: the
+  /// platform phase, unless the start of the role needs the services of the
+  /// app, which are ready in the last phase.
+  SocketRef<CodeSocket> get _bootstrapSocket => AppEntryRole.bootstrapPlatform;
 
   /// The roles in the condition of the code of [bootstrap] in the app of
   /// [input], each one that the app has: none, unless the start of the role
