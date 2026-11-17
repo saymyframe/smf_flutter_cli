@@ -342,8 +342,6 @@ final class FakePreferences implements AppPreferences {
 }
 ''';
 
-/// What the scripts for the test app share. `pump` lets what is on its way
-/// happen, `failureOf` tells what a call fails with, and `shown` a tap.
 /// Reads the function through which the state manager of the app follows
 /// the value, and sends back whether it returns the same listenable at each
 /// call, and whether that is `appNotifications.permission`.
@@ -356,6 +354,8 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// What the scripts for the test app share. `pump` lets what is on its way
+/// happen, `failureOf` tells what a call fails with, and `shown` a tap.
 const _notes = r'''
 import 'dart:async';
 import 'dart:isolate';

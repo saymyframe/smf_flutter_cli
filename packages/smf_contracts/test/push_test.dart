@@ -381,9 +381,6 @@ final class FakePreferences implements AppPreferences {
 }
 ''';
 
-/// What the scripts for the test app share. `pump` lets what is on its way
-/// happen, `start` starts the app as `bootstrap()` does, `shown` tells a
-/// message, and `shownNotification` a notification that the app showed.
 /// Reads the function through which the state manager of the app follows
 /// the value, and sends back whether it returns the same listenable at each
 /// call, and whether that is `appPush.address`.
@@ -396,6 +393,9 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// What the scripts for the test app share. `pump` lets what is on its way
+/// happen, `start` starts the app as `bootstrap()` does, `shown` tells a
+/// message, and `shownNotification` a notification that the app showed.
 const _notes = r'''
 import 'dart:async';
 import 'dart:convert';

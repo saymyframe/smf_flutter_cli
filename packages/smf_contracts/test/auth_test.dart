@@ -609,13 +609,6 @@ const credential = IdTokenCredential(
 );
 ''';
 
-/// Goes through the life of the session of the app, with the session and
-/// the functions that the role generates: a first launch, sign-up,
-/// sign-out, sign-in, the next launch, a password reset and the deletion
-/// of the account. After each step it notes the session with its two
-/// flags, the calls that reached the provider, and what the listeners of
-/// the session and of each flag found when they were called.
-
 /// Reads the function through which the state manager of the app follows
 /// the value, and sends back whether it returns the same listenable at each
 /// call, and whether that is appSession.
@@ -628,6 +621,12 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Goes through the life of the session of the app, with the session and
+/// the functions that the role generates: a first launch, sign-up,
+/// sign-out, sign-in, the next launch, a password reset and the deletion
+/// of the account. After each step it notes the session with its two
+/// flags, the calls that reached the provider, and what the listeners of
+/// the session and of each flag found when they were called.
 const _life = r'''
 Future<void> main(List<String> arguments, SendPort port) async {
   final heard = <String>[];

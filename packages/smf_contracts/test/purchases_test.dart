@@ -300,8 +300,6 @@ final class FakeAuth implements AuthService {
 }
 ''';
 
-/// What the scripts for the test app share. `pump` lets what is on its way
-/// happen, `show` tells an access, and `failureOf` the failure of a call.
 /// Reads the function through which the state manager of the app follows
 /// the value, and sends back whether it returns the same listenable at each
 /// call, and whether that is appPurchases.
@@ -314,6 +312,8 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// What the scripts for the test app share. `pump` lets what is on its way
+/// happen, `show` tells an access, and `failureOf` the failure of a call.
 const _notes = r'''
 import 'dart:async';
 import 'dart:isolate';
