@@ -41,9 +41,12 @@ void main() {
     loggedAnalyticsCalls.clear();
   });
 
-  tearDown(() {
+  tearDown(() async {
     serviceLogFailure = ServiceLogFailure.none;
     serviceLogChangesParameters = false;
+    // A test may turn collection off, which a provider may also keep in
+    // memory, and the next test logs events again.
+    await createAnalyticsService().setAnalyticsCollectionEnabled(true);
   });
 
   test(

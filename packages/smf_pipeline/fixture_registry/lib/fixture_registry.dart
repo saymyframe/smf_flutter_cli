@@ -87,6 +87,7 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeNotificationsModule(),
       const FakePushModule(),
       const FakePurchasesModule(),
+      const FakeReviewModule(),
       const FakeEnvModule(),
       const FakeEnvUserModule(),
       const FakeRestModule(),
@@ -102,7 +103,8 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeClockBadgeModule(),
       const FakeClockUserModule(),
       const BottomTabsModule(),
-      // Last, so its start-up runs last in the late phase of the start-up.
+      // Last, so its start-up runs after that of every other module in the
+      // late phase of the start-up.
       const FakeStartFailureModule(),
     ];
 
@@ -147,6 +149,7 @@ List<ModuleId> everyFixture({
       FakeNotificationsModule.id,
       FakePushModule.id,
       FakePurchasesModule.id,
+      FakeReviewModule.id,
       FakeEnvModule.id,
       FakeEnvUserModule.id,
       FakeRestModule.id,
@@ -158,8 +161,8 @@ List<ModuleId> everyFixture({
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
-      // Last, so its start-up runs last in the late phase of the start-up,
-      // after crash reporting has started.
+      // Last, so its start-up runs after that of every other module in the
+      // late phase of the start-up, after crash reporting has started.
       FakeStartFailureModule.id,
     ];
 

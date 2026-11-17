@@ -250,16 +250,29 @@ class WayOfTestIcon extends StatelessWidget {
 }
 
 /// The apps with every module of the matrix of the CLI: one for each state
-/// manager, and each once more for each other mode of the auth role, which
-/// Firebase Authentication provides there.
+/// manager, and each once more for each other combination of the mode of
+/// the auth role, which Firebase Authentication provides there, and of the
+/// collection of the analytics role.
 const _everyModule = [
   'every module (bloc)',
   'every module (riverpod)',
+  'every module (bloc) --analytics-collection=off',
   'every module (bloc) --auth-mode=guest',
+  'every module (bloc) --auth-mode=guest --analytics-collection=off',
   'every module (bloc) --auth-mode=anonymous',
+  'every module (bloc) --auth-mode=anonymous --analytics-collection=off',
+  'every module (riverpod) --analytics-collection=off',
   'every module (riverpod) --auth-mode=guest',
+  'every module (riverpod) --auth-mode=guest --analytics-collection=off',
   'every module (riverpod) --auth-mode=anonymous',
+  'every module (riverpod) --auth-mode=anonymous --analytics-collection=off',
 ];
+
+/// The app of Firebase Analytics that collects nothing before its code
+/// chose, the other value of the mode option of the analytics role, with the
+/// DI container and the router, since the role uses both.
+const _analyticsOff = 'analytics by firebase_analytics with di, router '
+    '--analytics-collection=off';
 
 /// The apps of Firebase Authentication in the other modes of the auth role,
 /// with the router and the localization, since the role uses both.
@@ -1173,6 +1186,41 @@ void main() {
   });
 
   test(
+      'the test of firebase_analytics applies to the apps with the module, '
+      'whatever else they have, reads the native projects with package:xml, '
+      'and gets whether the app collects from its first start from the '
+      'choice of the analytics role', () {
+    final analytics = named('firebase_analytics');
+
+    expect(
+      {
+        for (final app in apps)
+          if (analytics.appliesTo(app)) app.name: analytics.values!(app),
+      },
+      {
+        for (final name in const [
+          'firebase_analytics with di, router',
+          'firebase_analytics with di',
+          'firebase_analytics with router',
+          'firebase_analytics',
+          _analyticsOff,
+          ..._everyModule,
+        ])
+          name: {
+            'collected_from_first_start':
+                '${!name.contains('--analytics-collection=off')}',
+            'android_manifest': AppEntryRole.androidManifestFile,
+            'info_plist': AppEntryRole.infoPlistFile,
+          },
+      },
+    );
+    expect(analytics.devDependencies, ['xml']);
+    // It reads the choice of the role, not the name or the options of an
+    // app.
+    expect(MatrixAppTests([analytics]).modeProblems(apps), isEmpty);
+  });
+
+  test(
       'the test of the events role applies to the apps with the role, or to '
       'those of them that it is given', () async {
     bool hasEvents(MatrixApp app) =>
@@ -1894,6 +1942,7 @@ void main() {
         'firebase_crashlytics with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
+        _analyticsOff,
         ..._everyModule,
       ],
     );
@@ -3947,6 +3996,7 @@ void main() {
         // start the app.
         'firebase_analytics with di, router': '/',
         'firebase_analytics with router': '/',
+        _analyticsOff: '/',
         // The start screen of home.
         for (final app in _everyModule) app: 'home.home',
       },
@@ -4152,10 +4202,8 @@ void main() {
           name: 'required',
         for (final name in _authModes) name: name.split('--auth-mode=').last,
         for (final name in _everyModule)
-          name: switch (name.split('--auth-mode=')) {
-            [_, final mode] => mode,
-            _ => 'required',
-          },
+          name:
+              RegExp('--auth-mode=([a-z]+)').firstMatch(name)?[1] ?? 'required',
       },
     );
     expect(
@@ -4322,6 +4370,87 @@ void main() {
     );
     // Nobody can sign in on a device.
     expect(test.startProbe, isNull);
+  });
+
+  test(
+      'the test of the review role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and gets the keys of the role and what the ids of the flavors add to '
+      'the id of the app', () async {
+    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'review',
+          const [ModuleId('review')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {role, preferencesRole, envRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await reviewRoleAppTest();
+
+    expect(p.basename(test.directory), 'review_role');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    expect(test.roles, {reviewRole});
+    expect(test.appliesTo(appWith(reviewRole)), isTrue);
+    expect(test.appliesTo(appWith(notificationsRole)), isFalse);
+    // The keys of the role and the suffixes of the flavors that have one, as
+    // the roles publish them, the same in every app; the matrix writes no
+    // file for the test, which has no mocks either.
+    expect(test.values!(appWith(reviewRole)), {
+      'launches_key': ReviewRole.launchesKey,
+      'first_launch_key': ReviewRole.firstLaunchKey,
+      'asked_at_key': ReviewRole.askedAtKey,
+      'asked_version_key': ReviewRole.askedVersionKey,
+      'flavor_suffixes': '.dev,.staging',
+    });
+    expect(
+      test.values!(appWith(reviewRole))['flavor_suffixes']!.split(','),
+      [
+        for (final flavor in AppEntryRole.flavors)
+          if (flavor != AppEntryRole.releaseFlavor) flavor.idSuffix,
+      ],
+    );
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    // The probe that the start check runs on a device, a file of the test,
+    // which asks the script of CI for nothing.
+    expect(test.startProbe!.path, 'integration_test/review_role/probe.dart');
+    expect(test.startProbe!.function, 'probeReview');
+    expect(test.startProbe!.answer, isNull);
+    expect(
+      File(p.join(test.directory, test.startProbe!.path)).existsSync(),
+      isTrue,
+    );
+    // Every value that its files read is filled in.
+    final read = <String>{};
+    for (final file in Directory(test.directory)
+        .listSync(recursive: true)
+        .whereType<File>()) {
+      read.addAll([
+        for (final use
+            in RegExp(r'\{\{(\w+)\}\}').allMatches(file.readAsStringSync()))
+          use[1]!,
+      ]);
+    }
+    expect(read, {'app_name', ...test.values!(appWith(reviewRole)).keys});
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await reviewRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith(reviewRole)), isFalse);
+    expect(
+      everyModule.appliesTo(appWith(reviewRole, everyModuleWith: const [])),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(
+        appWith(notificationsRole, everyModuleWith: const []),
+      ),
+      isFalse,
+    );
   });
 
   test(
