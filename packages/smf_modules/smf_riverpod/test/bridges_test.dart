@@ -281,7 +281,8 @@ void main() {
           if (import.uri == 'package:flutter/foundation.dart')
             import.prefix ?? import.show.join(','),
       ],
-      ['state1', 'ValueListenable'],
+      // As ImportRef.merge orders them: the one without a prefix first.
+      ['ValueListenable', 'state1'],
     );
   });
 }
