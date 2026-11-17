@@ -321,7 +321,9 @@ void main() {
         'role, the remote config role and the review role, whose services are '
         'not for the code of the app', () {
       expect(
-        authRole.template.contribute(testContext).whereType<RoleData<Object>>(),
+        authRole.template
+            .contribute(testContext)
+            .whereType<RoleData<DiRegistration>>(),
         isEmpty,
       );
       for (final role in <Role>[

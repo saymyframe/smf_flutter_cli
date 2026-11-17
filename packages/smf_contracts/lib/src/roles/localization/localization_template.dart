@@ -92,6 +92,7 @@ final class _LocalizationTemplate extends RoleTemplate<TextsData> {
           _settingTexts,
           when: const {settingsScreenRole},
         ),
+        stateManagementRole.data(LocalizationRole.localeState),
         settingsScreenRole.data(
           const SettingsEntry(
             widget: TypeRef(

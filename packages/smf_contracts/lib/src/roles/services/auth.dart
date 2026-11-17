@@ -366,6 +366,23 @@ final class AuthRole extends Role<AuthData> {
   /// of the app uses.
   static const sessionFile = 'lib/core/auth/app_session.dart';
 
+  /// The session as an entry of the [StateManagementRole], which the
+  /// template gives the role: in an app with a state manager, a bridge of
+  /// the provider of that role follows `appSession`, through
+  /// `authSessionListenable()` of [sessionFile].
+  static const sessionState = SharedState(
+    'authSession',
+    listenable: FunctionRef(
+      'authSessionListenable',
+      import: ImportRef.app('core/auth/app_session.dart'),
+    ),
+    type: TypeRef(
+      'AppSession',
+      import: ImportRef.app('core/auth/app_session.dart'),
+    ),
+    description: 'Who uses the app; the calls of `appSession` change it.',
+  );
+
   /// The path of the file with `takeGuestData`, which the developer of the
   /// app edits.
   static const guestDataFile = 'lib/core/auth/guest_data.dart';
@@ -486,6 +503,9 @@ final class AuthRole extends Role<AuthData> {
   /// English text.
   @override
   Set<Role> get uses => {routerRole, localizationRole};
+
+  @override
+  Set<Role> get feeds => {stateManagementRole};
 
   @override
   List<SocketRef> get sockets => const [implementations];
@@ -1473,6 +1493,7 @@ final class _AuthTemplate extends _ServiceTemplate<AuthData> {
           role.description,
           AgentNote.ofRole(agentNote),
         ),
+        stateManagementRole.data(AuthRole.sessionState),
       ];
 
   /// The problems of the implementation and of the ways to sign in (see
