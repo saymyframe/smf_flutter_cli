@@ -4,8 +4,8 @@
 // (probe_test.dart): PostHog started exactly when the build of the app has a
 // project token, its SDK has the setting of collection that the app starts
 // with on a new install, and it has a distinct id for the user of the
-// device. Each read of PostHog waits at most a second, so the probe takes
-// less than two.
+// device. It reads PostHog twice at once, and each read waits at most a
+// second, so the probe takes little more than a second at worst.
 //
 // It uses no test framework. It also starts a check that outlives it and the
 // start check, once in a run of a debug build of the app: whether an event
@@ -62,10 +62,11 @@ Future<List<String>> probePostHog(Future<void> Function() settle) async {
   final hasToken = AppEnv.posthogProjectToken != null;
   if (!postHogStarted) return problemsOf(started: false, hasToken: hasToken);
   final problems = <String>[];
-  final optOut =
-      await _read('whether it is opted out', Posthog().isOptOut, problems);
-  final distinctId =
-      await _read('the distinct id', Posthog().getDistinctId, problems);
+  // Both at once, so that the probe waits at most a second.
+  final (optOut, distinctId) = await (
+    _read('whether it is opted out', Posthog().isOptOut, problems),
+    _read('the distinct id', Posthog().getDistinctId, problems),
+  ).wait;
   return [
     ...problemsOf(
       started: true,

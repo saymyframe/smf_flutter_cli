@@ -2,16 +2,16 @@
 // module: the probe of the module, which the start check runs on a device.
 // PostHog started exactly when the build has a project token, its SDK is
 // opted out exactly when the app collects nothing from its first start, and
-// it has a distinct id; each read waits at most a second. In a debug build
-// with a token and collection on, the check of the probe records an event
-// through the service of the module, has PostHog send it at once and writes
-// a request with its nonce, the distinct id and the flavor, which the answer
-// of CI looks up in PostHog; without a token, or while PostHog collects
-// nothing, it writes its verdict in place of a request; a release build
-// writes neither, and no file has the token. The probe starts its check once
-// in a run of the app, in the temporary directory of the app, so the test
-// gives it a directory of its own first, and runs checkDelivery with one of
-// its own too.
+// it has a distinct id; the probe waits for its reads at most a second. In a
+// debug build with a token and collection on, the check of the probe records
+// an event through the service of the module, has PostHog send it at once
+// and writes a request with its nonce, the distinct id and the flavor, which
+// the answer of CI looks up in PostHog; without a token, or while PostHog
+// collects nothing, it writes its verdict in place of a request; a release
+// build writes neither, and no file has the token. The probe starts its check
+// once in a run of the app, in the temporary directory of the app, so the
+// test gives it a directory of its own first, and runs checkDelivery with one
+// of its own too.
 //
 // PostHog starts as the start-up of the app starts it, over the mocks of its
 // platform side (posthog_mocks.dart).
@@ -245,7 +245,7 @@ void main() {
     });
 
     test(
-        'the probe waits for each read of PostHog at most a second, and '
+        'the probe waits for the reads of PostHog at most a second, and '
         'reports a read that did not come', () async {
       postHogDevice.hold = Completer<void>().future;
       final took = Stopwatch()..start();
@@ -257,7 +257,7 @@ void main() {
         'PostHog did not tell whether it is opted out within a second.',
         'PostHog did not tell the distinct id within a second.',
       ]);
-      expect(took.elapsed, lessThan(const Duration(milliseconds: 2500)));
+      expect(took.elapsed, lessThan(const Duration(milliseconds: 1500)));
     });
   }, skip: hasToken ? false : withoutToken);
 
