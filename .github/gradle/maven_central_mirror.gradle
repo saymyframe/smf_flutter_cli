@@ -18,14 +18,35 @@
 // projects of the plugins of the app among them. Each list of repositories
 // in which it did so gets Maven Central itself as its last repository, and
 // keeps it last when the build adds a repository to the list later, such
-// as the storage of Flutter. Gradle asks the repositories of a list in
-// order and goes on to the next one when a repository does not have a
-// module, so Maven Central gets only the requests for what no other
-// repository of the list has. A build that declares no repository of
-// plugins, such as that included build, takes its plugins from the Gradle
-// Plugin Portal, which sends the requests of what Maven Central has, such
-// as the Kotlin Gradle plugin, on to Maven Central. Such a build gets the
-// mirror and then Maven Central before the portal.
+// as the storage of Flutter. For a fixed version, Gradle asks the
+// repositories of a list in order and goes on to the next one when a
+// repository does not have the module, so Maven Central gets only the
+// requests for what no other repository of the list has. A build that
+// declares no repository of plugins, such as that included build, takes
+// its plugins from the Gradle Plugin Portal, which sends the requests of
+// what Maven Central has, such as the Kotlin Gradle plugin, on to Maven
+// Central. Such a build gets the mirror and then Maven Central before the
+// portal.
+//
+// For a range of versions, such as the one in which posthog_flutter takes
+// its Android SDK, Gradle asks every repository of the list for the
+// versions of the module and takes the newest, so Maven Central gets that
+// request too. When Maven Central still refuses it after the three tries
+// of Gradle, such as with 429 Too Many Requests, Gradle disables the
+// repository for the rest of the build. Older Gradle then went on with the
+// other repositories, but Gradle 9.3 and later fail the range, although
+// the mirror has listed its versions, unless the repository lets Gradle go
+// on without it (allowInsecureContinueWhenDisabled). The script sets that
+// on the repository of Maven Central behind the mirror, and the range then
+// takes the newest version that the other repositories have. Once Maven
+// Central is disabled, a module that only Maven Central has still fails:
+// Gradle downloads the files of a module only from the repository that
+// gave its metadata, and never from a disabled one. The mirror gets no
+// such setting, since a build takes nearly every file from it and cannot
+// go on without it. The script leaves the tries of Gradle as they are:
+// with the setting, Gradle asks Maven Central again for each later range,
+// and each further try doubles the wait before the range takes the
+// versions of the mirror.
 
 def central = ~/^https:\/\/(repo\.maven\.apache\.org|repo1\.maven\.org)\/maven2\/?/
 def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
@@ -34,9 +55,16 @@ def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
 def behindMirror = 'mavenCentralBehindMirror'
 
 def addBehindMirror = { RepositoryHandler repositories ->
-    repositories.maven {
+    repositories.maven { repository ->
         name = behindMirror
         url = 'https://repo.maven.apache.org/maven2/'
+        // Gradle goes on without this repository once it has disabled it
+        // for the build. Only Gradle 9.3 and later have the setting, and CI
+        // also builds the apps of published releases of SMF, whose Gradle
+        // may be older.
+        if (repository.hasProperty('allowInsecureContinueWhenDisabled')) {
+            repository.allowInsecureContinueWhenDisabled.set(true)
+        }
     }
 }
 
