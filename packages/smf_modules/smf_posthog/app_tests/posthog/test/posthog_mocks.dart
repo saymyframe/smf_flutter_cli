@@ -21,7 +21,11 @@
 // - reset() forgets what was kept, and the registered properties, and keeps
 //   the setting in memory until the next start;
 // - an optOut() or an optIn() that changes nothing in memory keeps nothing;
-// - while it is opted out, it records no event, no user and no property.
+// - while it is opted out, it records no event and no property. identify()
+//   still makes the user its distinct id then, as the SDKs for Android and
+//   iOS do, and only its event is dropped.
+// It also ignores a second setup in the same start, as both SDKs do: only
+// the next start reads the config again.
 //
 // ignore_for_file: implementation_imports
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -56,7 +60,8 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   /// The events that the device would have sent, in their order.
   final List<RecordedEvent> events = [];
 
-  /// The config of the last setup of this start, or `null` before it.
+  /// The config with which the SDK was set up in this start, or `null`
+  /// before it: a later setup of the same start changes nothing.
   PostHogConfig? config;
 
   /// The setting of collection that the device keeps across starts: whether
@@ -111,6 +116,7 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   @override
   Future<void> setup(PostHogConfig config) async {
     calls.add(['setup', config]);
+    if (this.config != null) return;
     this.config = config;
     optedOut = storedOptOut ?? config.optOut;
   }
@@ -190,8 +196,9 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
     Map<String, Object>? userPropertiesSetOnce,
   }) async {
     calls.add(['identify', userId, userProperties]);
-    if (optedOut) return;
     distinctId = userId;
+    // The event of the identification carries the properties.
+    if (optedOut) return;
     (people[userId] ??= {}).addAll({...?userProperties});
     _record(r'$identify', null);
   }
