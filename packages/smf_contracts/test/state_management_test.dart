@@ -425,12 +425,14 @@ void main() {
       expect(codeSpansOf(value.text), isEmpty);
       expect(value.text, contains('bridge'));
       expect(value.text, contains('only through its controller'));
-      // A value that no code of the app changes follows too.
+      // So does a value that no code of the app changes, which the note
+      // tells of in every app, with the role that has it or without.
       expect(
         value.text,
         contains(
-          'A value that only the backend changes, such as remote config, '
-          'follows too.',
+          'So does a value that only a backend changes, such as the values '
+          'of remote config in an app with that role; no code of the app '
+          'changes it.',
         ),
       );
     });
