@@ -98,8 +98,8 @@ List<SmfIssue> _checkBridgesRendered(StructuralRuleInput<StateData> input) {
     for (final entry in stateManagementRole.sharedStateIn(input.roleInput))
       if (entry.state.listenable case final listenable
           when !files.any(
-        (file) => usesImported(file, listenable.name, listenable.import),
-      ))
+            (file) => usesImported(file, listenable.name, listenable.import),
+          ))
         SmfIssue(
           'The provider of the $stateManagementRole does not render the '
           '$entry: none of its files calls or tears off $listenable of '

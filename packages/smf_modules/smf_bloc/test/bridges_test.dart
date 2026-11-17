@@ -114,9 +114,12 @@ void main() {
         ('State management', AgentNote(agentNote)),
         ('State management', AgentNote(note)),
       ]);
-      expect(_codeOf(note), {
-        _bridges,
-        AppEntryRole.mainFile,
+      // The paths of the note are for the rule of the app entry role,
+      // which finds each of them in every app with the note: the file of
+      // the cubits, and the file of the app entry with the root widget.
+      expect(_codeOf(note), contains(_bridges));
+      expect(_codeOf(note).where((span) => span.contains('/')), hasLength(2));
+      expect(_codeOf(note).where((span) => !span.contains('/')), {
         // The cubit of the first value of the app, as an example.
         'ThemeModeCubit',
         'SharedStateCubits',
