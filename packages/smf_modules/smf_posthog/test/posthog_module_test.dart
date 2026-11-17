@@ -153,6 +153,12 @@ Map<String, MethodDeclaration> _methodsOf(CompilationUnit unit, String name) {
   };
 }
 
+/// The doc comment of [declaration] as one line of text, without its `///`.
+String _docOf(AnnotatedNode declaration) => [
+      for (final token in declaration.documentationComment?.tokens ?? const [])
+        token.lexeme.replaceFirst(RegExp(r'^///\s?'), ''),
+    ].join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+
 /// Collects the nodes of a kind that a unit has.
 final class _Nodes<T extends AstNode> extends GeneralizingAstVisitor<void> {
   final List<T> found = [];
@@ -605,6 +611,20 @@ void main() {
         'setUserId',
         'setUserProperty',
       });
+      expect(
+        _docOf(
+          unit.declarations.whereType<ClassDeclaration>().singleWhere(
+                (declaration) =>
+                    declaration.namePart.typeName.lexeme ==
+                    'PostHogAnalyticsService',
+              ),
+        ),
+        contains('so after each start the app calls `setUserId(id)` for a '
+            'user who is signed in: until then, a property waits in memory, '
+            'and it is lost if the app closes.'),
+        reason: 'PostHog keeps the user of an earlier start, which the '
+            'service does not know.',
+      );
       expect(_postHogCallsIn(methods['logEvent']!), ['capture']);
       expect('${methods['logSignIn']}', contains("eventName: 'login'"));
       expect('${methods['logSignUp']}', contains("eventName: 'sign_up'"));
@@ -671,6 +691,8 @@ void main() {
             contains(r'a `$screen` event under the name of its route'),
             contains('The app has no `PosthogObserver`'),
             contains('`routeFilter: (_) => false`'),
+            contains('Surveys, which the app does not show, need '
+                '`surveys = true` in the config of `initPostHogAnalytics()`'),
             contains('a person profile only for a user whom the app '
                 'identifies'),
             contains('no session replay, no survey, and no request for '
@@ -683,14 +705,26 @@ void main() {
             contains('`analyticsCollectedFromFirstStart` alone decides'),
             contains('collects on the devices of iOS whose users declined '
                 'before'),
+            contains('events that the app logged before '
+                '`setAnalyticsCollectionEnabled(false)` may still leave with '
+                'the next batch of PostHog'),
             contains('`setUserId(null)` starts a new anonymous user in '
                 'PostHog, so call it when the user signs out, not at each '
                 'start'),
+            contains('after each start, call `setUserId(id)` for a user who '
+                'is signed in. Until then, the properties that '
+                '`setUserProperty()` sets wait in memory, and they are lost if '
+                'the app closes'),
             contains('version { strictly("<version>") }'),
+            contains('raise that version whenever `flutter pub upgrade` raises '
+                'posthog_flutter'),
             contains('`Package.resolved`'),
+            contains('`ios/Podfile.lock`'),
             contains('For the privacy policy of the app, which the App Store '
                 'and Google Play ask for'),
             contains('unless `disableGeoIp` is set'),
+            contains('PostHog keeps the IP address of the device too, unless '
+                'the settings of the project discard client IP data'),
           ]),
         );
         expect(
@@ -751,6 +785,8 @@ void main() {
             'bootstrap()',
             PostHogModule.flavorProperty,
             'setUserId(null)',
+            'setUserId(id)',
+            'setUserProperty()',
             'AnalyticsService',
             'Posthog().optIn()',
             'Posthog().optOut()',

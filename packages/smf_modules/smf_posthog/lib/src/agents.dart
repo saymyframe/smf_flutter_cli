@@ -12,6 +12,7 @@ With `posthog_flutter`:
 - `initPostHogAnalytics()` in `$serviceFile` starts PostHog with `${PostHogModule.projectTokenKey.name}` and `${PostHogModule.hostKey.name}` of `${EnvRole.dotEnvFile}`, and `${AppEntryRole.bootstrap.name}()` awaits it. Without a token, the app starts without PostHog.
 - Every event has `${PostHogModule.flavorProperty}`, the flavor of the build.
 - `setUserId(null)` starts a new anonymous user in PostHog: call it when the user signs out, not at each start.
+- After each start, call `setUserId(id)` for a user who is signed in: until then, the properties of `setUserProperty()` wait in memory, and they are lost if the app closes.
 - Record through `AnalyticsService`, and never call `Posthog().optIn()`, `Posthog().optOut()` or `Posthog().reset()`: `reset()` erases the setting of collection that PostHog keeps on the device, which the service keeps.
 ''';
 

@@ -107,8 +107,12 @@ Future<void> _registerFlavor() =>
 /// `setUserId(null)` starts a new anonymous user, so the app calls it when
 /// the user signs out, not at each start. A property of a user without an
 /// id waits for the next id, since PostHog would make a person profile for
-/// it. While collection is off, PostHog gets neither a new user nor a
-/// property, and gets them once collection is on again.
+/// it. PostHog keeps the user on the device from one start to the next, but
+/// the service does not know that user, so after each start the app calls
+/// `setUserId(id)` for a user who is signed in: until then, a property
+/// waits in memory, and it is lost if the app closes. While collection is
+/// off, PostHog gets neither a new user nor a property, and gets them once
+/// collection is on again.
 final class PostHogAnalyticsService implements AnalyticsService {
   /// Creates the service, which records to the PostHog that
   /// [initPostHogAnalytics] started.

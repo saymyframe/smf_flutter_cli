@@ -184,6 +184,7 @@ With `posthog_flutter`:
 - `initPostHogAnalytics()` in `lib/core/analytics/posthog_analytics_service.dart` starts PostHog with `POSTHOG_PROJECT_TOKEN` and `POSTHOG_HOST` of `.env`, and `bootstrap()` awaits it. Without a token, the app starts without PostHog.
 - Every event has `app_flavor`, the flavor of the build.
 - `setUserId(null)` starts a new anonymous user in PostHog: call it when the user signs out, not at each start.
+- After each start, call `setUserId(id)` for a user who is signed in: until then, the properties of `setUserProperty()` wait in memory, and they are lost if the app closes.
 - Record through `AnalyticsService`, and never call `Posthog().optIn()`, `Posthog().optOut()` or `Posthog().reset()`: `reset()` erases the setting of collection that PostHog keeps on the device, which the service keeps.
 
 ## Dependency injection
@@ -329,7 +330,7 @@ Create a project in PostHog and copy its project token, which starts with `phc_`
 
 Every event has the property `app_flavor`, the flavor of the build, such as `dev` or `prod`. A debug build records its events too, so filter the insights and the dashboards of PostHog on `app_flavor` equal to `prod` to count only the users of the release.
 
-In an app with a router, the router tells `logPostHogScreen()` of that file each screen that the user sees, which PostHog records as a `$screen` event under the name of its route. The app has no `PosthogObserver`: one with its defaults would record the screens a second time. Surveys, which the app does not show, need one among the observers of the navigators: give it `routeFilter: (_) => false`, so that it records no screen of its own.
+In an app with a router, the router tells `logPostHogScreen()` of that file each screen that the user sees, which PostHog records as a `$screen` event under the name of its route. The app has no `PosthogObserver`: one with its defaults would record the screens a second time. Surveys, which the app does not show, need `surveys = true` in the config of `initPostHogAnalytics()` and a `PosthogObserver` among the observers of the navigators: give it `routeFilter: (_) => false`, so that it records no screen of its own.
 
 PostHog is set up to record no more than the analytics of the app need:
 
@@ -338,9 +339,9 @@ PostHog is set up to record no more than the analytics of the app need:
 - nothing about push messages, which the push role handles: `com.posthog.posthog.CAPTURE_PUSH_NOTIFICATION_OPENED` is `false` in `ios/Runner/Info.plist`;
 - the events of the lifecycle of the app, such as `Application Opened`, and no errors, which the crash reporting of the app reports.
 
-`setAnalyticsCollectionEnabled()` of the analytics service opts PostHog in and out, and PostHog keeps that on the device, as the section Analytics tells. PostHog starts from Dart, so `analyticsCollectedFromFirstStart` alone decides what it does before the code chose, and it has no native lines for that: `com.posthog.posthog.AUTO_INIT` is `false` in `android/app/src/main/AndroidManifest.xml` and in `ios/Runner/Info.plist`, so that its SDKs for the platforms do not start on their own before Dart. On iOS, PostHog keeps nothing when the code chose what `analyticsCollectedFromFirstStart` says already. So an app that changes that constant from `false` to `true` collects on the devices of iOS whose users declined before.
+`setAnalyticsCollectionEnabled()` of the analytics service opts PostHog in and out, and PostHog keeps that on the device, as the section Analytics tells. PostHog starts from Dart, so `analyticsCollectedFromFirstStart` alone decides what it does before the code chose, and it has no native lines for that: `com.posthog.posthog.AUTO_INIT` is `false` in `android/app/src/main/AndroidManifest.xml` and in `ios/Runner/Info.plist`, so that its SDKs for the platforms do not start on their own before Dart. On iOS, PostHog keeps nothing when the code chose what `analyticsCollectedFromFirstStart` says already. So an app that changes that constant from `false` to `true` collects on the devices of iOS whose users declined before. PostHog keeps the events that it has not sent yet in a queue on the device, and opting out does not empty it: events that the app logged before `setAnalyticsCollectionEnabled(false)` may still leave with the next batch of PostHog, also at a later start.
 
-`setUserId(null)` starts a new anonymous user in PostHog, so call it when the user signs out, not at each start. A property that `setUserProperty()` sets for a user without an id waits for the next id. While collection is off, PostHog gets neither a new user nor a property, and gets them once collection is on again.
+`setUserId(null)` starts a new anonymous user in PostHog, so call it when the user signs out, not at each start. A property that `setUserProperty()` sets for a user without an id waits for the next id. PostHog keeps the user on the device from one start to the next, but the analytics service does not know that user: after each start, call `setUserId(id)` for a user who is signed in. Until then, the properties that `setUserProperty()` sets wait in memory, and they are lost if the app closes. While collection is off, PostHog gets neither a new user nor a property, and gets them once collection is on again.
 
 posthog_flutter takes the SDKs of PostHog for Android and iOS in a range of versions, so each build of the app takes the newest of the range, and each release of posthog_flutter raises the lowest. So the app does not pin them, or the next `flutter pub upgrade` would stop its build. To ship a build for a store with versions that you checked, pin the SDK for Android in `android/app/build.gradle.kts`:
 
@@ -352,9 +353,11 @@ dependencies {
 }
 ```
 
-On iOS, Swift Package Manager writes the versions that it resolved into a `Package.resolved` of the Xcode workspace: keep that file in git for a build for the App Store, and change it on purpose.
+Then raise that version whenever `flutter pub upgrade` raises posthog_flutter: a new posthog_flutter may need a newer SDK than the pin, and Gradle stops the build at a strict version that is too low.
 
-For the privacy policy of the app, which the App Store and Google Play ask for in the listing of the app and inside the app: PostHog gets what users do in the app, the screens that they see, an id of the device and the id of the user once the code sets one with the properties of the user, the model and the system of the device, and a coarse location, which PostHog infers from the IP address of the device unless `disableGeoIp` is set when PostHog starts. The SDKs of PostHog for iOS declare what they collect in their privacy manifests.
+On iOS, Swift Package Manager writes the versions that it resolved into a `Package.resolved` of the Xcode workspace, and CocoaPods, in an app that builds with it, into `ios/Podfile.lock`: keep that file in git for a build for the App Store, and change it on purpose.
+
+For the privacy policy of the app, which the App Store and Google Play ask for in the listing of the app and inside the app: PostHog gets what users do in the app, the screens that they see, an id of the device and the id of the user once the code sets one with the properties of the user, the model and the system of the device, and a coarse location, which PostHog infers from the IP address of the device unless `disableGeoIp` is set when PostHog starts. PostHog keeps the IP address of the device too, unless the settings of the project discard client IP data. The SDKs of PostHog for iOS declare what they collect in their privacy manifests.
 
 ## Analytics
 
@@ -941,8 +944,12 @@ Future<void> _registerFlavor() =>
 /// `setUserId(null)` starts a new anonymous user, so the app calls it when
 /// the user signs out, not at each start. A property of a user without an
 /// id waits for the next id, since PostHog would make a person profile for
-/// it. While collection is off, PostHog gets neither a new user nor a
-/// property, and gets them once collection is on again.
+/// it. PostHog keeps the user on the device from one start to the next, but
+/// the service does not know that user, so after each start the app calls
+/// `setUserId(id)` for a user who is signed in: until then, a property
+/// waits in memory, and it is lost if the app closes. While collection is
+/// off, PostHog gets neither a new user nor a property, and gets them once
+/// collection is on again.
 final class PostHogAnalyticsService implements AnalyticsService {
   /// Creates the service, which records to the PostHog that
   /// [initPostHogAnalytics] started.
