@@ -18,3 +18,16 @@ With `flutter_bloc`:
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
 ''';
+
+/// The note of the module in the guide for coding agents of an app whose
+/// controllers keep values that the state manager follows: where the
+/// cubits of those values are, with [example], the cubit of the first
+/// value of the app, what provides them, how a widget reads one, and that
+/// code changes a value only through its controller.
+///
+/// Its inline code names what the file of the cubits, the file of the app
+/// entry and the code of a variant for this module use, and the files,
+/// which every app with the note has.
+String bridgesAgentNote(String example) => '''
+- The values that controllers of the app keep, such as the theme mode, have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `$example`, which `SharedStateCubits` provides around the root widget in `${AppEntryRole.mainFile}`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+''';
