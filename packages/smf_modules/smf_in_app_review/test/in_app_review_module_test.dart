@@ -79,6 +79,20 @@ Set<String> _codeOf(String markdown) => {
         match[1]!,
     };
 
+/// The doc comment of the class [name] in [dart], the text of a Dart file,
+/// with its lines joined by spaces.
+String _docOf(String dart, String name) {
+  final type = parseString(content: dart)
+      .unit
+      .declarations
+      .whereType<ClassDeclaration>()
+      .singleWhere((type) => type.namePart.typeName.lexeme == name);
+  return [
+    for (final token in type.documentationComment!.tokens)
+      token.lexeme.replaceFirst(RegExp('^/// ?'), ''),
+  ].join(' ');
+}
+
 /// The links of [markdown], each as its text and its address.
 List<(String, String)> _linksOf(String markdown) => [
       for (final match
@@ -504,6 +518,50 @@ void main() {
             ('Test in-app reviews', testPage),
             ('the In-App Review API', reviewPage),
           ]),
+        );
+      });
+
+      test(
+          'tells, as the doc of the service does, the two cases of Android '
+          'outside an app that Google Play installed: without the review '
+          'service of Google Play the app records nothing and asks again, '
+          'and with the Play Store a request that shows nothing counts', () {
+        expect(
+          readmeSection,
+          allOf(
+            contains(
+              'On a device without the review service of Google Play, such as '
+              'an emulator without the Play Store, the store cannot take the '
+              'request, the app records nothing, and the next call of '
+              '`appReview.requestIfDue()` asks again.',
+            ),
+            contains(
+              'On a device with the Play Store, for a build that Google Play '
+              'did not install, such as a local build of the flavor `dev`, '
+              'the request completes and shows nothing, and the app counts it '
+              'as a request, so it does not ask again in that version of the '
+              'app.',
+            ),
+          ),
+        );
+        expect(readmeSection, isNot(contains('Anywhere else')));
+        expect(
+          _docOf(app.files[serviceFile]!.text, 'InAppReviewService'),
+          allOf(
+            contains(
+              'On a device without the review service of Google Play, such as '
+              'an emulator without the Play Store, [isAvailable] is `false` '
+              'and [requestReview] fails, so the app records no request and '
+              'asks again later.',
+            ),
+            contains(
+              'On a device with the Play Store, for an app that Google Play '
+              'did not install, such as a local build, [requestReview] '
+              'completes and shows nothing, and the app counts the request, '
+              'so it does not ask again in that version of the app.',
+            ),
+            isNot(contains('Elsewhere')),
+          ),
         );
       });
 

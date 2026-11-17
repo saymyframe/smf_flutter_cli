@@ -346,7 +346,7 @@ Google Play shows the dialog only in an app that it installed. To see it before 
 3. Install the app once from the internal test track with that account. From then on, local builds of the flavor `prod` may show the dialog on that device: uninstall the copy from Google Play first, since a local build has another signature. Google Play does not limit how often it shows the dialog to an app from the internal test track.
 4. Never send the review of a test, or delete it in the Play Store: Google Play shows no dialog to an account that has reviewed the app.
 
-An app from internal app sharing shows the dialog too, but its review cannot be sent. Anywhere else, such as on an emulator without the Play Store, the request fails, the app records nothing, and the next call of `appReview.requestIfDue()` asks again.
+An app from internal app sharing shows the dialog too, but its review cannot be sent. On a device without the review service of Google Play, such as an emulator without the Play Store, the store cannot take the request, the app records nothing, and the next call of `appReview.requestIfDue()` asks again. On a device with the Play Store, for a build that Google Play did not install, such as a local build of the flavor `dev`, the request completes and shows nothing, and the app counts it as a request, so it does not ask again in that version of the app.
 
 Through the dialog, Google Play collects the rating and the text of the review, which become a public review on Google Play, or which only you see for an app on a closed test track: see the section "Data Safety" of [the In-App Review API](https://developer.android.com/guide/playcore/in-app-review). The privacy manifest of in_app_review on iOS declares no data that it collects.
 
@@ -365,7 +365,7 @@ When a review is due, the call asks the App Store or Google Play for its own rev
 
 A review is due as `ReviewPolicy` in that file says: from the third launch of the app (`ReviewPolicy.launches`), three days after its first launch (`ReviewPolicy.sinceFirstLaunch`), and at most once a version of the app and once in 14 days (`ReviewPolicy.between`). Change the numbers there. The app counts its launches and remembers its last request in the preferences, under the keys `review.*`, so write nothing there.
 
-The store decides whether the dialog shows. iOS shows it in a debug build each time, never in TestFlight, and at most three times in 365 days. Google Play shows it only in an app that it installed, such as from an internal test track. Elsewhere the request fails and the app records nothing, so the next call of `appReview.requestIfDue()` asks again, also in the same launch.
+The store decides whether the dialog shows. iOS shows it in a debug build each time, never in TestFlight, and at most three times in 365 days. Google Play shows it only in an app that it installed, such as from an internal test track. On a device without the review service of Google Play, such as an emulator without the Play Store, the store cannot take the request and the app records nothing, so the next call of `appReview.requestIfDue()` asks again, also in the same launch. On a device with the Play Store, for an app that Google Play did not install, such as a local build, the request completes and shows nothing, and the app counts it as a request, so it does not ask again in that version of the app.
 
 `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page where the user writes a review. On Android that is the Google Play page of `com.example.my_app` (`googlePlayId`), the id of the flavor for a release, also from a build of another flavor. On iOS it is the App Store page of `REVIEW_APP_STORE_ID` in `.env`, the Apple ID of the app in App Store Connect. While that key is empty, the app has no App Store page, and `appReview.hasStorePage` is `false` on iOS.
 === android/app/build.gradle.kts (flutter_core) ===
@@ -1665,8 +1665,13 @@ ReviewService createInAppReviewService() => const InAppReviewService._();
 /// The version of the app comes from package_info_plus.
 ///
 /// Google Play shows the dialog only in an app that it installed, such as
-/// from an internal test track. Elsewhere [requestReview] fails, and the
-/// app records no request.
+/// from an internal test track. On a device without the review service of
+/// Google Play, such as an emulator without the Play Store, [isAvailable]
+/// is `false` and [requestReview] fails, so the app records no request and
+/// asks again later. On a device with the Play Store, for an app that
+/// Google Play did not install, such as a local build, [requestReview]
+/// completes and shows nothing, and the app counts the request, so it does
+/// not ask again in that version of the app.
 final class InAppReviewService implements ReviewService {
   const InAppReviewService._();
 

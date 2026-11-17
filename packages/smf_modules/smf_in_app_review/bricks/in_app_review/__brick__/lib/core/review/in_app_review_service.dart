@@ -18,8 +18,13 @@ ReviewService createInAppReviewService() => const InAppReviewService._();
 /// The version of the app comes from package_info_plus.
 ///
 /// Google Play shows the dialog only in an app that it installed, such as
-/// from an internal test track. Elsewhere [requestReview] fails, and the
-/// app records no request.
+/// from an internal test track. On a device without the review service of
+/// Google Play, such as an emulator without the Play Store, [isAvailable]
+/// is `false` and [requestReview] fails, so the app records no request and
+/// asks again later. On a device with the Play Store, for an app that
+/// Google Play did not install, such as a local build, [requestReview]
+/// completes and shows nothing, and the app counts the request, so it does
+/// not ask again in that version of the app.
 final class InAppReviewService implements ReviewService {
   const InAppReviewService._();
 

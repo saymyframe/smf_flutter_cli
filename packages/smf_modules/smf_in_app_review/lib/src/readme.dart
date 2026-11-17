@@ -32,7 +32,7 @@ Google Play shows the dialog only in an app that it installed. To see it before 
 3. Install the app once from the internal test track with that account. From then on, local builds of the flavor `prod` may show the dialog on that device: uninstall the copy from Google Play first, since a local build has another signature. Google Play does not limit how often it shows the dialog to an app from the internal test track.
 4. Never send the review of a test, or delete it in the Play Store: Google Play shows no dialog to an account that has reviewed the app.
 
-An app from internal app sharing shows the dialog too, but its review cannot be sent. Anywhere else, such as on an emulator without the Play Store, the request fails, the app records nothing, and the next call of `appReview.requestIfDue()` asks again.
+An app from internal app sharing shows the dialog too, but its review cannot be sent. On a device without the review service of Google Play, such as an emulator without the Play Store, the store cannot take the request, the app records nothing, and the next call of `appReview.requestIfDue()` asks again. On a device with the Play Store, for a build that Google Play did not install, such as a local build of the flavor `dev`, the request completes and shows nothing, and the app counts it as a request, so it does not ask again in that version of the app.
 
 Through the dialog, Google Play collects the rating and the text of the review, which become a public review on Google Play, or which only you see for an app on a closed test track: see the section "Data Safety" of [the In-App Review API]($reviewPage). The privacy manifest of in_app_review on iOS declares no data that it collects.
 

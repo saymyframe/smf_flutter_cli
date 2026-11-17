@@ -2053,18 +2053,30 @@ void main() {
     });
 
     test(
-        'tells that a request that the store did not take records nothing, '
-        'so that the next call asks again, and not the next launch', () async {
+        'tells that a request that the store cannot take records nothing, so '
+        'that the next call asks again, and not the next launch, and that one '
+        'that Google Play takes for an app that it did not install counts, '
+        'though it shows nothing', () async {
       final section = await sectionWith(const {});
 
       expect(
         section,
-        contains(
-          'Elsewhere the request fails and the app records nothing, so the '
-          'next call of `appReview.requestIfDue()` asks again, also in the '
-          'same launch.',
+        allOf(
+          contains(
+            'On a device without the review service of Google Play, such as '
+            'an emulator without the Play Store, the store cannot take the '
+            'request and the app records nothing, so the next call of '
+            '`appReview.requestIfDue()` asks again, also in the same launch.',
+          ),
+          contains(
+            'On a device with the Play Store, for an app that Google Play did '
+            'not install, such as a local build, the request completes and '
+            'shows nothing, and the app counts it as a request, so it does '
+            'not ask again in that version of the app.',
+          ),
         ),
       );
+      expect(section, isNot(contains('Elsewhere')));
       expect(section, isNot(contains('launch on which a review is due')));
     });
 
