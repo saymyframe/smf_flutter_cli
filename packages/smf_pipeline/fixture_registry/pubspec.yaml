@@ -54,6 +54,10 @@ dependencies:
   # The start screen of the CLI, for its app test in the app of several
   # providers, which starts on another screen.
   smf_home_flutter: ^0.5.2
+  # The provider of the review role in the registry of several providers,
+  # for the app test that it keeps and the tests of the role that the CLI
+  # keeps.
+  smf_in_app_review: ^0.8.0
   smf_launcher_icons: ^0.8.0
   # The provider of the notifications role in the registry of several
   # providers, for the app test that it keeps and the test of the role that

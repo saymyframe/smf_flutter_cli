@@ -32,6 +32,16 @@
       ]
     },
     {
+      "id": "review.app_store_id",
+      "title": "Copy the App Store ID of the app from App Store Connect into .env",
+      "owner": "review",
+      "ownerKind": "role",
+      "ownerName": "Store reviews",
+      "neededBy": [
+        "in_app_review"
+      ]
+    },
+    {
       "id": "firebase_analytics.google_analytics",
       "title": "Turn on Google Analytics in the Firebase project, unless it is on already",
       "owner": "firebase_analytics",
