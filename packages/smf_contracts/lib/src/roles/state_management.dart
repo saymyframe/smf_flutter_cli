@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_contracts/src/roles/symbol_uses.dart';
 
+part 'state_management/state_code.dart';
 part 'state_management/state_dsl.dart';
 part 'state_management/state_rules.dart';
 part 'state_management/state_template.dart';
@@ -39,9 +40,10 @@ const stateManagementRole = StateManagementRole._();
 /// the description names, and the controller saves it where it does. The
 /// provider imports the file of each type and function with a prefix of
 /// its own, such as `state0`, so the names of two feeders never clash with
-/// each other or with the names of the provider. It gives the role
-/// [StateBridges] once, which tells code that knows only the role how a
-/// widget follows a bridge.
+/// each other or with the names of the provider: [SharedStateCode] writes
+/// the types, the functions, the imports and the doc of the bridges so. It
+/// gives the role [StateBridges] once, which tells code that knows only the
+/// role how a widget follows a bridge.
 ///
 /// The rule `state_management.listenable_functions` checks the function of
 /// each entry, and `state_management.bridges_rendered` that the files of

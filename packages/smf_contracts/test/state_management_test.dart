@@ -1,3 +1,4 @@
+import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:test/test.dart';
 
@@ -761,6 +762,150 @@ void main() {
           'or tears off totalListenable() of package:counter/counter.dart.',
         ),
       ]);
+    });
+  });
+
+  group('SharedStateCode', () {
+    /// The entries of the tests: two with a type of a library and two in
+    /// one file of the app, with a type of `dart:core`, after one more.
+    const entries = [
+      ThemeRole.modeState,
+      LocalizationRole.localeState,
+      PushRole.addressState,
+      _count,
+      _paused,
+    ];
+
+    test(
+        'names the type and the function of each entry through an import '
+        'of its library with a prefix of its own, in the order of the '
+        'entries, the type of an entry before its function', () {
+      final code = SharedStateCode(entries, appName: 'my_app');
+
+      expect(
+        [for (final import in code.imports) import.toDirective('my_app')],
+        [
+          "import 'package:flutter/material.dart' as state0;",
+          "import 'package:my_app/core/theme/theme_mode.dart' as state1;",
+          "import 'package:flutter/widgets.dart' as state2;",
+          "import 'package:my_app/core/l10n/app_locale.dart' as state3;",
+          "import 'package:my_app/core/push/app_push.dart' as state4;",
+          // The two entries of the counter share the import of its file.
+          "import 'package:my_app/features/counter/counter.dart' as state5;",
+        ],
+      );
+      expect(
+        [for (final entry in entries) code.typeOf(entry)],
+        [
+          'state0.ThemeMode',
+          'state2.Locale?',
+          // A type of dart:core needs no import.
+          'String?',
+          'int',
+          'bool',
+        ],
+      );
+      expect(
+        [for (final entry in entries) code.functionOf(entry)],
+        [
+          'state1.themeModeListenable',
+          'state3.localizationLocaleListenable',
+          'state4.pushAddressListenable',
+          'state5.counterCountListenable',
+          'state5.counterPausedListenable',
+        ],
+      );
+    });
+
+    test(
+        'writes the directives of the file with those of the provider, '
+        'merged and in order, each as dart format writes it', () {
+      final code = SharedStateCode(
+        const [ThemeRole.modeState, LocalizationRole.localeState],
+        appName: 'my_app',
+      );
+      const path = 'core/state/'
+          'a_directory_with_a_name_long_enough_for_a_line_of_its_own/'
+          'bridges.dart';
+      final directives = code.directives(const [
+        ImportRef('package:flutter/foundation.dart', show: ['ValueListenable']),
+        ImportRef('package:flutter/foundation.dart', show: ['Listenable']),
+        // Of the library of a type, the provider imports its own names
+        // without a prefix.
+        ImportRef(
+          'package:flutter/widgets.dart',
+          show: ['BuildContext', 'StatelessWidget', 'Widget'],
+        ),
+        ImportRef('dart:async'),
+        ImportRef.app(path),
+      ]);
+
+      const foundation = "import 'package:flutter/foundation.dart' "
+          'show Listenable, ValueListenable;';
+      const widgets = "import 'package:flutter/widgets.dart'\n"
+          '    show BuildContext, StatelessWidget, Widget;';
+      // A directive without combinators stays on its line, however long.
+      const long = "import 'package:my_app/$path';";
+      expect(directives, [
+        "import 'dart:async';",
+        foundation,
+        "import 'package:flutter/material.dart' as state0;",
+        widgets,
+        "import 'package:flutter/widgets.dart' as state2;",
+        "import 'package:my_app/core/l10n/app_locale.dart' as state3;",
+        long,
+        "import 'package:my_app/core/theme/theme_mode.dart' as state1;",
+      ]);
+      final unit = parseString(
+        content: [...directives, '', 'void main() {}'].join('\n'),
+        throwIfDiagnostics: false,
+      );
+      expect(unit.errors, isEmpty);
+    });
+
+    test(
+        'writes the description of an entry as the doc of its bridge, on '
+        'lines of at most 80 characters but for a word that is longer', () {
+      final code = SharedStateCode(const [_count], appName: 'my_app');
+      final word = 'w' * 85;
+
+      expect(
+        code.docOf(_count),
+        ['/// The count; `counter.add()` changes it.'],
+      );
+      expect(code.docOf(LocalizationRole.localeState), [
+        '/// The language that the user chose, `null` to follow the device;',
+        '/// `appLocale.choose()` changes it.',
+      ]);
+      final long = SharedState(
+        'counterLong',
+        listenable: _count.listenable,
+        type: _count.type,
+        description: '$word ends it.',
+      );
+      expect(code.docOf(long), ['/// $word', '/// ends it.']);
+    });
+
+    test('refuses an entry that it was not created with', () {
+      final code = SharedStateCode(const [_count], appName: 'my_app');
+
+      for (final call in [
+        () => code.typeOf(ThemeRole.modeState),
+        () => code.functionOf(PushRole.addressState),
+      ]) {
+        expect(
+          call,
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              'Not one of the entries that the code was created with',
+            ),
+          ),
+        );
+      }
+      // The libraries of an entry that it was created with are known.
+      expect(code.functionOf(_paused), 'state0.counterPausedListenable');
     });
   });
 }
