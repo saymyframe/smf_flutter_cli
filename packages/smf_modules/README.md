@@ -23,6 +23,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_firebase_core` | `firebase_core`, Firebase |
 | `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
 | `smf_firebase_analytics` | `firebase_analytics`, analytics |
+| `smf_posthog` | `posthog`, analytics with PostHog |
 | `smf_firebase_messaging` | `firebase_messaging`, push messages |
 | `smf_firebase_auth` | `firebase_auth`, sign-in |
 | `smf_google_sign_in` | `google_sign_in`, Google sign-in on Android and iOS |

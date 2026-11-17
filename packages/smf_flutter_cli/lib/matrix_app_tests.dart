@@ -19,6 +19,7 @@ import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_posthog/smf_posthog.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
@@ -51,6 +52,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final nativeSplash = await appTestsDirectoryOf('smf_native_splash');
   final onboarding = await appTestsDirectoryOf('smf_onboarding');
   final paywall = await appTestsDirectoryOf('smf_paywall');
+  final posthog = await appTestsDirectoryOf('smf_posthog');
   final revenueCat = await appTestsDirectoryOf('smf_revenuecat');
   final settings = await appTestsDirectoryOf('smf_settings');
   final sharedPreferences = await appTestsDirectoryOf(
@@ -135,6 +137,53 @@ Future<MatrixAppTests> smfAppTests() async {
         '$analytics/screen_views',
         appliesTo: (app) =>
             _has(FirebaseAnalyticsModule.id)(app) &&
+            app.hook!.presentRoles.contains(routerRole),
+        values: (app) => {'start_screen': _startScreenOf(app)},
+        roles: {routerRole},
+      ),
+      // The analytics service of the posthog module: the start sets PostHog
+      // up with the project token and the host of .env, the setting of
+      // collection that the app starts with and the private defaults of the
+      // module, and registers the flavor of the build (see
+      // _posthogValuesOf); each call reaches PostHog as PostHog names it; and
+      // setUserId(null) resets PostHog only while it collects, so that the
+      // setting of collection that PostHog keeps holds at the next start.
+      // Without a project token, the app starts without PostHog. The tests
+      // leave out the other analytics services that the app may have. The
+      // mocks give posthog_flutter a device in memory, with the semantics of
+      // the SDK of PostHog for iOS, and the matrix sets them up for the tests
+      // of every module of the app, since the start-up of the app starts
+      // PostHog. The matrix gives POSTHOG_PROJECT_TOKEN a token of the tests
+      // in the apps with a DI container and none in the others, so that both
+      // paths run (see _posthogTokenOf). Its probe sees on a device that
+      // PostHog runs exactly when the build has a token, with the setting of
+      // collection of a new install, and then records an event through the
+      // service of the module and asks the script of CI that started the app
+      // for the answer posthog, whose exit code tells whether PostHog got the
+      // event.
+      MatrixAppTest(
+        '$posthog/posthog',
+        appliesTo: _has(PostHogModule.id),
+        values: _defaultFlavorOf,
+        envValues: _posthogTokenOf,
+        mocks: const MatrixMocks('test/posthog_mocks.dart', 'mockPostHog'),
+        startProbe: const MatrixStartProbe(
+          'integration_test/posthog/probe.dart',
+          'probePostHog',
+          answer: 'posthog',
+          verdict: MatrixAnswerVerdict.exitCode,
+        ),
+      ),
+      // The listener of the screen of the posthog module records nothing
+      // before PostHog started, nor without a project token, and the app
+      // records its first screen once, under the name of the screen that the
+      // app starts on (see _startScreenOf), whichever module provides the
+      // router, which calls the listener: a test of the router role too, so
+      // it finds the apps with a router by their roles.
+      MatrixAppTest(
+        '$posthog/posthog_screens',
+        appliesTo: (app) =>
+            _has(PostHogModule.id)(app) &&
             app.hook!.presentRoles.contains(routerRole),
         values: (app) => {'start_screen': _startScreenOf(app)},
         roles: {routerRole},
@@ -3417,6 +3466,23 @@ String _textsByLanguageOf(MatrixApp app, TextsData texts) {
 /// screen of its app entry, when no route of its modules can start it.
 String _startScreenOf(MatrixApp app) =>
     routerRole.startIn(routerRole.hookInput(app.hook!))?.fullName ?? '/';
+
+/// The values of the files of the test of the posthog module, the same in
+/// every app: `default_flavor`, the flavor that `flutter test` builds, which
+/// every event of PostHog has there.
+Map<String, String> _defaultFlavorOf(MatrixApp app) =>
+    {'default_flavor': AppEntryRole.defaultFlavor.name};
+
+/// The value that the test of the posthog module gives its project token in
+/// .env: a token of the tests in the apps with the DI role, such as the app
+/// of the module with a DI container and the apps with every module, and
+/// none in the others, whose tests check the app without PostHog. The host
+/// stays empty, which is the US Cloud of PostHog.
+Map<String, String?> _posthogTokenOf(MatrixApp app) => {
+      PostHogModule.projectTokenKey.name:
+          app.hook!.presentRoles.contains(diRole) ? 'phc_tests' : '',
+      PostHogModule.hostKey.name: '',
+    };
 
 /// Whether [app], an app with the analytics role, collects analytics from
 /// its first start, as the role chose (`--analytics-collection`): from the

@@ -368,7 +368,9 @@ void main() {
       'app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
-      'which get Firebase, the app of Firebase Cloud Messaging, which gets '
+      'which get Firebase, the apps of PostHog with and without the DI '
+      'container and the router, which get the values of .env, the app of '
+      'Firebase Cloud Messaging, which gets '
       'Firebase and the notifications with their preferences, the apps of '
       'Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
@@ -377,8 +379,9 @@ void main() {
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
-      'the auth role, one of Firebase Analytics with the DI container and '
-      'the router that collects nothing before its code chose, and one of '
+      'the auth role, one each of Firebase Analytics and of PostHog with the '
+      'DI container and the router that collects nothing before its code '
+      'chose, and one of '
       'every module for each state manager, each once more for each other '
       'combination of the mode of the auth role and of the collection of '
       'the analytics role', () async {
@@ -394,7 +397,7 @@ void main() {
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
         'revenuecat, paywall, dart_define, firebase_crashlytics, '
-        'firebase_analytics, '
+        'firebase_analytics, posthog, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
@@ -415,6 +418,10 @@ void main() {
     const analyticsOff = 'analytics by firebase_analytics with di, router '
         '--analytics-collection=off (firebase_analytics, get_it, go_router, '
         'firebase_core, flutter_core)';
+    // The same app of PostHog, which gets the values of .env.
+    const postHogOff = 'analytics by posthog with di, router '
+        '--analytics-collection=off (posthog, get_it, go_router, '
+        'flutter_core, dart_define)';
     // The options of the apps with every module of the other combinations
     // of the mode of the auth role and of the collection of the analytics
     // role, in the order of the matrix.
@@ -664,6 +671,16 @@ void main() {
       equals(
         'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
       ),
+      // PostHog with the DI container and the router, which its role uses,
+      // and without each, each with the provider of the env role, which it
+      // requires.
+      equals(
+        'posthog with di, router (posthog, get_it, go_router, flutter_core, '
+        'dart_define)',
+      ),
+      'posthog with di (posthog, get_it, flutter_core, dart_define)',
+      'posthog with router (posthog, go_router, flutter_core, dart_define)',
+      'posthog (posthog, flutter_core, dart_define)',
       'launcher_icons (launcher_icons, flutter_core)',
       'native_splash (native_splash, flutter_core)',
       // CI with the values of .env, which its build writes, and without.
@@ -672,6 +689,7 @@ void main() {
       inMode('guest'),
       inMode('anonymous'),
       analyticsOff,
+      postHogOff,
       everyModule('bloc'),
       everyModule('riverpod'),
       // The apps with every module of the other combinations of the mode of
@@ -714,11 +732,15 @@ void main() {
             {'auth-mode': mode},
             {'auth-mode': mode},
           ],
-        [
-          '$analyticsApp --analytics-collection=off',
-          {'analytics-collection': 'off'},
-          {'analytics-collection': 'off'},
-        ],
+        for (final app in const [
+          analyticsApp,
+          'analytics by posthog with di, router',
+        ])
+          [
+            '$app --analytics-collection=off',
+            {'analytics-collection': 'off'},
+            {'analytics-collection': 'off'},
+          ],
         for (final stateManager in const ['bloc', 'riverpod'])
           for (final modes in otherModes)
             [
@@ -910,7 +932,7 @@ void main() {
         '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, dio, revenuecat, paywall, dart_define, '
-        'launcher_icons, native_splash, github_actions, local)';
+        'posthog, launcher_icons, native_splash, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2936,6 +2958,7 @@ Type type() => Types;
               'revenuecat',
               'paywall',
               'dart_define',
+              'posthog',
               'launcher_icons',
               'native_splash',
               'github_actions',

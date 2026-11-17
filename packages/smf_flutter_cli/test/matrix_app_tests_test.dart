@@ -274,6 +274,11 @@ const _everyModule = [
 const _analyticsOff = 'analytics by firebase_analytics with di, router '
     '--analytics-collection=off';
 
+/// The app of PostHog that collects nothing before its code chose, with the
+/// DI container and the router, since the role uses both.
+const _postHogOff = 'analytics by posthog with di, router '
+    '--analytics-collection=off';
+
 /// The apps of Firebase Authentication in the other modes of the auth role,
 /// with the router and the localization, since the role uses both.
 const _authModes = [
@@ -1942,7 +1947,10 @@ void main() {
         'firebase_crashlytics with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
+        'posthog with di, router',
+        'posthog with di',
         _analyticsOff,
+        _postHogOff,
         ..._everyModule,
       ],
     );
@@ -2110,11 +2118,13 @@ void main() {
 
   test(
       'the probe of Firebase Cloud Messaging asks the script of CI that '
-      'starts the app for the answer firebase_messaging, a push message, and '
-      'that of RevenueCat for the answer revenuecat, premium access, by the '
+      'starts the app for the answer firebase_messaging, a push message, '
+      'that of RevenueCat for the answer revenuecat, premium access, and that '
+      'of PostHog for the answer posthog, the query for its event, by the '
       'names with which the jobs give the answers, and no other probe asks '
-      'for one; the app gives the verdict on both, since what each answer '
-      'sends reaches the app', () {
+      'for one; the app gives the verdict on the first two, since what each '
+      'sends reaches the app, and the exit code of the answer on that of '
+      'PostHog, since only PostHog sees what reached it', () {
     expect(
       {
         for (final test in appTests.tests)
@@ -2123,6 +2133,7 @@ void main() {
             p.basename(test.directory): (answer, verdict),
       },
       {
+        'posthog': ('posthog', MatrixAnswerVerdict.exitCode),
         'firebase_messaging': ('firebase_messaging', MatrixAnswerVerdict.app),
         'revenuecat': ('revenuecat', MatrixAnswerVerdict.app),
       },
@@ -2186,8 +2197,8 @@ void main() {
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
       'of Firebase Cloud Messaging, the purchases of the role and those of '
-      'RevenueCat, each a function of a file of its tests that takes the one '
-      'that waits until the screen settles', () async {
+      'RevenueCat, and PostHog, each a function of a file of its tests that '
+      'takes the one that waits until the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -2205,6 +2216,7 @@ void main() {
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
             'probeFirebaseMessaging',
         'revenuecat': 'integration_test/revenuecat/probe.dart probeRevenueCat',
+        'posthog': 'integration_test/posthog/probe.dart probePostHog',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -2248,16 +2260,18 @@ void main() {
     // all of them, which the list of the probes names. That of the
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
-    // the routes of the app past it. Those of Firebase Authentication, of
-    // Google sign-in, of Firebase Cloud Messaging, of RevenueCat, of the
-    // notifications role, of local_notifications, of the push role and of
-    // the purchases role only read, so they hold wherever they come.
+    // the routes of the app past it. Those of PostHog, which records an event
+    // of its own, of Firebase Authentication, of Google sign-in, of Firebase
+    // Cloud Messaging, of RevenueCat, of the notifications role, of
+    // local_notifications, of the push role and of the purchases role only
+    // read, so they hold wherever they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
       [
         'start',
+        'posthog',
         'firebase_auth',
         'google_sign_in',
         'firebase_messaging',
@@ -2309,41 +2323,43 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: firebase_auth/probe.dart',
-        'probe1: google_sign_in/probe.dart',
-        'probe2: firebase_messaging/probe.dart',
-        'probe3: revenuecat/probe.dart',
-        'probe4: onboarding/probe.dart',
-        'probe5: shared_preferences/probe.dart',
-        'probe6: local_notifications/probe.dart',
-        'probe7: di_role/probe.dart',
-        'probe8: preferences_role/probe.dart',
-        'probe9: notifications_role/probe.dart',
-        'probe10: push_role/probe.dart',
-        'probe11: purchases_role/probe.dart',
-        'probe12: router_walk/walk.dart',
-        'probe13: localization_role/probe.dart',
-        'probe14: flavors/probe.dart',
-        'probe15: rest_role/probe.dart',
+        'probe0: posthog/probe.dart',
+        'probe1: firebase_auth/probe.dart',
+        'probe2: google_sign_in/probe.dart',
+        'probe3: firebase_messaging/probe.dart',
+        'probe4: revenuecat/probe.dart',
+        'probe5: onboarding/probe.dart',
+        'probe6: shared_preferences/probe.dart',
+        'probe7: local_notifications/probe.dart',
+        'probe8: di_role/probe.dart',
+        'probe9: preferences_role/probe.dart',
+        'probe10: notifications_role/probe.dart',
+        'probe11: push_role/probe.dart',
+        'probe12: purchases_role/probe.dart',
+        'probe13: router_walk/walk.dart',
+        'probe14: localization_role/probe.dart',
+        'probe15: flavors/probe.dart',
+        'probe16: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
-      ('firebase_auth', 'probe0.probeFirebaseAuth'),
-      ('google_sign_in', 'probe1.probeGoogleSignIn'),
-      ('firebase_messaging', 'probe2.probeFirebaseMessaging'),
-      ('revenuecat', 'probe3.probeRevenueCat'),
-      ('onboarding', 'probe4.probeOnboarding'),
-      ('shared_preferences', 'probe5.probeSharedPreferences'),
-      ('local_notifications', 'probe6.probeLocalNotifications'),
-      ('di_role', 'probe7.probeServices'),
-      ('preferences_role', 'probe8.probePreferences'),
-      ('notifications_role', 'probe9.probeNotifications'),
-      ('push_role', 'probe10.probePush'),
-      ('purchases_role', 'probe11.probePurchases'),
-      ('router_walk', 'probe12.probeRoutes'),
-      ('localization_role', 'probe13.probeLanguages'),
-      ('flavors', 'probe14.probeFlavor'),
-      ('rest_role', 'probe15.probeRest'),
+      ('posthog', 'probe0.probePostHog'),
+      ('firebase_auth', 'probe1.probeFirebaseAuth'),
+      ('google_sign_in', 'probe2.probeGoogleSignIn'),
+      ('firebase_messaging', 'probe3.probeFirebaseMessaging'),
+      ('revenuecat', 'probe4.probeRevenueCat'),
+      ('onboarding', 'probe5.probeOnboarding'),
+      ('shared_preferences', 'probe6.probeSharedPreferences'),
+      ('local_notifications', 'probe7.probeLocalNotifications'),
+      ('di_role', 'probe8.probeServices'),
+      ('preferences_role', 'probe9.probePreferences'),
+      ('notifications_role', 'probe10.probeNotifications'),
+      ('push_role', 'probe11.probePush'),
+      ('purchases_role', 'probe12.probePurchases'),
+      ('router_walk', 'probe13.probeRoutes'),
+      ('localization_role', 'probe14.probeLanguages'),
+      ('flavors', 'probe15.probeFlavor'),
+      ('rest_role', 'probe16.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -4109,6 +4125,98 @@ void main() {
     expect(moduleTest.roles, isEmpty, reason: 'It tests one provider.');
     expect(moduleTest.mocks, isNull, reason: 'dio has no platform side.');
     expect(moduleTest.startProbe, isNull);
+  });
+
+  test(
+      'the test of posthog runs in the apps with the module, with the mocks '
+      'of its platform side, the default flavor, which every event of '
+      'PostHog has under flutter test, a project token of the tests in the '
+      'apps with a DI container and none in the others, the host of the US '
+      'Cloud, and the probe whose answer has its exit code for the verdict; '
+      'the test of its screens runs in those of them with a router', () {
+    final test = named('posthog');
+    final screens = named('posthog_screens');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        'posthog with di, router',
+        'posthog with di',
+        'posthog with router',
+        'posthog',
+        _postHogOff,
+        ..._everyModule,
+      ],
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (screens.appliesTo(app)) app.name,
+      ],
+      [
+        'posthog with di, router',
+        'posthog with router',
+        _postHogOff,
+        ..._everyModule,
+      ],
+    );
+    expect(test.roles, isEmpty, reason: 'It tests one provider.');
+    expect(
+      screens.roles,
+      {routerRole},
+      reason: 'The router calls the listener of the module.',
+    );
+    expect(
+      (test.mocks?.path, test.mocks?.function),
+      ('test/posthog_mocks.dart', 'mockPostHog'),
+    );
+    expect(screens.mocks, isNull);
+    expect(
+      (
+        test.startProbe?.path,
+        test.startProbe?.function,
+        test.startProbe?.answer,
+        test.startProbe?.verdict,
+      ),
+      (
+        'integration_test/posthog/probe.dart',
+        'probePostHog',
+        'posthog',
+        MatrixAnswerVerdict.exitCode,
+      ),
+    );
+    expect(screens.startProbe, isNull);
+    final byName = {
+      for (final app in apps.where(test.appliesTo)) app.name: app,
+    };
+    expect(test.values!(byName['posthog']!), {
+      'default_flavor': AppEntryRole.defaultFlavor.name,
+    });
+    expect(screens.values!(byName['posthog with router']!), {
+      'start_screen': '/',
+    });
+    for (final withToken in [
+      'posthog with di, router',
+      'posthog with di',
+      _postHogOff,
+      'every module (bloc)',
+    ]) {
+      expect(
+        test.envValues!(byName[withToken]!),
+        {'POSTHOG_PROJECT_TOKEN': 'phc_tests', 'POSTHOG_HOST': ''},
+        reason: withToken,
+      );
+    }
+    for (final withoutToken in ['posthog with router', 'posthog']) {
+      expect(
+        test.envValues!(byName[withoutToken]!),
+        {'POSTHOG_PROJECT_TOKEN': '', 'POSTHOG_HOST': ''},
+        reason: withoutToken,
+      );
+    }
   });
 
   test(
@@ -5884,8 +5992,8 @@ void main() {
       expect(test.startProbe, isNull);
       // The matrix of the CLI runs it in the apps whose roles and modules give
       // the role keys: those of dio, whose role gives the key of its address,
-      // of revenuecat and of the paywall, whose tests give the keys values in
-      // .env, and those with every module.
+      // of revenuecat, of the paywall and of posthog, whose tests give the
+      // keys values in .env, and those with every module.
       expect(
         [
           for (final app in apps)
@@ -5903,6 +6011,11 @@ void main() {
           _rcL10n,
           _rc,
           ..._paywall,
+          'posthog with di, router',
+          'posthog with di',
+          'posthog with router',
+          'posthog',
+          _postHogOff,
           ..._everyModule,
         ],
       );
