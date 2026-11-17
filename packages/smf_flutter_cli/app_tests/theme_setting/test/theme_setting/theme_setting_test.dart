@@ -7,7 +7,10 @@
 // chooses it: the app is in that mode, its root takes it, and the entry
 // shows it as selected. The entry keeps no mode of its own: it also shows a
 // mode that other code chose. On a small phone with a large text size, the
-// names of the modes grow only by half and stay in their segments.
+// names of the modes grow only by half and stay in their segments, and the
+// title of the entry, in each language of the app, keeps its words whole
+// and stays in the entry, in full: it is as large as the text size asks,
+// or, where its longest word would not fit, as large as that word allows.
 //
 // It knows only the roles. The entry is the role's own, the same with every
 // provider: a SegmentedButton of the modes with a segment for each. The
@@ -18,9 +21,11 @@
 // lib/main.dart, since the start-up of an app may not run twice, with the
 // mocks of the platform side of every module of the app
 // (flutter_test_config.dart), and goes to the settings screen with go() of
-// the navigator of the router role. Each expectation gives its reason.
+// the navigator of the router role. The languages of the app are those that
+// its root supports. Each expectation gives its reason.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/preferences/app_preferences.dart';
 import 'package:{{app_name}}/core/router/app_router.dart';
@@ -83,6 +88,18 @@ Future<void> _openSettings(WidgetTester tester) async {
       .go(settingsLocation);
   await tester.pumpAndSettle();
 }
+
+/// A letter, a mark that belongs to one, a digit, or a no-break space, which
+/// keeps the words around it together: a line that starts between two of
+/// them starts inside a word.
+final RegExp _joined = RegExp(
+  r'[\p{L}\p{M}\p{N}\u00A0\u2007\u202F]',
+  unicode: true,
+);
+
+/// A white space between two words, where a line may break: every one but a
+/// no-break space.
+final RegExp _space = RegExp(r'[^\S\u00A0\u2007\u202F]');
 
 /// Puts the app back into the mode of the device, with no mode saved, as
 /// the test found it: the mode of the app and the preferences of its last
@@ -260,7 +277,157 @@ void main() {
               'small phone with a large text size.',
         );
       }
+
+      // The title of the entry on the small phone, in each language of the
+      // app, which the device asks for in turn: the one text of the entry
+      // outside its control.
+      //
+      // Under flutter test every glyph of the font of the tests is one em
+      // wide, so at this size the title has about 210 pixels of room beside
+      // the icon of the entry, and "Theme", 240 pixels wide, does not fit:
+      // the English title is smaller than the text size asks here. With the
+      // font of the app, such as Geist of material_theme, it fits at the
+      // size that the text size asks. So the size that this check sees is no
+      // look of the app: it checks that the title keeps its words whole and
+      // stays in the entry, whichever size that takes.
+      final languages = tester
+          .widget<MaterialApp>(find.byType(MaterialApp).first)
+          .supportedLocales;
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      for (final locale in languages) {
+        final language = locale.toLanguageTag();
+        tester.platformDispatcher.localesTestValue = [locale];
+        await tester.pumpAndSettle();
+        final names = find
+            .descendant(of: control, matching: find.byType(Text))
+            .evaluate()
+            .toSet();
+        final titles = [
+          for (final text in find
+              .descendant(of: entry, matching: find.byType(Text))
+              .evaluate())
+            if (!names.contains(text)) text,
+        ];
+        expect(
+          titles,
+          hasLength(1),
+          reason: 'The entry has one text outside its control, its title, in '
+              '$language.',
+        );
+        final title = find.byElementPredicate(
+          (element) => element == titles.single,
+          description: 'the title of the entry of the theme mode',
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: title,
+            matching: find.byType(RichText),
+            matchRoot: true,
+          ),
+        );
+        final text = paragraph.text.toPlainText();
+        final box = tester.getRect(title);
+        final row = tester.getRect(entry);
+        expect(
+          (box.left >= row.left, box.right <= row.right),
+          (true, true),
+          reason: 'The title of the entry stays in the entry on a small phone '
+              'with a large text size, in $language: it is at $box in the '
+              'entry at $row.',
+        );
+        expect(
+          (
+            paragraph.didExceedMaxLines,
+            paragraph.size.height < paragraph.textSize.height,
+          ),
+          (false, false),
+          reason: 'The entry shows its title "$text" in full, on as many '
+              'lines as it needs, on a small phone with a large text size, '
+              'in $language.',
+        );
+        _expectWholeWords(tester, title, language: language);
+      }
+      tester.platformDispatcher.clearLocalesTestValue();
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'The entry of the theme mode fits a small phone with a large '
+            'text size in each language of the app.',
+      );
     },
     timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
+
+/// Checks that [shown], a text of the entry, keeps its words whole on the
+/// small phone in [language]: no line starts between two letters or digits,
+/// or at a no-break space. The text is as large as the text size of the
+/// device asks for its style, or, where its longest word would not fit the
+/// width that the text has at that size, as large as that word allows:
+/// smaller, with that word on a line of its own.
+void _expectWholeWords(
+  WidgetTester tester,
+  Finder shown, {
+  required String language,
+}) {
+  final paragraph = tester.renderObject<RenderParagraph>(
+    find.descendant(
+        of: shown, matching: find.byType(RichText), matchRoot: true),
+  );
+  final text = paragraph.text.toPlainText();
+  // The boxes of the characters from [start] to [end].
+  List<TextBox> boxesOf(int start, int end) => paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      );
+  // The top of the line of the character at [index], or `null` for one that
+  // the paragraph draws no box for.
+  double? lineOf(int index) => boxesOf(index, index + 1).firstOrNull?.top;
+  for (var index = 1; index < text.length; index++) {
+    if (!_joined.hasMatch(text[index - 1]) || !_joined.hasMatch(text[index])) {
+      continue;
+    }
+    final (before, after) = (lineOf(index - 1), lineOf(index));
+    if (before == null || after == null) continue;
+    final start = text.lastIndexOf(_space, index) + 1;
+    final end = switch (text.indexOf(_space, index)) {
+      -1 => text.length,
+      final space => space,
+    };
+    expect(
+      after,
+      closeTo(before, 0.5),
+      reason: 'On the small phone, "$text" breaks between its words and not '
+          'inside "${text.substring(start, end)}", in $language: where a '
+          'word would not fit, the text is as large as the word allows.',
+    );
+  }
+  // The width of the longest word: that of all its boxes.
+  var widest = 0.0;
+  var from = 0;
+  for (final word in text.split(_space)) {
+    if (word.isEmpty) continue;
+    final start = text.indexOf(word, from);
+    from = start + word.length;
+    final width = boxesOf(start, from).fold(
+      0.0,
+      (width, box) => width + box.right - box.left,
+    );
+    if (width > widest) widest = width;
+  }
+  // The size that the text size of the device asks for the style of the
+  // text, and the size of the text.
+  final element = tester.element(shown);
+  final largest = MediaQuery.textScalerOf(element)
+      .scale(DefaultTextStyle.of(element).style.fontSize ?? 14);
+  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
+  final room = paragraph.constraints.maxWidth;
+  expect(
+    size <= largest + 0.01 &&
+        (size >= largest - 0.01 || (widest <= room && widest >= room * 0.9)),
+    isTrue,
+    reason: 'On the small phone, "$text" is as large as the text size asks, '
+        '$largest, or as large as its longest word allows, in $language: it '
+        'is $size, and its longest word takes $widest of $room.',
   );
 }

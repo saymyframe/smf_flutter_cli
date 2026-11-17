@@ -370,6 +370,25 @@ void expectParses(String code, {String? reason}) {
   );
 }
 
+/// Fails unless [code], the file of an entry of the settings screen, has a
+/// copy of its own of `WholeWords`, `_WholeWords`: a widget that breaks a
+/// line only at a white space but a no-break space, measures each word in
+/// the style in which a `Text` paints, bold for a user who asks for bold
+/// text, and where the longest word does not fit the width that the text
+/// has, makes the text as large as that word allows.
+void expectWholeWordsCopy(String code) {
+  final wholeWords = parseString(content: code)
+      .unit
+      .declarations
+      .whereType<ClassDeclaration>()
+      .singleWhere((type) => type.namePart.typeName.lexeme == '_WholeWords');
+  expect(wholeWords.extendsClause!.superclass.name.lexeme, 'StatelessWidget');
+  expect(code, contains(r"text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'))"));
+  expect(code, contains('size *= room / widest * 0.98;'));
+  expect(code, contains('MediaQuery.boldTextOf(context)'));
+  expect(code, contains('DefaultTextStyle.of(context).style'));
+}
+
 /// An interactive environment whose user picks the choice at [pick] of every
 /// selection.
 final class PromptingEnvironment implements SmfEnvironment {

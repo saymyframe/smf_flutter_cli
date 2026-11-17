@@ -615,7 +615,8 @@ Future<MatrixAppTests> smfAppTests() async {
       // with the theme role and the settings screen role, whichever modules
       // provide them: the screen shows the entry, which shows the mode of
       // the app, also one that other code chose, and a tap on a mode
-      // chooses it.
+      // chooses it. On a small phone with a large text size, its title
+      // keeps its words whole.
       MatrixAppTest(
         '$cli/theme_setting',
         appliesTo: (app) => app.hook!.presentRoles
@@ -985,7 +986,9 @@ $list
 /// option, which is saved under [LocalizationRole.localeKey], and the
 /// option of the device removes what was saved. On a small phone with a
 /// large text size, the choice is below the title of the setting, and the
-/// sheet scrolls. A second file of the test starts the app on a device
+/// sheet scrolls; the texts of the setting and of its sheet stay in their
+/// rows, in full, and keep their words whole, in each language and with
+/// each choice. A second file of the test starts the app on a device
 /// that prefers the last language of the app: the app and the setting
 /// follow the device, the setting names a choice of that same language
 /// that code makes, the next start restores the language that was saved,
@@ -1265,7 +1268,7 @@ Map<String, String> _notificationsValuesOf(MatrixApp app) =>
 ///   provider, whose mocks grant it, and the entry shows On; and on a small
 ///   phone with a large text size, once the list of the screen scrolled to
 ///   the entry, the state is below the title, and the texts stay in the row
-///   of the entry;
+///   of the entry, in full, and keep their words whole, in each language;
 /// - over a service of the test that scripts what a provider answers: a tap
 ///   asks the user while the app has not asked, once, and the entry shows
 ///   what the user answered; once the app asked, or while it may show
@@ -1962,7 +1965,8 @@ Future<MatrixAppTest> feedbackRoleAppTest({
 /// - while a restore is on its way, the entry shows a spinner and no result
 ///   of an earlier restore, and a second tap restores nothing more;
 /// - on a small phone with a large text size, the title and a long failure
-///   stay in the row of the entry, in full.
+///   stay in the row of the entry, in full, and the title and the text of
+///   the failure keep their words whole.
 ///
 /// The test knows only the two roles. The matrix writes the type of the
 /// widget of the entry for it into [purchasesSettingFile], from the entries

@@ -10,7 +10,12 @@
 // the app and the texts of the setting are in the language of the option,
 // which is saved under the key of the role, and the option of the device
 // removes what was saved. On a small phone with a large text size, the
-// choice is below the title of the setting, and the sheet scrolls.
+// choice is below the title of the setting, and the sheet scrolls. There
+// the texts of the setting keep their words whole and stay in its row, in
+// full, in each language of the app and with each choice, and so do the
+// title and the options of the sheet: each is as large as the text size
+// asks, or, where its longest word would not fit, as large as that word
+// allows.
 //
 // It knows only the two roles, and starts the app once, since the start-up
 // of an app may not run twice. The matrix writes setting.dart next to it,
@@ -23,12 +28,25 @@
 // with a known bug fails the test with (brokenProviders of the fixture
 // registry).
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:{{app_name}}/core/l10n/app_locale.dart';
 import 'package:{{app_name}}/core/preferences/app_preferences.dart';
 
 import '../settings_screen_role/open_settings.dart';
 import 'setting.dart';
+
+/// A letter, a mark that belongs to one, a digit, or a no-break space, which
+/// keeps the words around it together: a line that starts between two of
+/// them starts inside a word.
+final RegExp _joined = RegExp(
+  r'[\p{L}\p{M}\p{N}\u00A0\u2007\u202F]',
+  unicode: true,
+);
+
+/// A white space between two words, where a line may break: every one but a
+/// no-break space.
+final RegExp _space = RegExp(r'[^\S\u00A0\u2007\u202F]');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -282,6 +300,65 @@ void main() {
         );
       }
 
+      // Each text of the row on the small phone: the title in each
+      // language of the app, and as the choice the option of the languages
+      // of the device, in each language that the device asks for, and the
+      // name of each language of the app, which code chooses in real time,
+      // so that the write of the preferences does not wait for the fake
+      // time of the test.
+      //
+      // Under flutter test every glyph of the font of the tests is one em
+      // wide, so at this size the title has about 160 pixels of room in its
+      // row, and even "System", 252 pixels wide as the choice, does not fit:
+      // the texts are smaller than the text size asks here. With the font
+      // of the app, such as Geist of material_theme, a short word such as
+      // "Мова" fits at the size that the text size asks, and a long one such
+      // as "Українська" does not. So the size that this check sees is no
+      // look of the app: it checks that the texts keep their words whole and
+      // stay in the row, whichever size that takes.
+      addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+      Future<void> expectWholeRow(String code, String choice) async {
+        await tester.ensureVisible(
+          find.byType(languageSetting, skipOffstage: false),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          language(),
+          code,
+          reason: 'The app is in the language $code, one of its languages.',
+        );
+        for (final text in [settingTitles[code]!, choice]) {
+          _expectInPlace(
+            tester,
+            inSetting(text),
+            setting,
+            'the row of the setting',
+            language: code,
+          );
+        }
+      }
+
+      for (final code in settingTitles.keys) {
+        tester.platformDispatcher.localesTestValue = [Locale(code)];
+        await tester.pumpAndSettle();
+        await expectWholeRow(code, deviceOptions[code]!);
+      }
+      for (final locale in appLocales) {
+        final code = locale.languageCode;
+        await tester.runAsync(() => appLocale.choose(locale));
+        await tester.pumpAndSettle();
+        await expectWholeRow(code, languageLabels[code]!);
+      }
+      await tester.runAsync(() => appLocale.choose(null));
+      tester.platformDispatcher.clearLocalesTestValue();
+      await tester.pumpAndSettle();
+      expect(
+        (appLocale.value, language()),
+        (null, device),
+        reason: 'The app follows the device again, which asks for the '
+            'language that it asked for at the start.',
+      );
+
       await tester.tap(setting);
       await tester.pumpAndSettle();
       expect(
@@ -290,6 +367,34 @@ void main() {
         reason: 'The sheet of the setting fits a small phone with a large '
             'text size.',
       );
+      // The title of the sheet and the label of each option on the small
+      // phone, each option once the sheet scrolled to it.
+      _expectInPlace(
+        tester,
+        option(settingTitles[device]!),
+        sheet,
+        'the sheet',
+        language: device,
+      );
+      for (final label in [
+        deviceOptions[device]!,
+        for (final locale in appLocales) languageLabels[locale.languageCode]!,
+      ]) {
+        await tester.scrollUntilVisible(
+          option(label),
+          100,
+          scrollable:
+              find.descendant(of: sheet, matching: find.byType(Scrollable)),
+        );
+        await tester.pumpAndSettle();
+        _expectInPlace(
+          tester,
+          option(label),
+          find.ancestor(of: option(label), matching: find.byType(ListTile)),
+          'its option',
+          language: device,
+        );
+      }
       // The last option of the sheet, which the sheet scrolls to where its
       // options do not fit.
       final last = option(languageLabels[appLocales.last.languageCode]!);
@@ -329,5 +434,97 @@ void main() {
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),
+  );
+}
+
+/// Checks that [shown], a text that [place] shows in [placed], keeps its
+/// words whole on the small phone in [language] and stays in [placed], in
+/// full: no line starts between two letters or digits, or at a no-break
+/// space. The text is as large as the text size of the device asks for its
+/// style, or, where its longest word would not fit the width that the text
+/// has at that size, as large as that word allows: smaller, with that word
+/// on a line of its own.
+void _expectInPlace(
+  WidgetTester tester,
+  Finder shown,
+  Finder placed,
+  String place, {
+  required String language,
+}) {
+  final paragraph = tester.renderObject<RenderParagraph>(
+    find.descendant(
+        of: shown, matching: find.byType(RichText), matchRoot: true),
+  );
+  final text = paragraph.text.toPlainText();
+  final box = tester.getRect(shown);
+  final bounds = tester.getRect(placed);
+  expect(
+    (box.left >= bounds.left, box.right <= bounds.right),
+    (true, true),
+    reason: '"$text" stays in $place on a small phone with a large text '
+        'size, in $language: it is at $box in $place at $bounds.',
+  );
+  expect(
+    (
+      paragraph.didExceedMaxLines,
+      paragraph.size.height < paragraph.textSize.height,
+    ),
+    (false, false),
+    reason: '"$text" shows in full in $place, on as many lines as it needs, '
+        'on a small phone with a large text size, in $language.',
+  );
+  // The boxes of the characters from [start] to [end].
+  List<TextBox> boxesOf(int start, int end) => paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      );
+  // The top of the line of the character at [index], or `null` for one that
+  // the paragraph draws no box for.
+  double? lineOf(int index) => boxesOf(index, index + 1).firstOrNull?.top;
+  for (var index = 1; index < text.length; index++) {
+    if (!_joined.hasMatch(text[index - 1]) || !_joined.hasMatch(text[index])) {
+      continue;
+    }
+    final (before, after) = (lineOf(index - 1), lineOf(index));
+    if (before == null || after == null) continue;
+    final start = text.lastIndexOf(_space, index) + 1;
+    final end = switch (text.indexOf(_space, index)) {
+      -1 => text.length,
+      final space => space,
+    };
+    expect(
+      after,
+      closeTo(before, 0.5),
+      reason: 'On the small phone, "$text" breaks between its words and not '
+          'inside "${text.substring(start, end)}", in $language: where a '
+          'word would not fit, the text is as large as the word allows.',
+    );
+  }
+  // The width of the longest word: that of all its boxes.
+  var widest = 0.0;
+  var from = 0;
+  for (final word in text.split(_space)) {
+    if (word.isEmpty) continue;
+    final start = text.indexOf(word, from);
+    from = start + word.length;
+    final width = boxesOf(start, from).fold(
+      0.0,
+      (width, box) => width + box.right - box.left,
+    );
+    if (width > widest) widest = width;
+  }
+  // The size that the text size of the device asks for the style of the
+  // text, and the size of the text.
+  final element = tester.element(shown);
+  final largest = MediaQuery.textScalerOf(element)
+      .scale(DefaultTextStyle.of(element).style.fontSize ?? 14);
+  final size = paragraph.textScaler.scale(paragraph.text.style!.fontSize!);
+  final room = paragraph.constraints.maxWidth;
+  expect(
+    size <= largest + 0.01 &&
+        (size >= largest - 0.01 || (widest <= room && widest >= room * 0.9)),
+    isTrue,
+    reason: 'On the small phone, "$text" is as large as the text size asks, '
+        '$largest, or as large as its longest word allows, in $language: it '
+        'is $size, and its longest word takes $widest of $room.',
   );
 }
