@@ -634,7 +634,7 @@ With `flutter_native_splash`:
 
 ## State management
 
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A value that only the backend changes, such as remote config, follows too. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
 
 With `flutter_riverpod`:
 
@@ -11748,57 +11748,65 @@ class _DashedEdge extends CustomPainter {
 // changes the value only through the controller that the doc of its
 // provider names.
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:flutter/material.dart' as state0;
-import 'package:flutter/widgets.dart' as state2;
+import 'package:flutter/material.dart' as state1;
+import 'package:flutter/widgets.dart' as state3;
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     show Notifier, NotifierProvider;
-import 'package:my_app/core/auth/app_session.dart' as state6;
-import 'package:my_app/core/l10n/app_locale.dart' as state3;
-import 'package:my_app/core/notifications/app_notifications.dart' as state4;
-import 'package:my_app/core/purchases/app_purchases.dart' as state7;
-import 'package:my_app/core/push/app_push.dart' as state5;
-import 'package:my_app/core/theme/theme_mode.dart' as state1;
+import 'package:my_app/core/auth/app_session.dart' as state7;
+import 'package:my_app/core/l10n/app_locale.dart' as state4;
+import 'package:my_app/core/notifications/app_notifications.dart' as state5;
+import 'package:my_app/core/purchases/app_purchases.dart' as state8;
+import 'package:my_app/core/push/app_push.dart' as state6;
+import 'package:my_app/core/theme/theme_mode.dart' as state2;
+import 'package:my_app/features/onboarding/onboarding_status.dart' as state0;
+
+/// Whether the user finished the onboarding; `onboardingStatus.complete()` and
+/// `restart()` change it.
+final NotifierProvider<ListenableNotifier<bool>, bool>
+onboardingCompletedProvider = NotifierProvider(
+  () => ListenableNotifier(state0.onboardingCompleted),
+);
 
 /// The theme mode that the user selected; `appThemeMode.choose()` changes it.
-final NotifierProvider<ListenableNotifier<state0.ThemeMode>, state0.ThemeMode>
+final NotifierProvider<ListenableNotifier<state1.ThemeMode>, state1.ThemeMode>
 themeModeProvider = NotifierProvider(
-  () => ListenableNotifier(state1.themeModeListenable),
+  () => ListenableNotifier(state2.themeModeListenable),
 );
 
 /// The language that the user chose, `null` to follow the device;
 /// `appLocale.choose()` changes it.
-final NotifierProvider<ListenableNotifier<state2.Locale?>, state2.Locale?>
+final NotifierProvider<ListenableNotifier<state3.Locale?>, state3.Locale?>
 localizationLocaleProvider = NotifierProvider(
-  () => ListenableNotifier(state3.localizationLocaleListenable),
+  () => ListenableNotifier(state4.localizationLocaleListenable),
 );
 
 /// Whether the app may show notifications; `appNotifications.request()` changes
 /// it.
 final NotifierProvider<
-  ListenableNotifier<state4.NotificationPermission>,
-  state4.NotificationPermission
+  ListenableNotifier<state5.NotificationPermission>,
+  state5.NotificationPermission
 >
 notificationsPermissionProvider = NotifierProvider(
-  () => ListenableNotifier(state4.notificationsPermissionListenable),
+  () => ListenableNotifier(state5.notificationsPermissionListenable),
 );
 
 /// The address of the device that `appPush.address` keeps, `null` while the
 /// platform gives none.
 final NotifierProvider<ListenableNotifier<String?>, String?>
 pushAddressProvider = NotifierProvider(
-  () => ListenableNotifier(state5.pushAddressListenable),
+  () => ListenableNotifier(state6.pushAddressListenable),
 );
 
 /// Who uses the app; the calls of `appSession` change it.
-final NotifierProvider<ListenableNotifier<state6.AppSession>, state6.AppSession>
+final NotifierProvider<ListenableNotifier<state7.AppSession>, state7.AppSession>
 authSessionProvider = NotifierProvider(
-  () => ListenableNotifier(state6.authSessionListenable),
+  () => ListenableNotifier(state7.authSessionListenable),
 );
 
 /// The premium access of the user; the calls of `appPurchases` change it.
-final NotifierProvider<ListenableNotifier<state7.AppAccess>, state7.AppAccess>
+final NotifierProvider<ListenableNotifier<state8.AppAccess>, state8.AppAccess>
 purchasesAccessProvider = NotifierProvider(
-  () => ListenableNotifier(state7.purchasesAccessListenable),
+  () => ListenableNotifier(state8.purchasesAccessListenable),
 );
 
 /// A notifier whose state is the value of a [ValueListenable], from the first

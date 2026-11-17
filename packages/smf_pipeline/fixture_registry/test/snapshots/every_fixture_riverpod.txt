@@ -345,7 +345,7 @@ The assets of the fixture are in `assets/fixture/`, such as `assets/fixture/read
 
 ## State management
 
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A value that only the backend changes, such as remote config, follows too. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
 
 ## Store reviews
 
@@ -7377,6 +7377,10 @@ export 'remote_values.dart';
 /// on the screen reads it once, such as in `initState`.
 final appRemoteConfig = AppRemoteConfigController._();
 
+/// The values of remote config as a [ValueListenable], for the state manager
+/// of the app: [appRemoteConfig] itself.
+ValueListenable<RemoteValues> remoteConfigValuesListenable() => appRemoteConfig;
+
 /// Keeps the values of remote config of the app up to date with the service
 /// of the provider of remote config. The app has one, [appRemoteConfig].
 ///
@@ -10381,6 +10385,9 @@ import 'package:fixture_app/core/notifications/app_notifications.dart'
     as state5;
 import 'package:fixture_app/core/purchases/app_purchases.dart' as state7;
 import 'package:fixture_app/core/push/app_push.dart' as state6;
+import 'package:fixture_app/core/remote_config/app_remote_config.dart'
+    as state9;
+import 'package:fixture_app/core/remote_config/remote_values.dart' as state8;
 import 'package:fixture_app/core/state/fixture_listenable_notifier.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart' as state3;
 import 'package:flutter/material.dart' as state2;
@@ -10431,6 +10438,14 @@ final purchasesAccessBridge =
       FixtureListenableNotifier<state7.AppAccess>,
       state7.AppAccess
     >(() => FixtureListenableNotifier(state7.purchasesAccessListenable));
+
+/// The values of remote config; they change when the app gets new values from
+/// the backend.
+final remoteConfigValuesBridge =
+    NotifierProvider<
+      FixtureListenableNotifier<state8.RemoteValues>,
+      state8.RemoteValues
+    >(() => FixtureListenableNotifier(state9.remoteConfigValuesListenable));
 === lib/core/theme/app_theme.dart (fake_theme) ===
 import 'package:flutter/material.dart';
 
