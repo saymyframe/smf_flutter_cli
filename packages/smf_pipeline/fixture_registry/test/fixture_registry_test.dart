@@ -24,6 +24,27 @@ import 'package:test/test.dart';
 
 import 'host.dart';
 
+/// The matrix of the fixtures, which several tests read: built once, when
+/// a test reads it first, since the contract harness renders each of its
+/// apps. The tests only read it.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})>
+    _fixtureMatrix = matrixOf(fixtureModules());
+
+/// The matrix of the fixtures that CI checks, with a pairwise covering of
+/// the apps with every module, which several tests read: built once too.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})>
+    _pairwiseFixtureMatrix = matrixOf(
+  fixtureModules(),
+  everyModuleApps: EveryModuleCombinations.pairwise,
+);
+
+/// The apps with every module of the registry of several providers, which
+/// several tests read: built once too.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})>
+    _severalProvidersEveryModule = everyModuleAppsOf(
+  severalProvidersModules(),
+);
+
 void main() {
   test('the fixtures form a valid registry', () {
     expect(ModuleRegistry.problemsOf(fixtureModules()), isEmpty);
@@ -163,9 +184,7 @@ void main() {
         'builds an app with every module for each of the two state managers '
         'that the sign-in has a variant for, whose cases have no errors, and '
         'its tool checks the first of them', () async {
-      final (:apps, :failed) = await everyModuleAppsOf(
-        severalProvidersModules(),
-      );
+      final (:apps, :failed) = await _severalProvidersEveryModule;
 
       expect(failed, isEmpty);
       // A registry has every provider that one of its modules has a variant
@@ -190,9 +209,7 @@ void main() {
         'that shows only at times, next to the entry of the review role, so '
         'that the tests of the settings screen role check a screen with '
         'entries on a provider that must work', () async {
-      final (:apps, :failed) = await everyModuleAppsOf(
-        severalProvidersModules(),
-      );
+      final (:apps, :failed) = await _severalProvidersEveryModule;
 
       expect(failed, isEmpty);
       // The app that the tool of the registry checks.
@@ -707,7 +724,7 @@ on request staging
 
     test('is an app of the matrix, with the start that the harness answered',
         () async {
-      final (:apps, :failed) = await matrixOf(fixtureModules());
+      final (:apps, :failed) = await _fixtureMatrix;
 
       expect(failed, isEmpty);
       // The apps with every module whose mode options have their first
@@ -1744,7 +1761,7 @@ on request staging
         'clock by fake_clock_badge --clock-hours=12',
       ]);
 
-      final (:apps, :failed) = await matrixOf(fixtureModules());
+      final (:apps, :failed) = await _fixtureMatrix;
       expect(failed, isEmpty);
       MatrixApp named(String name) =>
           apps.singleWhere((app) => app.name == name);
@@ -1816,7 +1833,7 @@ on request staging
               'every module ($router, $container, $stateManager)',
       ];
 
-      final all = await matrixOf(fixtureModules());
+      final all = await _fixtureMatrix;
       expect(all.failed, isEmpty);
       expect(ofTwelve(all.apps), [
         'clock by fake_clock_badge $twelveHours',
@@ -1852,10 +1869,7 @@ on request staging
       }
 
       // The matrix that CI checks, with a pairwise covering.
-      final (:apps, :failed) = await matrixOf(
-        fixtureModules(),
-        everyModuleApps: EveryModuleCombinations.pairwise,
-      );
+      final (:apps, :failed) = await _pairwiseFixtureMatrix;
       expect(failed, isEmpty);
       final ofModes = [
         for (final app in apps)
@@ -2062,7 +2076,7 @@ on request staging
         AuthMode.required,
       );
 
-      final (:apps, :failed) = await matrixOf(fixtureModules());
+      final (:apps, :failed) = await _fixtureMatrix;
       expect(failed, isEmpty);
       MatrixApp named(String name) =>
           apps.singleWhere((app) => app.name == name);
@@ -2114,10 +2128,7 @@ on request staging
         'a run of the matrix takes apps with every module that have each '
         'other mode with each router, each DI container and each state '
         'manager, and with a clock of 24 hours and of 12', () async {
-      final (:apps, :failed) = await matrixOf(
-        fixtureModules(),
-        everyModuleApps: EveryModuleCombinations.pairwise,
-      );
+      final (:apps, :failed) = await _pairwiseFixtureMatrix;
       expect(failed, isEmpty);
       final ofModes = [
         for (final app in apps)
