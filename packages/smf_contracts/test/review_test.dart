@@ -1965,6 +1965,13 @@ void main() {
         ]),
       );
     });
+
+    test(
+        'keeps the words of its title whole, with a copy of WholeWords of its '
+        'own, the same as the copies of the other entries of the templates '
+        'of roles', () {
+      expectWholeWordsCopy(code);
+    });
   });
 
   group('the notes of the review role for coding agents', () {

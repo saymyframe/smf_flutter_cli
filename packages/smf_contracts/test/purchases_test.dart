@@ -2150,7 +2150,7 @@ void main() {
 
       expect(
         created('ListTile').single['title'],
-        'Text(context.l10n.purchasesRestoreTitle)',
+        '_WholeWords(context.l10n.purchasesRestoreTitle)',
       );
       expect(
         code,
@@ -2170,10 +2170,12 @@ void main() {
       expect(
         english,
         allOf(
-          contains("title: Text('Restore purchases'),"),
+          contains("title: _WholeWords('Restore purchases'),"),
           contains("_Outcome.premium => 'Your premium access is back.',"),
           contains("_Outcome.nothing => 'No purchases to restore.',"),
-          contains(r"'Couldn\'t restore purchases. Try again.',"),
+          contains(
+            r"_Outcome.failed => 'Couldn\'t restore purchases. Try again.',",
+          ),
         ),
       );
       expectParses(english);
@@ -2182,7 +2184,8 @@ void main() {
     test(
         'has in its code a row whose tap calls _restore, which returns while '
         'a restore is on its way, a spinner while _restoring, the result in '
-        'a live region, and the hint of a failure behind kDebugMode', () {
+        'a live region with its words whole, and below it the hint of a '
+        'failure behind kDebugMode', () {
       final row = created('ListTile').single;
       expect(row['leading'], 'const Icon(Icons.restore)');
       expect(row['onTap'], '_restore');
@@ -2193,8 +2196,10 @@ void main() {
       );
       expect(
         row['subtitle'],
-        'message == null ? null : Semantics(liveRegion: true, child: '
-        'Text(message))',
+        'found == null ? null : Semantics(liveRegion: true, child: '
+        'Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: '
+        'CrossAxisAlignment.start, children: [_WholeWords(found), '
+        'if (_hint case final hint? when kDebugMode) Text(hint)]))',
       );
       final state = unit.declarations.whereType<ClassDeclaration>().singleWhere(
             (type) =>
@@ -2217,10 +2222,6 @@ void main() {
         ),
       );
       expect(
-        code,
-        contains('if (_hint case final hint? when kDebugMode) hint'),
-      );
-      expect(
         [
           for (final directive in unit.directives.whereType<ImportDirective>())
             directive.uri.stringValue,
@@ -2233,6 +2234,12 @@ void main() {
           'package:my_app/core/l10n/l10n.dart',
         ]),
       );
+    });
+
+    test(
+        'keeps the words of its texts whole at a large text size, with a '
+        'copy of WholeWords of its own', () {
+      expectWholeWordsCopy(code);
     });
   });
 

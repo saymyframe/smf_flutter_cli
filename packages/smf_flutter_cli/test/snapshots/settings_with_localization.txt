@@ -1072,23 +1072,29 @@ class LanguageSetting extends StatelessWidget {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final chosen = AppLocaleScope.of(context);
-    final choice = Text(
-      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
-      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-    );
+    final choice = chosen == null
+        ? context.l10n.localizationSystem
+        : _nameOf(chosen);
+    final style = theme.textTheme.bodyMedium?.copyWith(color: muted);
     final arrow = Icon(Icons.chevron_right, color: muted);
     // At a large text size, the choice goes below the title, where it has
-    // the width of the row.
+    // the width of the row, and the two wrap between their words.
     final below = MediaQuery.textScalerOf(context).scale(10) > 13;
     return ListTile(
       leading: const Icon(Icons.language),
-      title: Text(context.l10n.localizationLanguage),
-      subtitle: below ? choice : null,
+      title: _WholeWords(context.l10n.localizationLanguage),
+      subtitle: below
+          ? DefaultTextStyle.merge(style: style, child: _WholeWords(choice))
+          : null,
       trailing: below
           ? arrow
           : Row(
               mainAxisSize: MainAxisSize.min,
-              children: [choice, const SizedBox(width: 4), arrow],
+              children: [
+                Text(choice, style: style),
+                const SizedBox(width: 4),
+                arrow,
+              ],
             ),
       onTap: () => showModalBottomSheet<void>(
         context: context,
@@ -1125,9 +1131,9 @@ class _LanguageSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: Semantics(
               header: true,
-              child: Text(
-                context.l10n.localizationLanguage,
+              child: DefaultTextStyle.merge(
                 style: theme.textTheme.headlineSmall,
+                child: _WholeWords(context.l10n.localizationLanguage),
               ),
             ),
           ),
@@ -1137,12 +1143,15 @@ class _LanguageSheet extends StatelessWidget {
                 horizontal: 24,
                 vertical: 4,
               ),
-              title: Text(
-                locale == null
-                    ? context.l10n.localizationSystem
-                    : _nameOf(locale),
-                // Larger than the text of a row of the screen.
+              // Larger than the text of a row of the screen, and so the
+              // name of a language wraps between its words too.
+              title: DefaultTextStyle.merge(
                 style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+                child: _WholeWords(
+                  locale == null
+                      ? context.l10n.localizationSystem
+                      : _nameOf(locale),
+                ),
               ),
               selected: locale == chosen,
               trailing: locale == chosen
@@ -1159,6 +1168,77 @@ class _LanguageSheet extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
     );
   }
 }
