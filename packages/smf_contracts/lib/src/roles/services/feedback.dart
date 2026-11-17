@@ -313,7 +313,7 @@ final class _FeedbackTemplate extends _ServiceTemplate<RoleImplementation> {
   /// provider implements.
   @override
   String get agentNote => '''
-- `appFeedback` in `$file` lets a user write to the developer: call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app. It opens the way of the provider, such as the mail app with a new mail, a form or a survey. It completes with `true` once that opened, without waiting for the user, or with `false`. It never throws, and a call while another is on its way does nothing.
+- `appFeedback` in `$file` lets a user write to the developer: call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app. It opens what the provider offers, such as a new mail in the mail app, a form or a survey. It completes with `true` once that has opened, without waiting for the user, and with `false` otherwise. It never throws, and a call while another is on its way does nothing.
 - `appFeedback.available` tells whether the provider has what it needs, and does not change while the app runs: hide your own button while it is `false`.
 - Never ask anything before or around the review dialog of a store, and never make a way to write depend on whether the user rated the app.
 - A new provider implements `$service` of `${FeedbackRole.serviceFile}`, and only the files of its implementation import it. The code of the app calls neither `$factory()` nor `appFeedback.use()`, which is for tests.

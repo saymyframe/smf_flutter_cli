@@ -197,7 +197,7 @@ With `shared_preferences`:
 
 - `appReview` in `lib/core/review/app_review.dart` asks for the review dialog of the App Store or Google Play only where the code of the app calls `appReview.requestIfDue()`. Call it at a natural break, such as after the user has finished a task: `unawaited(appReview.requestIfDue());`. It asks only when `ReviewPolicy` says that a review is due: never on the first launch, in the flow of a guard of the routes, twice in a version or twice in 14 days. It returns nothing, since the store tells nothing.
 - Never call it from a button or after a question of your own, and show nothing around the dialog. Nothing in the app may depend on whether the app asked.
-- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, also from a build of another flavor.
+- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, even from a build of another flavor.
 - A new provider implements `ReviewService` of `lib/core/review/review_service.dart`, and only the files of that implementation import it. The code of the app calls neither `initReview()`, `createReviewService()` nor `appReview.start()`, and writes nothing under the keys `review.*`.
 
 With `in_app_review`:
