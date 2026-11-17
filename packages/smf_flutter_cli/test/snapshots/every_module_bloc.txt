@@ -640,7 +640,7 @@ With `flutter_native_splash`:
 
 ## State management
 
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. So does a value that only a backend changes, such as the values of remote config in an app with that role; no code of the app changes it. A widget reads such a value through its bridge. Code changes any other such value only through its controller, which the doc of the bridge names, and never in a build.
 
 With `flutter_bloc`:
 
@@ -650,7 +650,7 @@ With `flutter_bloc`:
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
 
-- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `ThemeModeCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `OnboardingCompletedCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Store reviews
 
@@ -12377,58 +12377,66 @@ class _DashedEdge extends CustomPainter {
 // the value only through the controller that the doc of its cubit
 // names.
 import 'package:flutter/foundation.dart' show ValueListenable;
-import 'package:flutter/material.dart' as state0;
+import 'package:flutter/material.dart' as state1;
 import 'package:flutter/widgets.dart'
     show BuildContext, StatelessWidget, Widget;
-import 'package:flutter/widgets.dart' as state2;
+import 'package:flutter/widgets.dart' as state3;
 import 'package:flutter_bloc/flutter_bloc.dart'
     show BlocProvider, Cubit, MultiBlocProvider;
-import 'package:my_app/core/auth/app_session.dart' as state6;
-import 'package:my_app/core/l10n/app_locale.dart' as state3;
-import 'package:my_app/core/notifications/app_notifications.dart' as state4;
-import 'package:my_app/core/purchases/app_purchases.dart' as state7;
-import 'package:my_app/core/push/app_push.dart' as state5;
-import 'package:my_app/core/theme/theme_mode.dart' as state1;
+import 'package:my_app/core/auth/app_session.dart' as state7;
+import 'package:my_app/core/l10n/app_locale.dart' as state4;
+import 'package:my_app/core/notifications/app_notifications.dart' as state5;
+import 'package:my_app/core/purchases/app_purchases.dart' as state8;
+import 'package:my_app/core/push/app_push.dart' as state6;
+import 'package:my_app/core/theme/theme_mode.dart' as state2;
+import 'package:my_app/features/onboarding/onboarding_status.dart' as state0;
+
+/// Whether the user finished the onboarding; `onboardingStatus.complete()` and
+/// `restart()` change it.
+final class OnboardingCompletedCubit extends ListenableCubit<bool> {
+  /// Creates the cubit, with the value that the controller has.
+  OnboardingCompletedCubit() : super(state0.onboardingCompleted());
+}
 
 /// The theme mode that the user selected; `appThemeMode.choose()` changes it.
-final class ThemeModeCubit extends ListenableCubit<state0.ThemeMode> {
+final class ThemeModeCubit extends ListenableCubit<state1.ThemeMode> {
   /// Creates the cubit, with the value that the controller has.
-  ThemeModeCubit() : super(state1.themeModeListenable());
+  ThemeModeCubit() : super(state2.themeModeListenable());
 }
 
 /// The language that the user chose, `null` to follow the device;
 /// `appLocale.choose()` changes it.
-final class LocalizationLocaleCubit extends ListenableCubit<state2.Locale?> {
+final class LocalizationLocaleCubit extends ListenableCubit<state3.Locale?> {
   /// Creates the cubit, with the value that the controller has.
-  LocalizationLocaleCubit() : super(state3.localizationLocaleListenable());
+  LocalizationLocaleCubit() : super(state4.localizationLocaleListenable());
 }
 
 /// Whether the app may show notifications; `appNotifications.request()` changes
 /// it.
 final class NotificationsPermissionCubit
-    extends ListenableCubit<state4.NotificationPermission> {
+    extends ListenableCubit<state5.NotificationPermission> {
   /// Creates the cubit, with the value that the controller has.
   NotificationsPermissionCubit()
-    : super(state4.notificationsPermissionListenable());
+    : super(state5.notificationsPermissionListenable());
 }
 
 /// The address of the device that `appPush.address` keeps, `null` while the
 /// platform gives none.
 final class PushAddressCubit extends ListenableCubit<String?> {
   /// Creates the cubit, with the value that the controller has.
-  PushAddressCubit() : super(state5.pushAddressListenable());
+  PushAddressCubit() : super(state6.pushAddressListenable());
 }
 
 /// Who uses the app; the calls of `appSession` change it.
-final class AuthSessionCubit extends ListenableCubit<state6.AppSession> {
+final class AuthSessionCubit extends ListenableCubit<state7.AppSession> {
   /// Creates the cubit, with the value that the controller has.
-  AuthSessionCubit() : super(state6.authSessionListenable());
+  AuthSessionCubit() : super(state7.authSessionListenable());
 }
 
 /// The premium access of the user; the calls of `appPurchases` change it.
-final class PurchasesAccessCubit extends ListenableCubit<state7.AppAccess> {
+final class PurchasesAccessCubit extends ListenableCubit<state8.AppAccess> {
   /// Creates the cubit, with the value that the controller has.
-  PurchasesAccessCubit() : super(state7.purchasesAccessListenable());
+  PurchasesAccessCubit() : super(state8.purchasesAccessListenable());
 }
 
 /// Provides the cubits of the values that controllers of the app keep to
@@ -12444,6 +12452,7 @@ final class SharedStateCubits extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MultiBlocProvider(
     providers: [
+      BlocProvider(create: (_) => OnboardingCompletedCubit()),
       BlocProvider(create: (_) => ThemeModeCubit()),
       BlocProvider(create: (_) => LocalizationLocaleCubit()),
       BlocProvider(create: (_) => NotificationsPermissionCubit()),

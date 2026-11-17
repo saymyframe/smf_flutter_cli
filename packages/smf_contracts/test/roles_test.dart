@@ -191,12 +191,12 @@ void main() {
     });
     // The values of an app are the same whichever roles the app has: the
     // template renders the parameters that the modules give it, and the
-    // provider keeps what the backend gave.
+    // provider keeps what the backend gave. The state manager follows them.
     expect(shape(remoteConfigRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
-      'feeds': <String>{},
+      'feeds': {'state_management'},
     });
     // The app counts its launches and remembers its last request for a
     // review in the preferences, and the App Store ID is a value of the

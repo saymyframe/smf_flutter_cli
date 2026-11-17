@@ -18,7 +18,8 @@ import 'package:fixture_registry/fixture_registry.dart';
 import 'package:fixture_registry/matrix_app_tests.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_flutter_cli/matrix.dart';
-import 'package:smf_flutter_cli/matrix_app_tests.dart' show routerWalkFile;
+import 'package:smf_flutter_cli/matrix_app_tests.dart'
+    show routerWalkFile, stateBridgesFile;
 import 'package:test/test.dart';
 
 /// The full names of the routes of the locations that the walk of the
@@ -188,6 +189,7 @@ void main() {
         reviewRole,
         feedbackRole,
         analyticsRole,
+        stateManagementRole,
       ]),
     );
     // The test of the setting of collection checks that every provider of
@@ -242,6 +244,13 @@ void main() {
     expect(named('theme_look').roles, {appEntryRole});
     // Which flavor a command without --flavor builds only a run shows.
     expect(named('flavors').roles, {appEntryRole});
+    // The test of the bridges changes the values of the entries of the
+    // theme role, of the localization role and of the auth role through
+    // their controllers.
+    expect(
+      named('state_management_role').roles,
+      {stateManagementRole, themeRole, localizationRole, authRole},
+    );
 
     expect(appTests.roleProblems(fixtureModules(), apps), isEmpty);
   });
@@ -1158,6 +1167,67 @@ void main() {
           reason: app.name,
         );
       }
+    }
+  });
+
+  test(
+      'the test of the state management role applies to the apps with every '
+      'module, where a fixture state manager follows a value of each template '
+      'of a role that keeps one, remote config among them, and to no app of '
+      'a state manager without such a value', () {
+    final roleTest = named('state_management_role');
+    final everyModule = [
+      for (final app in apps)
+        if (app.everyModuleWith != null) app,
+    ];
+
+    expect(appsOf(roleTest), [for (final app in everyModule) app.name]);
+    // The apps of the fixture state managers alone, and those of the fixture
+    // feature, have no value to follow.
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(stateManagementRole) &&
+              app.everyModuleWith == null &&
+              !roleTest.appliesTo(app))
+            app.name,
+      ],
+      containsAll(['fake_bloc', 'fake_riverpod']),
+    );
+    for (final app in everyModule) {
+      final input = stateManagementRole.hookInput(app.hook!);
+      expect(
+        [
+          for (final entry in stateManagementRole.sharedStateIn(input))
+            '${entry.name} of ${entry.owner}',
+        ],
+        [
+          'localizationLocale of role:localization',
+          'themeMode of role:theme',
+          'authSession of role:auth',
+          'notificationsPermission of role:notifications',
+          'pushAddress of role:push',
+          'purchasesAccess of role:purchases',
+          'remoteConfigValues of role:remote_config',
+        ],
+        reason: app.name,
+      );
+      final file =
+          roleTest.generatedFiles!(app, 'fixture_app')[stateBridgesFile]!;
+      // The theme mode, the language and the session change in each app.
+      expect(
+        RegExp(r"^    entry: '(\w+)',$", multiLine: true)
+            .allMatches(file)
+            .map((match) => match[1]),
+        [
+          'themeMode',
+          'themeMode',
+          'localizationLocale',
+          'localizationLocale',
+          'authSession',
+        ],
+        reason: app.name,
+      );
     }
   });
 
@@ -2420,6 +2490,7 @@ void main() {
           'launcher_icons',
           'splash_role',
           'native_splash',
+          'state_management_role',
         ]),
       );
       // The test of the purchases of the user of the device is for an app

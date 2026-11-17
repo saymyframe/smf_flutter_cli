@@ -323,11 +323,35 @@ final class BrokenProvider {
   /// The fixture modules, with [module] in place of the other providers of
   /// [role]: the registry in which the contract harness checks [module]
   /// with every provider of each role that it requires or uses.
-  List<SmfModule> get registry => [
-        for (final other in fixtureModules())
-          if (!other.descriptor.provides.contains(role)) other,
-        module,
-      ];
+  ///
+  /// A registry has every module that one of its modules depends on and
+  /// every provider that one of them has a variant for, so the fixture
+  /// modules that depend on one of those other providers, or have a variant
+  /// for one, are left out too, and so are the modules that depend on these
+  /// in turn, as the fixture gates and the fixture feature are for a broken
+  /// state manager.
+  List<SmfModule> get registry {
+    final fixtures = {
+      for (final other in fixtureModules()) other.descriptor.id: other,
+    };
+    // The fixture modules have no cycle of dependencies, which the pipeline
+    // refuses, and each module that one of them depends on or has a variant
+    // for is a fixture module too.
+    bool leftOut(SmfModule other) {
+      final descriptor = other.descriptor;
+      return descriptor.provides.contains(role) ||
+          {
+            ...descriptor.dependsOn,
+            ...?descriptor.variants?.byProvider.keys,
+          }.any((id) => leftOut(fixtures[id]!));
+    }
+
+    return [
+      for (final other in fixtureModules())
+        if (!leftOut(other)) other,
+      module,
+    ];
+  }
 
   /// The registry of the app: its app entry, that of the fixtures unless
   /// [module] provides the app entry itself, [module] and the modules of
@@ -2590,7 +2614,33 @@ List<BrokenProvider> brokenProviders() => const [
           ),
         ],
       ),
+      BrokenProvider(
+        BrokenModule.stateReadOnce,
+        role: stateManagementRole,
+        bug: 'Its bridges read the value of their listenable once, when a '
+            'widget first reads them, and do not follow it, so a widget that '
+            'reads the theme mode through its bridge keeps the mode of the '
+            'start once the controller changed it.',
+        // The fixture theme, whose template gives the role the theme mode,
+        // and the preferences that the theme role requires.
+        app: [FakeThemeModule.id, FakePreferencesModule.id],
+        failures: [
+          // The values at the start are right, so the first change, that of
+          // the theme mode, fails.
+          MatrixExpectedFailure(
+            _stateBridgesTest,
+            'the state manager follows each value that a controller of the '
+                'app keeps through its bridge, at the start and once the '
+                'controller changed the value',
+            'The bridge of an entry gives the value that the controller of '
+                'the entry has, also once that value changed.',
+          ),
+        ],
+      ),
     ];
+
+/// The file of the test of the bridges of the state management role.
+const _stateBridgesTest = 'test/state_management_role/state_bridges_test.dart';
 
 /// The other modules of the app of a router that breaks what the role says
 /// of the guards of the routes: the fixture late gate and the fixture

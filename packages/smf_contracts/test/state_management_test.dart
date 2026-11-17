@@ -425,6 +425,16 @@ void main() {
       expect(codeSpansOf(value.text), isEmpty);
       expect(value.text, contains('bridge'));
       expect(value.text, contains('only through its controller'));
+      // So does a value that no code of the app changes, which the note
+      // tells of in every app, with the role that has it or without.
+      expect(
+        value.text,
+        contains(
+          'So does a value that only a backend changes, such as the values '
+          'of remote config in an app with that role; no code of the app '
+          'changes it.',
+        ),
+      );
     });
 
     /// The issues of the template in an app with [data].
@@ -444,6 +454,7 @@ void main() {
             (purchasesRole, PurchasesRole.accessState),
             (notificationsRole, NotificationsRole.permissionState),
             (pushRole, PushRole.addressState),
+            (remoteConfigRole, RemoteConfigRole.valuesState),
           ])
             stateManagementRole
                 .data(state)

@@ -292,7 +292,7 @@ With `go_router`:
 
 ## State management
 
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. So does a value that only a backend changes, such as the values of remote config in an app with that role; no code of the app changes it. A widget reads such a value through its bridge. Code changes any other such value only through its controller, which the doc of the bridge names, and never in a build.
 
 With `flutter_riverpod`:
 
@@ -4601,12 +4601,20 @@ class _DashedEdge extends CustomPainter {
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_riverpod/flutter_riverpod.dart'
     show Notifier, NotifierProvider;
-import 'package:my_app/core/purchases/app_purchases.dart' as state0;
+import 'package:my_app/core/purchases/app_purchases.dart' as state1;
+import 'package:my_app/features/onboarding/onboarding_status.dart' as state0;
+
+/// Whether the user finished the onboarding; `onboardingStatus.complete()` and
+/// `restart()` change it.
+final NotifierProvider<ListenableNotifier<bool>, bool>
+onboardingCompletedProvider = NotifierProvider(
+  () => ListenableNotifier(state0.onboardingCompleted),
+);
 
 /// The premium access of the user; the calls of `appPurchases` change it.
-final NotifierProvider<ListenableNotifier<state0.AppAccess>, state0.AppAccess>
+final NotifierProvider<ListenableNotifier<state1.AppAccess>, state1.AppAccess>
 purchasesAccessProvider = NotifierProvider(
-  () => ListenableNotifier(state0.purchasesAccessListenable),
+  () => ListenableNotifier(state1.purchasesAccessListenable),
 );
 
 /// A notifier whose state is the value of a [ValueListenable], from the first

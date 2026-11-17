@@ -3,10 +3,10 @@ part of '../state_management.dart';
 /// The note of the state management role in the guide for coding agents,
 /// whichever module provides the role: that the values that controllers
 /// keep reach the state manager through bridges, which the note of the
-/// provider names, and that code changes such a value only through its
-/// controller.
+/// provider names, also a value that only a backend changes, and that code
+/// changes such a value only through its controller.
 const _agentNote = '''
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. So does a value that only a backend changes, such as the values of remote config in an app with that role; no code of the app changes it. A widget reads such a value through its bridge. Code changes any other such value only through its controller, which the doc of the bridge names, and never in a build.
 ''';
 
 /// Who answers for [entry], which has the name of [earlier], an entry before
