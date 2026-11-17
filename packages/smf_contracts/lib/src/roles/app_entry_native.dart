@@ -698,7 +698,14 @@ int _closingBrace(String text, int open) {
 
 /// The start of an object of an Xcode project without comments: its id,
 /// and its `isa`, which Xcode writes first.
-final _projectObject = RegExp(r'(\w+)\s*=\s*\{\s*isa\s*=\s*"?(\w+)"?\s*;');
+///
+/// The id starts at the start of a word (`\b`). The matches would be the
+/// same without it, since a match that starts inside a word would start at
+/// the start of that word too, and a match ends with `;`, so the next one
+/// is looked for after a character that is no part of a word. With it, the
+/// expression no longer tries a match at each letter of every word of the
+/// project, which took most of the time of the rules that read it.
+final _projectObject = RegExp(r'\b(\w+)\s*=\s*\{\s*isa\s*=\s*"?(\w+)"?\s*;');
 
 /// An object of an Xcode project: its `id`, its `isa`, such as
 /// `XCBuildConfiguration`, and the text between its braces, its `body`.
