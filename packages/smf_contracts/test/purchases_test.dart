@@ -300,6 +300,18 @@ final class FakeAuth implements AuthService {
 }
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the value, and sends back whether it returns the same listenable at each
+/// call, and whether that is appPurchases.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['the same listenable at each call'] =
+      identical(purchasesAccessListenable(), purchasesAccessListenable());
+  result['the controller'] = identical(purchasesAccessListenable(), appPurchases);
+  port.send(result);
+}
+''';
+
 /// What the scripts for the test app share. `pump` lets what is on its way
 /// happen, `show` tells an access, and `failureOf` the failure of a call.
 const _notes = r'''
@@ -1699,6 +1711,36 @@ void main() {
       setUpAll(() async => app = await _app());
 
       tearDownAll(() => app.delete());
+
+      test(
+          'gives the state manager its value through a function of the file '
+          'of the controller, which returns the same listenable each time',
+          () async {
+        const state = PurchasesRole.accessState;
+
+        expect(await app.run('$_notes$_listenable'), {
+          'the same listenable at each call': true,
+          'the controller': true,
+        });
+        expect(purchasesRole.feeds, {stateManagementRole});
+        expect(
+          [
+            for (final data in _dataFor(stateManagementRole)) data.value,
+          ],
+          [state],
+        );
+        expect(state.name, 'purchasesAccess');
+        expect(state.listenable.name, 'purchasesAccessListenable');
+        expect(
+          state.listenable.import,
+          const ImportRef.app('core/purchases/app_purchases.dart'),
+        );
+        expect(state.type.name, 'AppAccess');
+        expect(state.type.import, state.listenable.import);
+        expect(state.nullable, isFalse);
+        expect(state.listenableType, 'ValueListenable<AppAccess>');
+        expect(state.problems(), isEmpty);
+      });
 
       test(
           'runs the calls made before the first start within it, after the '

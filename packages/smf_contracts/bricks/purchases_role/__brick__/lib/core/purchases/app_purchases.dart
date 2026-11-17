@@ -15,6 +15,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
 
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
+
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
 /// one, [appPurchases].

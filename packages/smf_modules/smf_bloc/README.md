@@ -2,7 +2,9 @@
 
 The SMF module that manages the state of screens with [BLoC](https://bloclibrary.dev). It provides the state management role of SMF with [flutter_bloc](https://pub.dev/packages/flutter_bloc) 9.
 
-It adds `flutter_bloc` to the app and nothing else: BLoC needs neither a widget around the app nor start-up code. A module with screens supports BLoC through its variant for `bloc`, which brings the Cubits or Blocs of its screens.
+It adds `flutter_bloc` to the app. A module with screens supports BLoC through its variant for `bloc`, which brings the Cubits or Blocs of its screens.
+
+In an app whose controllers keep values that screens read, such as the theme mode, the language or the session of sign-in, it also writes `lib/core/state/shared_state_cubits.dart` with a cubit for each value, such as `ThemeModeCubit`, and wraps the root widget in `SharedStateCubits`, which provides them. A widget reads one with `context.watch`. The cubits only follow the values: code changes a value through its controller, which the doc of the cubit names.
 
 ## Use with the SMF CLI
 

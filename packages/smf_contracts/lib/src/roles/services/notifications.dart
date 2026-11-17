@@ -219,6 +219,25 @@ final class NotificationsRole extends Role<RoleImplementation> {
   /// uses.
   static const controllerFile = 'lib/core/notifications/app_notifications.dart';
 
+  /// The permission of the app to show notifications as an entry of the
+  /// [StateManagementRole], which the template gives the role: in an app
+  /// with a state manager, a bridge of the provider of that role follows
+  /// `appNotifications.permission`, through
+  /// `notificationsPermissionListenable()` of [controllerFile].
+  static const permissionState = SharedState(
+    'notificationsPermission',
+    listenable: FunctionRef(
+      'notificationsPermissionListenable',
+      import: ImportRef.app('core/notifications/app_notifications.dart'),
+    ),
+    type: TypeRef(
+      'NotificationPermission',
+      import: ImportRef.app('core/notifications/app_notifications.dart'),
+    ),
+    description: 'Whether the app may show notifications; '
+        '`appNotifications.request()` changes it.',
+  );
+
   /// The path of the small icon of a notification on Android, the drawable
   /// [androidIcon].
   static const androidIconFile =
@@ -356,6 +375,9 @@ final class NotificationsRole extends Role<RoleImplementation> {
   @override
   Set<Role> get uses =>
       {settingsScreenRole, onboardingScreenRole, localizationRole};
+
+  @override
+  Set<Role> get feeds => {stateManagementRole};
 
   @override
   List<SocketRef> get sockets => const [implementations];
@@ -581,6 +603,7 @@ final class _NotificationsTemplate
           role.description,
           AgentNote.ofRole(agentNote),
         ),
+        stateManagementRole.data(NotificationsRole.permissionState),
         SocketContribution.item(
           PreferencesRole.restorers,
           Fragment('restoreNotifications', imports: [import]),

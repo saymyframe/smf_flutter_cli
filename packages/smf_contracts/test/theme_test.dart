@@ -311,6 +311,24 @@ final String _scope = _scriptOf('''
   result['asked of the context below no scope'] = outside.asked;
 ''');
 
+/// Reads the mode through the function through which the state manager of
+/// the app follows it: the listenable that it returns at each call, its
+/// value, and what its listeners hear of a choice.
+final String _listenable = _scriptOf('''
+  final listenable = themeModeListenable();
+  final heardByIt = <String>[];
+  listenable.addListener(() => heardByIt.add(listenable.value.name));
+  result['the same listenable at each call'] =
+      identical(listenable, themeModeListenable());
+  result['the controller of the mode'] = identical(listenable, appThemeMode);
+  result['at first'] = listenable.value.name;
+  await appThemeMode.choose(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.light);
+  result['after two choices'] = listenable.value.name;
+  result['heard'] = heardByIt;
+''');
+
 /// The files of the test app: the file of the mode, as the template of the
 /// role generates it, the file of the preferences role with the restorer
 /// that the template puts into its socket, and the fake preferences.
@@ -565,6 +583,35 @@ void main() {
       for (final contribution in [wrapper, ...args]) {
         expect(contribution.when, isEmpty);
       }
+    });
+
+    test(
+        'gives the state manager the mode, through a function of the file of '
+        'the mode, in every app', () {
+      final data = _contributions().whereType<RoleData<Object>>().where(
+            (data) => data.role == stateManagementRole,
+          );
+
+      expect(data.single.value, ThemeRole.modeState);
+      expect(data.single.when, isEmpty);
+      expect(data.single.whenChosen, isEmpty);
+      // The role only feeds the state management, which an app may lack.
+      expect(themeRole.feeds, {stateManagementRole});
+      const state = ThemeRole.modeState;
+      expect(state.name, 'themeMode');
+      expect(state.listenable.name, 'themeModeListenable');
+      expect(state.listenable.import, _themeMode);
+      expect(
+        state.type,
+        const TypeRef(
+          'ThemeMode',
+          import: ImportRef('package:flutter/material.dart'),
+        ),
+      );
+      expect(state.nullable, isFalse);
+      expect(state.listenableType, 'ValueListenable<ThemeMode>');
+      expect(state.description, contains('`appThemeMode.choose()`'));
+      expect(state.problems(), isEmpty);
     });
 
     test(
@@ -960,6 +1007,23 @@ void main() {
           'mode': 'light',
           'heard': ['light'],
         },
+      });
+    });
+
+    test(
+        'is the value of the controller of the mode, which the function of '
+        'the file returns to the state manager, and whose listeners hear of '
+        'each change once', () async {
+      final app = await _app();
+      addTearDown(app.delete);
+
+      expect(await app.run(_listenable), {
+        'the same listenable at each call': true,
+        'the controller of the mode': true,
+        'at first': 'system',
+        'after two choices': 'light',
+        // The same choice again changes nothing.
+        'heard': ['dark', 'light'],
       });
     });
 

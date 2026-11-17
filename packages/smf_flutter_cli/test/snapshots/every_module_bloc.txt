@@ -640,6 +640,8 @@ With `flutter_native_splash`:
 
 ## State management
 
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 With `flutter_bloc`:
 
 - The state of a screen is a `Cubit` in the directory of its feature. The screen provides it with a `BlocProvider` around its content. In a `BlocBuilder` there, it passes the state on to its view as plain values, and the methods of the `Cubit` as callbacks.
@@ -647,6 +649,8 @@ With `flutter_bloc`:
 - When a screen is gone, its `BlocProvider` closes the `Cubit` that it created. For state that several screens read, put a `BlocProvider` around the root widget in `runApp()`, in `lib/main.dart`. A widget reads that `Cubit` with `context.watch`.
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
+
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `ThemeModeCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Store reviews
 
@@ -2480,6 +2484,10 @@ final appSession = AppSessionController(
   mode: authMode,
   takeGuestData: takeGuestData,
 );
+
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
 
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
@@ -4904,6 +4912,7 @@ class GoogleSignInIcon extends StatelessWidget {
   }
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../preferences/app_preferences.dart';
@@ -4933,7 +4942,8 @@ final appLocale = AppLocaleController._();
 
 /// Keeps the language that the user chose for the app, and saves each
 /// choice in the preferences of the app.
-final class AppLocaleController extends ChangeNotifier {
+final class AppLocaleController extends ChangeNotifier
+    implements ValueListenable<Locale?> {
   AppLocaleController._();
 
   Locale? _locale;
@@ -4943,6 +4953,7 @@ final class AppLocaleController extends ChangeNotifier {
 
   /// The language that the user chose, one of [appLocales], or `null` while
   /// the app follows the languages of the device.
+  @override
   Locale? get value => _locale;
 
   /// Chooses the language of [locale] as the language of the app, or with
@@ -4992,6 +5003,11 @@ Locale? _ofApp(String? code) {
   }
   return null;
 }
+
+/// The language that the user chose, as a [ValueListenable] for the state
+/// manager of the app: [appLocale], which changes it only through
+/// [AppLocaleController.choose].
+ValueListenable<Locale?> localizationLocaleListenable() => appLocale;
 
 /// Restores the language that the user chose from [preferences], which the
 /// app opened, and keeps them for the choices to come: a restorer of the
@@ -5474,6 +5490,12 @@ const String notificationOwnerKey = 'notifications.owner';
 /// notifications that the app shows now or at a time to come, and the taps
 /// of the user on them.
 final appNotifications = NotificationsController._();
+
+/// Whether the app may show notifications, as a [ValueListenable] for the
+/// state manager of the app: [NotificationsController.permission] of
+/// [appNotifications], which [NotificationsController.request] changes.
+ValueListenable<NotificationPermission> notificationsPermissionListenable() =>
+    appNotifications.permission;
 
 /// Shows the notifications of the app through the service of the provider
 /// of notifications, keeps the permission to show them up to date, and
@@ -6587,6 +6609,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -8032,6 +8059,11 @@ export 'push_service.dart' show PushMessage;
 /// that arrive while the app is in the foreground, and the taps of the user
 /// on them.
 final appPush = AppPushController._();
+
+/// The address of the device for push messages, as a [ValueListenable] for
+/// the state manager of the app: [AppPushController.address] of [appPush],
+/// `null` while the platform gives none.
+ValueListenable<String?> pushAddressListenable() => appPush.address;
 
 /// Receives the push messages of the app through the service of the
 /// provider of push messages. The app has one, [appPush].
@@ -12337,6 +12369,111 @@ class _DashedEdge extends CustomPainter {
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
 }
+=== lib/core/state/shared_state_cubits.dart (bloc) ===
+// The cubits that follow the values that controllers of the app keep,
+// one for each value, which the bloc module generates for the state
+// management role, and the widget that provides them around the root
+// of the app. A widget reads one with context.watch, and code changes
+// the value only through the controller that the doc of its cubit
+// names.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/material.dart' as state0;
+import 'package:flutter/widgets.dart'
+    show BuildContext, StatelessWidget, Widget;
+import 'package:flutter/widgets.dart' as state2;
+import 'package:flutter_bloc/flutter_bloc.dart'
+    show BlocProvider, Cubit, MultiBlocProvider;
+import 'package:my_app/core/auth/app_session.dart' as state6;
+import 'package:my_app/core/l10n/app_locale.dart' as state3;
+import 'package:my_app/core/notifications/app_notifications.dart' as state4;
+import 'package:my_app/core/purchases/app_purchases.dart' as state7;
+import 'package:my_app/core/push/app_push.dart' as state5;
+import 'package:my_app/core/theme/theme_mode.dart' as state1;
+
+/// The theme mode that the user selected; `appThemeMode.choose()` changes it.
+final class ThemeModeCubit extends ListenableCubit<state0.ThemeMode> {
+  /// Creates the cubit, with the value that the controller has.
+  ThemeModeCubit() : super(state1.themeModeListenable());
+}
+
+/// The language that the user chose, `null` to follow the device;
+/// `appLocale.choose()` changes it.
+final class LocalizationLocaleCubit extends ListenableCubit<state2.Locale?> {
+  /// Creates the cubit, with the value that the controller has.
+  LocalizationLocaleCubit() : super(state3.localizationLocaleListenable());
+}
+
+/// Whether the app may show notifications; `appNotifications.request()` changes
+/// it.
+final class NotificationsPermissionCubit
+    extends ListenableCubit<state4.NotificationPermission> {
+  /// Creates the cubit, with the value that the controller has.
+  NotificationsPermissionCubit()
+    : super(state4.notificationsPermissionListenable());
+}
+
+/// The address of the device that `appPush.address` keeps, `null` while the
+/// platform gives none.
+final class PushAddressCubit extends ListenableCubit<String?> {
+  /// Creates the cubit, with the value that the controller has.
+  PushAddressCubit() : super(state5.pushAddressListenable());
+}
+
+/// Who uses the app; the calls of `appSession` change it.
+final class AuthSessionCubit extends ListenableCubit<state6.AppSession> {
+  /// Creates the cubit, with the value that the controller has.
+  AuthSessionCubit() : super(state6.authSessionListenable());
+}
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final class PurchasesAccessCubit extends ListenableCubit<state7.AppAccess> {
+  /// Creates the cubit, with the value that the controller has.
+  PurchasesAccessCubit() : super(state7.purchasesAccessListenable());
+}
+
+/// Provides the cubits of the values that controllers of the app keep to
+/// [child], the root of the app. Each cubit is created at its first read,
+/// and follows its value until the app ends.
+final class SharedStateCubits extends StatelessWidget {
+  /// Creates the widget around [child].
+  const SharedStateCubits({required this.child, super.key});
+
+  /// The root of the app.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MultiBlocProvider(
+    providers: [
+      BlocProvider(create: (_) => ThemeModeCubit()),
+      BlocProvider(create: (_) => LocalizationLocaleCubit()),
+      BlocProvider(create: (_) => NotificationsPermissionCubit()),
+      BlocProvider(create: (_) => PushAddressCubit()),
+      BlocProvider(create: (_) => AuthSessionCubit()),
+      BlocProvider(create: (_) => PurchasesAccessCubit()),
+    ],
+    child: child,
+  );
+}
+
+/// A cubit whose state is the value of a [ValueListenable], from its creation
+/// until it is closed. It only follows the value: code changes it through
+/// the controller of the listenable.
+abstract base class ListenableCubit<T> extends Cubit<T> {
+  /// Creates the cubit of [listenable], with its value.
+  ListenableCubit(this._listenable) : super(_listenable.value) {
+    _listenable.addListener(_follow);
+  }
+
+  final ValueListenable<T> _listenable;
+
+  void _follow() => emit(_listenable.value);
+
+  @override
+  Future<void> close() {
+    _listenable.removeListener(_follow);
+    return super.close();
+  }
+}
 === lib/core/theme/app_theme.dart (material_theme) ===
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
@@ -12648,6 +12785,7 @@ ThemeData _themeOf(Brightness brightness) {
   );
 }
 === lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -12663,7 +12801,8 @@ final appThemeMode = AppThemeModeController._();
 /// Keeps the theme mode that the user selected for the app, tells its
 /// listeners when the mode changes, and saves each choice in the
 /// preferences of the app. The app has one, [appThemeMode].
-final class AppThemeModeController extends ChangeNotifier {
+final class AppThemeModeController extends ChangeNotifier
+    implements ValueListenable<ThemeMode> {
   AppThemeModeController._();
 
   /// The key of the mode in the preferences, which keep it by its name.
@@ -12676,6 +12815,7 @@ final class AppThemeModeController extends ChangeNotifier {
 
   /// The mode of the app: [ThemeMode.system], which follows the device,
   /// unless the user selected another.
+  @override
   ThemeMode get value => _mode;
 
   /// Chooses [mode] as the mode of the app, at once, and saves the choice:
@@ -12706,6 +12846,11 @@ final class AppThemeModeController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// The theme mode that the user selected, as a [ValueListenable] for the
+/// state manager of the app: [appThemeMode], which changes it only through
+/// [AppThemeModeController.choose].
+ValueListenable<ThemeMode> themeModeListenable() => appThemeMode;
 
 /// Restores the theme mode that the user selected from [preferences], which
 /// the app opened, and keeps them for the choices to come: a restorer of
@@ -20429,6 +20574,8 @@ class DefaultFirebaseOptions {
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart' show BlocProvider;
 import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/state/shared_state_cubits.dart'
+    show SharedStateCubits;
 import 'package:my_app/core/theme/theme_mode.dart';
 import 'package:my_app/features/paywall/paywall_composition.dart'
     show createPremiumCubit;
@@ -20450,15 +20597,17 @@ Future<void> main() async {
     return;
   }
   runApp(
-    BlocProvider(
-      create: (_) => createPremiumCubit(),
-      child: AppLocaleScope(
-        notifier: appLocale,
-        child: AppThemeModeScope(
-          notifier: appThemeMode,
-          child: BlocProvider(
-            create: (_) => createSessionCubit(),
-            child: const App(),
+    SharedStateCubits(
+      child: BlocProvider(
+        create: (_) => createPremiumCubit(),
+        child: AppLocaleScope(
+          notifier: appLocale,
+          child: AppThemeModeScope(
+            notifier: appThemeMode,
+            child: BlocProvider(
+              create: (_) => createSessionCubit(),
+              child: const App(),
+            ),
           ),
         ),
       ),

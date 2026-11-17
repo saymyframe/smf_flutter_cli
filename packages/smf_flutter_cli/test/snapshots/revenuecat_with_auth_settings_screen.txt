@@ -1295,6 +1295,10 @@ final appSession = AppSessionController(
   takeGuestData: takeGuestData,
 );
 
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
+
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
 /// one, [appSession].
@@ -3025,6 +3029,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has

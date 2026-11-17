@@ -221,6 +221,27 @@ final class PurchasesRole extends Role<RoleImplementation> {
   /// uses.
   static const controllerFile = 'lib/core/purchases/app_purchases.dart';
 
+  /// The premium access of the user as an entry of the
+  /// [StateManagementRole], which the template gives the role: in an app
+  /// with a state manager, a bridge of the provider of that role follows
+  /// `appPurchases`, through `purchasesAccessListenable()` of
+  /// [controllerFile]. Its type `AppAccess` comes through [controllerFile]
+  /// too, which exports it, since only the implementation of a provider
+  /// imports [serviceFile].
+  static const accessState = SharedState(
+    'purchasesAccess',
+    listenable: FunctionRef(
+      'purchasesAccessListenable',
+      import: ImportRef.app('core/purchases/app_purchases.dart'),
+    ),
+    type: TypeRef(
+      'AppAccess',
+      import: ImportRef.app('core/purchases/app_purchases.dart'),
+    ),
+    description: 'The premium access of the user; the calls of '
+        '`appPurchases` change it.',
+  );
+
   /// The path of the file with `RestorePurchasesSetting`, the entry of the
   /// settings screen, which only an app with the [SettingsScreenRole] has.
   /// So it is no file of the [interface] of the role: the provider of the
@@ -313,6 +334,9 @@ final class PurchasesRole extends Role<RoleImplementation> {
   /// languages of the app, in which that entry shows its texts.
   @override
   Set<Role> get uses => {authRole, settingsScreenRole, localizationRole};
+
+  @override
+  Set<Role> get feeds => {stateManagementRole};
 
   @override
   List<SocketRef> get sockets => const [implementations];
@@ -511,6 +535,7 @@ final class _PurchasesTemplate extends _ServiceTemplate<RoleImplementation> {
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(bundle),
+        stateManagementRole.data(PurchasesRole.accessState),
         AppEntryRole.agentSections.entry(
           role.description,
           AgentNote.ofRole(agentNote),

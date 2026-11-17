@@ -2160,6 +2160,7 @@ ThemeData _themeOf(Brightness brightness) {
   );
 }
 === lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -2175,7 +2176,8 @@ final appThemeMode = AppThemeModeController._();
 /// Keeps the theme mode that the user selected for the app, tells its
 /// listeners when the mode changes, and saves each choice in the
 /// preferences of the app. The app has one, [appThemeMode].
-final class AppThemeModeController extends ChangeNotifier {
+final class AppThemeModeController extends ChangeNotifier
+    implements ValueListenable<ThemeMode> {
   AppThemeModeController._();
 
   /// The key of the mode in the preferences, which keep it by its name.
@@ -2188,6 +2190,7 @@ final class AppThemeModeController extends ChangeNotifier {
 
   /// The mode of the app: [ThemeMode.system], which follows the device,
   /// unless the user selected another.
+  @override
   ThemeMode get value => _mode;
 
   /// Chooses [mode] as the mode of the app, at once, and saves the choice:
@@ -2218,6 +2221,11 @@ final class AppThemeModeController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// The theme mode that the user selected, as a [ValueListenable] for the
+/// state manager of the app: [appThemeMode], which changes it only through
+/// [AppThemeModeController.choose].
+ValueListenable<ThemeMode> themeModeListenable() => appThemeMode;
 
 /// Restores the theme mode that the user selected from [preferences], which
 /// the app opened, and keeps them for the choices to come: a restorer of
