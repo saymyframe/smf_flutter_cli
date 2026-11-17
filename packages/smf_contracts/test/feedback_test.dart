@@ -993,23 +993,9 @@ void main() {
 
     test(
         'keeps the words of its title whole, with a copy of its own that '
-        'breaks a line only at white space but a no-break space', () {
-      final wholeWords =
-          unit.declarations.whereType<ClassDeclaration>().singleWhere(
-                (type) => type.namePart.typeName.lexeme == '_WholeWords',
-              );
-      expect(
-        wholeWords.extendsClause!.superclass.name.lexeme,
-        'StatelessWidget',
-      );
-      expect(
-        code,
-        contains(r"text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'))"),
-      );
-      // Where the longest word does not fit, the text is as large as it
-      // allows.
-      expect(code, contains('size *= room / widest * 0.98;'));
-      expect(code, contains('MediaQuery.boldTextOf(context)'));
+        'breaks a line only at white space but a no-break space, the same '
+        'as the copies of the other entries of the templates of roles', () {
+      expectWholeWordsCopy(code);
     });
   });
 
