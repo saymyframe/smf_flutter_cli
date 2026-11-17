@@ -38,7 +38,9 @@ abstract final class NoDsl {}
 ///   [ModuleDescriptor.providers];
 /// - a module that needs it lists it in [ModuleDescriptor.requires];
 /// - a module that can work with or without it lists it in
-///   [ModuleDescriptor.uses].
+///   [ModuleDescriptor.uses];
+/// - a module that only gives it data, and renders the same files with or
+///   without it, lists it in [ModuleDescriptor.feeds].
 ///
 /// A module never learns which module provides a role it requires or uses.
 /// It meets the role only through:
@@ -93,6 +95,22 @@ abstract base class Role<D extends Object> {
   /// provider of this role uses them too.
   Set<Role> get uses => const {};
 
+  /// Roles to which the template of this role gives data and nothing else,
+  /// such as a role that follows a value which the template keeps.
+  ///
+  /// The template may contribute [RoleData] of such a role, which applies
+  /// only where the role is present, as all data does. It gets nothing else
+  /// of the role: no [Contribution.when] or [Contribution.whenChosen] of
+  /// it, no [RoleVar], no socket, no symbol and no presence flag, and the
+  /// hooks of this role neither read its data nor ask for its presence. So
+  /// the template renders the same files whether the app has the role or
+  /// not. A role that needs more of another role uses it instead (see
+  /// [uses]), and feeds neither itself nor a role that it requires or uses.
+  /// Unlike [uses], it does not pass to the providers of this role: a
+  /// provider that gives such a role data feeds it itself (see
+  /// [ModuleDescriptor.feeds]).
+  Set<Role> get feeds => const {};
+
   /// The sockets of the role.
   ///
   /// Their tags are in the role's template files or in the files of its
@@ -121,8 +139,8 @@ abstract base class Role<D extends Object> {
   /// `null` if it has none.
   RoleTemplate<D>? get template => null;
 
-  /// Checks of the data of modules that provide, require or use the role,
-  /// run during validation with [checkModule].
+  /// Checks of the data of modules that provide, require, use or feed the
+  /// role, run during validation with [checkModule].
   List<ModuleRule<D>> get moduleRules => const [];
 
   /// Checks of the generated code, run by the contract test harness with
@@ -140,7 +158,7 @@ abstract base class Role<D extends Object> {
   String get presenceFlag => 'has_$id';
 
   /// The roles whose data and presence the hooks of this role may read:
-  /// [requires] and [uses].
+  /// [requires] and [uses], and not [feeds].
   @nonVirtual
   Set<Role> get visibleRoles => {...requires, ...uses};
 

@@ -1,0 +1,1642 @@
+=== .env (role:env) ===
+# The values that the app reads, each under a comment that says what goes
+# there. This file stays out of git; .env.example has the same keys without
+# values. Every value ends up in the app, where anyone can read it, so never
+# put a secret here. An empty value counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The DSN of your Sentry project, which the crash reports go to
+SENTRY_DSN=
+=== .env.example (role:env) ===
+# This file lists the keys of the values that the app reads, each under a
+# comment that says what goes there. After a clone, copy it to .env and fill
+# in the values there; .env stays out of git. Every value ends up in the app,
+# where anyone can read it, so never put a secret into one. An empty value
+# counts as missing.
+#
+# Write a value as it is, or in double quotes if it has a space, a # or a quote.
+
+# The DSN of your Sentry project, which the crash reports go to
+SENTRY_DSN=
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# The values of the app, which each developer fills in from .env.example
+.env
+=== .run/dev.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app dev" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor dev --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/prod.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app prod" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor prod --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .run/staging.run.xml (role:env) ===
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="my_app staging" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="additionalArgs" value="--flavor staging --dart-define-from-file=.env" />
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
+=== .vscode/launch.json (role:env) ===
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "my_app dev",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "dev",
+        "--dart-define-from-file=.env"
+      ],
+      "templateFor": ""
+    },
+    {
+      "name": "my_app staging",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "staging",
+        "--dart-define-from-file=.env"
+      ]
+    },
+    {
+      "name": "my_app prod",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--flavor",
+        "prod",
+        "--dart-define-from-file=.env"
+      ]
+    }
+  ]
+}
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
+
+- The section "Finish the setup" of the README lists the steps of the setup that no command can do, such as a step in the web console of a service that the app uses. Only the developer of the app does them: when a task depends on one of them, point the developer to that section, and do not try to do the step yourself.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Every screen is below it, so create no other `MaterialApp` in `lib/`. The only other one is in `FailedStartApp`, which `main()` runs in its place when the start-up fails.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+- The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
+
+## Crash reporting
+
+- `installCrashReporting()` of `lib/core/crash_reporting/crash_reporter.dart`, which `bootstrap()` calls, reports the errors of the main isolate that nothing handles, through `FlutterError.onError` and `PlatformDispatcher.instance.onError`. Set these two nowhere else.
+- Report an error that the code catches with `recordError()` of `CrashReporter`. `createCrashReporter()` returns the one reporter of the app, which reports to every provider and never fails. Call it where the state of a screen is created, or, with a DI container in the app, take the reporter from the container instead.
+- A new provider implements `CrashReporter`. The function that creates it gets an entry in `_crashReporters` in that file, `?_createAlone('<name>', <function>)`, or, if it starts asynchronously, one in `initCrashReporting()`, which the file has once a provider needs it.
+
+With `sentry_flutter`:
+
+- `initSentryCrashReporter()` in `lib/core/crash_reporting/sentry_crash_reporter.dart` starts Sentry with `SENTRY_DSN` of `.env`, and `bootstrap()` awaits it. Without a value of the key, the app starts without Sentry.
+- Report through `CrashReporter`, not through `Sentry.captureException`. Never call `SentryFlutter.init` elsewhere: its start removes `OnErrorIntegration` and puts `FlutterError.onError` back, so that each error reaches Sentry once.
+- The environment of an event is the flavor of the build (`appFlavor`), and a debug build sends its events too.
+- `configureSentryForTests` changes the options of Sentry before it starts, for tests only: a test keeps the events in `beforeSend` and gives Sentry a `transport` that sends nothing. `SentryFlutter.init` never completes in the fake time of a widget test, so a test starts Sentry, or runs `bootstrap()`, in real time.
+
+## Values in .env
+
+- Read a value of `.env` only through a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is the key in lowerCamelCase: `AppEnv.myServiceKey` for the key `MY_SERVICE_KEY`. It returns a `String?` that is `null` while the value is empty or missing, so handle `null`. Never read `.env` or `.env.example` from code.
+- Every value ends up in the app, where anyone can read it. Never put a secret into `.env`, such as the secret key of a server, a password or a private key.
+- `.env` stays out of git. A new key goes into both `.env.example` and `.env`, in UPPER_SNAKE_CASE with a comment line above it, and `AppEnv` gets a getter for it.
+- A release build of an app with keys stops with an error unless its command gives the app the values of `.env`; the note of the provider names the arguments. Never remove or work around the check in `lib/core/env/env_check.dart`, which `bootstrap()` calls in its first phase: give the build the arguments. `AppEnv.supplied` tells whether a build has the values.
+- `.vscode/launch.json` and `.run/<flavor>.run.xml` are the run configurations of VS Code and Android Studio, one for each flavor. Each passes the flavor and the arguments that the values need. In VS Code, F5 starts the selected configuration, while the links above `main()` and above a test and the Testing view always use `dev`, whose configuration alone has `templateFor`. In Android Studio, a test gets none of these arguments.
+
+With `--dart-define-from-file`:
+
+- Every command of the `flutter` tool that builds, runs or tests the app takes `--dart-define-from-file=.env`, such as `flutter run --dart-define-from-file=.env`, `flutter test` and `flutter build`. Without it, every getter of `AppEnv` is `null`, and a release build stops with an error.
+- A command reads `.env` only when it starts. After a change of `.env`, stop `flutter run` and start it again: hot reload and hot restart keep the values that the app was built with.
+- The getter of a new key in `lib/core/env/app_env.dart` reads `const String.fromEnvironment('MY_SERVICE_KEY')`, with the key in place of `MY_SERVICE_KEY`, and returns `null` for an empty value, as the other getters do.
+- `AppEnv.supplied` is `true` once `--dart-define-from-file=.env` declared one of the keys that it names, so a new key needs no change there. An app without keys has `true` there: with its first key, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
+## Finish the setup
+
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=sentry.dsn) shows each one click by click:
+
+1. Create a Flutter project in Sentry and copy its DSN into .env
+
+Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which has one only after a `flutter` command that builds or runs the iOS app with a flavor. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
+
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
+
+## When the start-up fails
+
+`bootstrap()` in `lib/bootstrap.dart` runs before the first frame. When it throws, `main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.
+
+## Run, test and build with .env
+
+`AppEnv` in `lib/core/env/app_env.dart` reads each value of `.env` with `String.fromEnvironment`. The `flutter` tool reads `.env` when a command that builds, runs or tests the app starts, given `--dart-define-from-file=.env`, and compiles each value into the app. Without the argument, a debug or profile build has every getter of `AppEnv` `null` and says so, and a release build stops with an error that names the argument, so give it to each such command:
+
+```bash
+flutter run --dart-define-from-file=.env
+flutter test --dart-define-from-file=.env
+flutter build apk --flavor prod --dart-define-from-file=.env
+flutter build appbundle --flavor prod --dart-define-from-file=.env
+flutter build ipa --flavor prod --dart-define-from-file=.env
+```
+
+A build without `--flavor` is a release of `dev`, under its id, so a build for a store names its flavor. The section "Flavors" tells more.
+
+Xcode takes the values from `ios/Flutter/Generated.xcconfig`. Only a `flutter` command that builds or runs the iOS app writes them there, and in a fresh app the file has no values. So before Product > Archive, run `flutter build ios --config-only --flavor prod --dart-define-from-file=.env`, or archive with `flutter build ipa` as above.
+
+A command reads the values only when it starts: after you change `.env`, stop `flutter run` and start it again. Hot reload and hot restart keep the values that the app was built with.
+
+`AppEnv.supplied` is `true` once the command declared one of the keys that it names, so a key of your own needs no change there. An app without keys has `true` there, since nothing can tell. With the first key of your own, make it `bool.hasEnvironment('MY_SERVICE_KEY')` with that key, so that a release build without the argument stops.
+
+To read a key of your own, give `AppEnv` a getter for it, as for the other keys:
+
+```dart
+static String? get myServiceKey {
+  const value = String.fromEnvironment('MY_SERVICE_KEY');
+  return value.isEmpty ? null : value;
+}
+```
+
+The section "Values in .env" tells what goes into `.env`, lists the keys of the app and names the run configurations that pass the argument.
+
+## Values in .env
+
+`.env` at the root of the app holds the values you fill in after generating the app, such as the public key of a service. Code reads each value as a static getter of `AppEnv` in `lib/core/env/app_env.dart`. The getter is `null` while the value is empty or missing, so the app builds and starts before you fill anything in.
+
+A release build needs `.env`: `flutter build` of a release, and an archive in Xcode, stop with an error unless the command has `--dart-define-from-file=.env` and `.env` has a line of a key of the app, also with an empty value. So a build for a store never goes out by mistake from a command that did not give it `.env`. A debug or profile build without it starts with every getter `null` and says so in the console. `lib/core/env/env_check.dart` holds the check, which `bootstrap()` calls in its first phase, and `AppEnv.supplied` tells whether a build has the values.
+
+`.gitignore` lists `.env`, so it stays out of git. `.env.example` is in git and has the same keys without values: after a clone, run `cp .env.example .env` and fill in `.env`. Every value ends up in the app, where anyone can read it, so never put a secret there, such as the secret key of a server, a password or a private key.
+
+`.env` is not tied to a flavor: a build of any flavor takes what `.env` has when its command runs. Keep one file and change its values by hand, or have CI write the file for its job.
+
+The keys of the app:
+
+- `SENTRY_DSN`, read as `AppEnv.sentryDsn`, from the module `sentry`: The DSN of your Sentry project, which the crash reports go to
+
+To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
+
+Each flavor has a run configuration, which passes the flavor and the arguments that the values need:
+
+- In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
+- In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
+
+## Sentry
+
+The app reports its errors to [Sentry](https://sentry.io) with [sentry_flutter](https://pub.dev/packages/sentry_flutter). `lib/core/crash_reporting/sentry_crash_reporter.dart` starts Sentry in `bootstrap()` with the DSN of `SENTRY_DSN` in `.env`, and implements the crash reporter of the app on it. While `SENTRY_DSN` has no value in a build, or one that is no DSN of Sentry, the app starts without Sentry and reports nothing to it, and a debug build prints why without the value.
+
+Create a Flutter project in Sentry and copy its DSN into `SENTRY_DSN`. The section Finish the setup lists this among the steps that you do by hand. A DSN only lets an app send events to its project, and it goes into the app, where anyone can read it, so it is no secret. In the settings of the project, give the key of the DSN a rate limit, so that one app that fails in a loop does not use up the quota of the organization. Keep a second project for development: its DSN goes into your local `.env`, and the DSN of the project of the release goes into the values that a build for a store gets, such as those of the environment `prod` of your CI.
+
+The environment of each event is the flavor of the build, such as `dev` or `prod`, so Sentry tells the events of a test build from those of the release. A debug build sends its events too. To keep debug builds out of Sentry, start `initSentryCrashReporter()` with this line:
+
+```dart
+if (kDebugMode) throw StateError('Sentry reports nothing from a debug build.');
+```
+
+What each start of the app sends to Sentry:
+
+- the errors that the crash reporting of the app reports: those that nothing catches, as fatal, and those that the code reports with `recordError()`, each with the messages of `log()` before it as breadcrumbs and with the id of the user that `setUserId()` set. An error that comes before Sentry has started in `bootstrap()` is not reported;
+- the native crashes of Android and iOS, which the SDKs of Sentry for the platforms record and send at the next start, and on Android an app that does not respond (ANR), on iOS an app that hangs;
+- a session, from which Sentry counts the users and the starts without a crash.
+
+Next to another crash reporter, both record the native crashes that each of them catches: an uncaught exception of Java or Kotlin reaches both, and a signal of native code on Android may reach Sentry alone. On iOS, another crash reporter may warn in the log that another handler of exceptions is installed, which does no harm. The free plan of Sentry has a monthly quota of errors, which the [pricing](https://sentry.io/pricing/) of Sentry tells.
+
+Without `--obfuscate`, the Dart frames of an event have their functions, files and lines, also in a release build. The other cases need files that a release build writes, uploaded with an auth token of Sentry that may upload debug files, in `SENTRY_AUTH_TOKEN`:
+
+1. The native frames of iOS need the dSYMs of the archive. After `flutter build ipa`, upload them with [sentry-cli](https://docs.sentry.io/cli/installation/):
+
+   ```bash
+   sentry-cli debug-files upload --org <org> --project <project> build/ios/archive/Runner.xcarchive/dSYMs
+   ```
+
+2. The Java and Kotlin frames of the plugins in an Android release, which R8 shrinks, need its mapping. The Gradle plugin of Sentry uploads it. Add `id("io.sentry.android.gradle") version "6.27.0"` to the `plugins` of `android/app/build.gradle.kts`, and this block below them, without which the plugin fails every release build without a token, sends telemetry of its own, and changes the bytecode of every plugin:
+
+   ```kotlin
+   sentry {
+       autoUploadProguardMapping.set(providers.environmentVariable("SENTRY_AUTH_TOKEN").isPresent)
+       uploadNativeSymbols.set(false)
+       telemetry.set(false)
+       autoInstallation { enabled.set(false) }
+       tracingInstrumentation { enabled.set(false) }
+   }
+   ```
+
+3. The Dart frames of a build with `--obfuscate` need its symbols. Build with `--obfuscate --split-debug-info=build/debug-info --extra-gen-snapshot-options=--save-obfuscation-map=build/app/obfuscation.map.json`, add [sentry_dart_plugin](https://pub.dev/packages/sentry_dart_plugin) `^3.5.0` to the `dev_dependencies`, give the `pubspec.yaml` of the app this block, and run `dart run sentry_dart_plugin`:
+
+   ```yaml
+   sentry:
+     org: <org>
+     project: <project>
+     dart_symbol_map_path: build/app/obfuscation.map.json
+   ```
+
+For the privacy policy of the app, which the App Store and Google Play ask for in the listing of the app and inside the app: Sentry gets crash and diagnostic data, the id of the user once the code sets one, and the IP address of the device, which Sentry may store unless "Prevent Storing of IP Addresses" is on in the settings of the project. The SDK of Sentry for iOS declares what it collects in its privacy manifest.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="${appName}"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.1.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/AppDelegate.swift (flutter_core) ===
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(APP_DISPLAY_NAME)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== ios/Runner/Runner.entitlements (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'My App',
+    home: const FallbackStartScreen(),
+    builder: (context, child) => StatusBarIcons(child: child!),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/crash_reporting/crash_reporter.dart';
+import 'package:my_app/core/env/env_check.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  checkEnvValues(debugPrint);
+  await initCrashReporting();
+  installCrashReporting();
+}
+=== lib/core/app/failed_start.dart (role:app_entry) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'status_bar_icons.dart';
+
+/// Shows why the app could not start, in place of the splash screen of the
+/// system, which would otherwise stay, and reports [error] with its
+/// [stackTrace] to the handler of the errors of Flutter.
+///
+/// `main()` calls it when `bootstrap()` throws, and then returns: the app
+/// does not start. The screen comes first, so a handler that throws cannot
+/// keep it away. The handlers that the start-up set up before it failed,
+/// such as those of crash reporting, hear of the error, and so does a test
+/// that runs `main()`.
+void showFailedStart(Object error, StackTrace stackTrace) {
+  runApp(FailedStartApp(error: error, stackTrace: stackTrace));
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'the start-up of the app',
+      context: ErrorDescription('while main() awaited bootstrap()'),
+    ),
+  );
+}
+
+/// The app that runs when the start-up failed: a screen that says so, with
+/// [error] and [stackTrace] in a debug build.
+///
+/// It needs nothing of the start-up: it has neither the theme nor the texts
+/// nor the root wrappers of the app, which the start-up sets up, and so its
+/// texts are in English. Change them here.
+class FailedStartApp extends StatelessWidget {
+  /// Creates the app of a start-up that failed with [error] at
+  /// [stackTrace].
+  const FailedStartApp({
+    required this.error,
+    required this.stackTrace,
+    this.showsError = kDebugMode,
+    super.key,
+  });
+
+  /// What `bootstrap()` threw.
+  final Object error;
+
+  /// Where `bootstrap()` threw [error].
+  final StackTrace stackTrace;
+
+  /// Whether the screen shows [error] and [stackTrace]: only in a debug
+  /// build, since the message of an error may hold data of the user and
+  /// means nothing to a user.
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(),
+    darkTheme: ThemeData(brightness: Brightness.dark),
+    builder: (context, child) => StatusBarIcons(child: child!),
+    home: _FailedStartScreen(
+      error: error,
+      stackTrace: stackTrace,
+      showsError: showsError,
+    ),
+  );
+}
+
+class _FailedStartScreen extends StatelessWidget {
+  const _FailedStartScreen({
+    required this.error,
+    required this.stackTrace,
+    required this.showsError,
+  });
+
+  final Object error;
+
+  final StackTrace stackTrace;
+
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final code = texts.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Courier'],
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'The app could not start',
+                style: texts.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (showsError) ...[
+              Text(
+                'bootstrap() in lib/bootstrap.dart threw:',
+                style: texts.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText('$error', style: code),
+              const SizedBox(height: 16),
+              SelectableText('$stackTrace', style: code),
+            ] else
+              Text('Close the app and open it again.', style: texts.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const FallbackStartView(
+    hint:
+        'No start screen yet. Add a feature with a route, or replace this screen.',
+    copied: 'Copied',
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/status_bar_icons.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Asks the system for the icons of the status bar that suit the theme,
+/// around [child]: dark icons on a light theme, light ones on a dark theme.
+///
+/// The root of the app puts it around the content of every route, below
+/// the `MaterialApp` whose theme it reads. It leaves the navigation bar of
+/// the system as the platform has it. A screen with an `AppBar` gets the
+/// icons that suit its bar, since the bar tells them for the top of the
+/// screen itself.
+class StatusBarIcons extends StatelessWidget {
+  /// Creates the widget around [child].
+  const StatusBarIcons({required this.child, super.key});
+
+  /// What the icons suit: the content of a route.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // iOS takes the brightness of the bar, and Android that of its icons.
+      value: SystemUiOverlayStyle(
+        statusBarBrightness: brightness,
+        statusBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: child,
+    );
+  }
+}
+=== lib/core/crash_reporting/crash_reporter.dart (role:crash_reporting) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/crash_reporting/sentry_crash_reporter.dart'
+    as impl0;
+
+/// Reports the errors of the app.
+abstract interface class CrashReporter {
+  /// Reports [error] with its [stackTrace]; a [fatal] error ended the app.
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  });
+
+  /// Reports an error that Flutter caught, described by [details].
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  });
+
+  /// Adds [message] to the log sent with the next report.
+  Future<void> log(String message);
+
+  /// Sets the id of the signed-in user for the next reports, or clears it
+  /// with `null`.
+  Future<void> setUserId(String? userId);
+}
+
+/// Returns the crash reporter of the app, which forwards every call to the
+/// crash reporters of all modules.
+///
+/// It calls each of them on its own, and its future completes once all of
+/// them are done. A crash reporter that throws, or whose future fails,
+/// keeps no other from the call, and its failure reaches neither the code
+/// that called nor the handlers of [installCrashReporting], which would
+/// report it to the same crash reporter again, without end. In debug mode
+/// the failure is printed, so that a crash reporter that does not work,
+/// such as one that is not set up, shows in the console. A crash reporter
+/// whose factory throws, or that fails to start, is left out, and in debug
+/// mode its error is printed.
+CrashReporter createCrashReporter() => _crashReporter;
+
+/// Reports the errors of the main isolate that nothing handles, each once.
+///
+/// `bootstrap()` calls it once the crash reporting services are ready. Two
+/// handlers cover the main isolate:
+/// - `FlutterError.onError` gets the errors that Flutter catches, such as in
+///   a build or a layout, and still presents them as Flutter does by
+///   default;
+/// - `PlatformDispatcher.instance.onError` gets every other uncaught error,
+///   such as in a `Future`, a `Timer` or the handler of a port, with its
+///   type. In debug mode it leaves the error unhandled, so the engine prints
+///   it.
+///
+/// Each report reaches every crash reporter, and the failure of a crash
+/// reporter comes back to neither handler; see [createCrashReporter].
+///
+/// `compute()` and `Isolate.run()` throw the error of their isolate to the
+/// code that awaits them, so it reaches the platform dispatcher unless that
+/// code catches it. The uncaught errors of an isolate that the app spawns
+/// itself go only to the error listener of that isolate, such as the
+/// `onError` port of `Isolate.spawn`, so the app reports them there to its
+/// crash reporter.
+void installCrashReporting() {
+  final reporter = createCrashReporter();
+  final presentError = FlutterError.onError;
+  FlutterError.onError = (details) {
+    presentError?.call(details);
+    unawaited(reporter.recordFlutterError(details, fatal: true));
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    unawaited(reporter.recordError(error, stackTrace, fatal: true));
+    return !kDebugMode;
+  };
+}
+
+final CrashReporter _crashReporter = _CrashReporters(_crashReporters);
+
+final List<CrashReporter> _crashReporters = [];
+
+/// Creates the implementations of CrashReporter that start
+/// asynchronously; `bootstrap()` awaits it.
+Future<void> initCrashReporting() async {
+  final started = await Future.wait([
+    _startAlone('initSentryCrashReporter', impl0.initSentryCrashReporter),
+  ]);
+  _crashReporters.addAll(started.nonNulls);
+}
+
+/// Calls [start], the function [name], on its own: returns what it starts,
+/// or `null` if it throws or its future fails, so that the app starts and
+/// works without it, and in debug mode prints the error.
+Future<CrashReporter?> _startAlone(
+  String name,
+  Future<CrashReporter> Function() start,
+) async {
+  try {
+    return await start();
+  } on Object catch (error) {
+    if (kDebugMode) {
+      debugPrint('$name() failed, so the app works without it: $error');
+    }
+    return null;
+  }
+}
+
+final class _CrashReporters implements CrashReporter {
+  const _CrashReporters(this._reporters);
+
+  final List<CrashReporter> _reporters;
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) => _forAll(
+    (reporter) =>
+        reporter.recordError(error, stackTrace, fatal: fatal, reason: reason),
+  );
+
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) =>
+      _forAll((reporter) => reporter.recordFlutterError(details, fatal: fatal));
+
+  @override
+  Future<void> log(String message) =>
+      _forAll((reporter) => reporter.log(message));
+
+  @override
+  Future<void> setUserId(String? userId) =>
+      _forAll((reporter) => reporter.setUserId(userId));
+
+  /// Calls [call] with each crash reporter on its own, and completes once
+  /// all of them are done, whatever each does; see [createCrashReporter].
+  Future<void> _forAll(
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    await Future.wait([
+      for (final reporter in _reporters) _callAlone(reporter, call),
+    ]);
+  }
+
+  /// Calls [call] with [reporter], and keeps what it throws, or the error of
+  /// its future, from the caller: in debug mode it prints it.
+  static Future<void> _callAlone(
+    CrashReporter reporter,
+    Future<void> Function(CrashReporter reporter) call,
+  ) async {
+    try {
+      await call(reporter);
+    } on Object catch (error) {
+      if (kDebugMode) {
+        debugPrint('The crash reporter ${reporter.runtimeType} failed: $error');
+      }
+    }
+  }
+}
+=== lib/core/crash_reporting/sentry_crash_reporter.dart (sentry) ===
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show appFlavor;
+import 'package:my_app/core/env/app_env.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
+
+import 'crash_reporter.dart';
+
+/// Changes the options of Sentry before it starts, for the tests of the app
+/// only: their mocks keep the events and drop them, so that no test sends
+/// any.
+@visibleForTesting
+void Function(SentryFlutterOptions options)? configureSentryForTests;
+
+/// Starts Sentry with the DSN of `.env` and returns a crash reporter that
+/// reports to it. `bootstrap()` awaits it before it installs the handlers of
+/// the crash reporting.
+///
+/// The handlers of the errors that nothing catches belong to the crash
+/// reporting of the app, which reports each error to every crash reporter.
+/// So Sentry gets no handler of its own: the start removes the integration
+/// with which Sentry would take `PlatformDispatcher.instance.onError`, and
+/// puts back the handler of `FlutterError.onError` that Sentry replaces, or
+/// an error of Flutter would reach Sentry twice. Native crashes stay with
+/// the SDKs of Sentry for Android and iOS.
+///
+/// The environment of the events is the flavor of the build. A debug build
+/// sends its events too.
+///
+/// On Windows, where the app runs only in `flutter test`, Sentry processes
+/// the events without the processor that adds the device, the system and
+/// the runtime, whose read of the arguments of flutter_tester fails there
+/// once a path among them has a letter beyond ASCII.
+///
+/// Throws a [StateError] when the build has no DSN, has a value that is no
+/// DSN of Sentry, or when Sentry does not start with it: the app then reports
+/// nothing to Sentry, and a debug build prints why, without the value.
+Future<CrashReporter> initSentryCrashReporter() async {
+  final dsn = AppEnv.sentryDsn;
+  if (dsn == null) {
+    throw StateError(
+      'SENTRY_DSN has no value in this build, so the app reports nothing to '
+      'Sentry. In .env, give it the DSN of your Sentry project, and build the '
+      'app as the section "Values in .env" of its README says. The section '
+      '"Sentry" tells more.',
+    );
+  }
+  final flutterErrors = FlutterError.onError;
+  late final SentryFlutterOptions started;
+  try {
+    await SentryFlutter.init((options) {
+      started = options;
+      options
+        ..dsn = dsn
+        ..environment = appFlavor ?? 'dev'
+        // Sentry logs what it does in a debug build; the crash reporting of
+        // the app shows the errors, and Sentry logs nothing.
+        ..debug = false
+        ..sendDefaultPii = false
+        ..attachScreenshot = false
+        ..attachViewHierarchy = false
+        // An event of the app carries what it logged with log(), not what it
+        // printed, which may hold what nobody meant to send.
+        ..enablePrintBreadcrumbs = false;
+      // By type, which a build with --obfuscate keeps, unlike a name.
+      for (final integration
+          in options.integrations.whereType<OnErrorIntegration>().toList()) {
+        options.removeIntegration(integration);
+      }
+      configureSentryForTests?.call(options);
+    });
+  } on ArgumentError {
+    // The errors of Sentry about a DSN that it does not take quote the DSN,
+    // which a debug build would print.
+    throw StateError(_noDsnOfSentry);
+  } on FormatException {
+    throw StateError(_noDsnOfSentry);
+  } finally {
+    FlutterError.onError = flutterErrors;
+  }
+  if (!Sentry.isEnabled) {
+    throw StateError(
+      'Sentry did not start with the SENTRY_DSN of this build, so the app '
+      'reports nothing to Sentry: copy the DSN of your Sentry project into '
+      '.env again.',
+    );
+  }
+  _withoutEnricherOnWindows(started);
+  return const SentryCrashReporter();
+}
+
+/// The class of the processor of Sentry that adds the device, the system,
+/// the runtimes and the context of Dart to each event.
+const _enricherClass = 'IoEnricherEventProcessor';
+
+/// Leaves out the processor [_enricherClass] of Sentry, which [options]
+/// has once Sentry started, on Windows, where the app runs only in
+/// `flutter test`. There flutter_tester gives Dart its arguments in the code
+/// page of Windows rather than in UTF-8, and the processor reads them
+/// (`Platform.executableArguments`) for each event: when a path among them
+/// has a letter beyond ASCII, such as the directory of the app, the read
+/// fails with an error of the engine that no `catch` takes, so the event
+/// never reaches Sentry and the call that reported it never completes. The
+/// app is never obfuscated in `flutter test`, so the name of the class holds
+/// there. On Android and iOS, the events keep the processor.
+void _withoutEnricherOnWindows(SentryFlutterOptions options) {
+  if (!Platform.isWindows) return;
+  for (final processor in options.eventProcessors) {
+    if ('${processor.runtimeType}' == _enricherClass) {
+      options.removeEventProcessor(processor);
+    }
+  }
+}
+
+/// Why the app reports nothing to Sentry when Sentry does not take the
+/// value of SENTRY_DSN, which it does not quote.
+const _noDsnOfSentry =
+    'SENTRY_DSN of this build is no DSN of Sentry, so the '
+    'app reports nothing to Sentry: copy the DSN of your Sentry project into '
+    '.env again, as the section "Sentry" of its README tells.';
+
+/// Reports the errors of the app to Sentry.
+///
+/// It prints nothing. Of the errors that `installCrashReporting()` reports,
+/// Flutter already presents those it catches, in every mode, and in debug
+/// mode the engine prints the others.
+final class SentryCrashReporter implements CrashReporter {
+  /// Creates the reporter, which reports to the Sentry that
+  /// [initSentryCrashReporter] started.
+  const SentryCrashReporter();
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stackTrace, {
+    bool fatal = false,
+    String? reason,
+  }) async {
+    await Sentry.captureException(
+      ThrowableMechanism(
+        Mechanism(type: 'CrashReporter.recordError', handled: !fatal),
+        error,
+      ),
+      stackTrace: stackTrace,
+      withScope: (scope) async {
+        scope.level = fatal ? SentryLevel.fatal : SentryLevel.error;
+        if (reason != null) {
+          await scope.setContexts('reason', {'reason': reason});
+        }
+      },
+    );
+  }
+
+  /// Reports what the integration of Sentry for the errors of Flutter
+  /// reports, without presenting the error, which the crash reporting of the
+  /// app does.
+  @override
+  Future<void> recordFlutterError(
+    FlutterErrorDetails details, {
+    bool fatal = false,
+  }) async {
+    final context = details.context?.toDescription();
+    final information = details.informationCollector?.call() ?? const [];
+    final library = details.library;
+    await Sentry.captureException(
+      ThrowableMechanism(
+        Mechanism(type: 'CrashReporter.recordFlutterError', handled: !fatal),
+        details.exception,
+      ),
+      stackTrace: details.stack,
+      withScope: (scope) async {
+        scope.level = fatal ? SentryLevel.fatal : SentryLevel.error;
+        await scope.setContexts('flutter_error_details', {
+          if (context != null) 'context': 'thrown $context',
+          if (information.isNotEmpty) 'information': information.join('\n'),
+          'library': ?library,
+        });
+      },
+    );
+  }
+
+  @override
+  Future<void> log(String message) =>
+      Sentry.addBreadcrumb(Breadcrumb(message: message, category: 'log'));
+
+  @override
+  Future<void> setUserId(String? userId) async {
+    await Sentry.configureScope(
+      (scope) => scope.setUser(userId == null ? null : SentryUser(id: userId)),
+    );
+  }
+}
+=== lib/core/env/app_env.dart (dart_define) ===
+/// The values of `.env`, each through a static getter that returns the
+/// value, or `null` while it is empty or missing.
+///
+/// A command of the `flutter` tool that builds, runs or tests the app reads
+/// `.env` when it starts, given `--dart-define-from-file=.env`, and compiles
+/// each value into the app, where `String.fromEnvironment` reads it as a
+/// constant. Without that argument every value is empty, so every getter
+/// is `null`, and a release build of an app with keys stops, since
+/// [supplied] is `false` then.
+abstract final class AppEnv {
+  /// Whether the command that built the app gave it the values of `.env`:
+  /// `--dart-define-from-file=.env` declares each key that `.env` has a line
+  /// of, also with an empty value, and this is `true` once it declared one
+  /// of the keys below. A key of your own needs no change here.
+  static const bool supplied = bool.hasEnvironment('SENTRY_DSN');
+
+  /// The DSN of your Sentry project, which the crash reports go to.
+  static String? get sentryDsn {
+    const value = String.fromEnvironment('SENTRY_DSN');
+    return value.isEmpty ? null : value;
+  }
+}
+=== lib/core/env/env_check.dart (role:env) ===
+// The check that the command that built the app gave it .env, which
+// bootstrap() calls in its first phase. It does not look at whether the values
+// are filled in. It is plain Dart, so that a test compiles it with the Dart
+// SDK alone.
+import 'app_env.dart';
+
+/// Whether this is a release build, which the compiler of a release build
+/// declares.
+const _release = bool.fromEnvironment('dart.vm.product');
+
+/// Whether the command that built the app gave it the values of `.env`, as
+/// [AppEnv.supplied] says. A release build without them cannot evaluate
+/// this constant, so it stops here, and the compiler quotes the text.
+const bool _supplied = AppEnv.supplied || !_release
+    ? AppEnv.supplied
+    : ('A release build of this app needs the values of .env: build it '
+              'with --dart-define-from-file=.env, from a .env with the keys of '
+              '.env.example.'
+          as bool);
+
+/// Tells a debug or profile build that has none of the values of `.env`,
+/// through [report], that every getter of [AppEnv] is `null`, and how to
+/// give the values; `bootstrap()` calls it in its first phase, with
+/// `debugPrint`.
+void checkEnvValues(void Function(String message) report) {
+  if (_supplied) return;
+  report(
+    'This build has none of the values of .env, so every getter of AppEnv is '
+    'null. Run it with --dart-define-from-file=.env, from a .env with the '
+    'keys of .env.example, as the run configurations in .vscode/launch.json '
+    'and .run/ do.',
+  );
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sentry_flutter: "^10.4.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  default-flavor: "dev"
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}
+=== test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+/// What the widget asks the system for on a screen in [theme].
+Future<SystemUiOverlayStyle> _styleIn(
+  WidgetTester tester,
+  ThemeData theme,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: theme,
+      home: const StatusBarIcons(child: Text('A screen')),
+    ),
+  );
+  return tester
+      .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.descendant(
+          of: find.byType(StatusBarIcons),
+          matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        ),
+      )
+      .value;
+}
+
+void main() {
+  testWidgets('asks for dark icons on a light theme', (tester) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.statusBarIconBrightness, Brightness.dark);
+    expect(style.statusBarBrightness, Brightness.light);
+    expect(find.text('A screen'), findsOneWidget);
+  });
+
+  testWidgets('asks for light icons on a dark theme', (tester) async {
+    final style = await _styleIn(
+      tester,
+      ThemeData(brightness: Brightness.dark),
+    );
+
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+  });
+
+  testWidgets('leaves the navigation bar of the system as it is', (
+    tester,
+  ) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.systemNavigationBarColor, isNull);
+    expect(style.systemNavigationBarIconBrightness, isNull);
+  });
+}

@@ -9,8 +9,11 @@ part of '../contributions.dart';
 /// were selected (see [RoleHookInput.data]).
 ///
 /// A module may contribute data only to its own roles (see
-/// [ModuleDescriptor.roles]). Data applies only when [role] is present, in
-/// addition to [when], so a module that only uses a role can contribute data
+/// [ModuleDescriptor.roles]) and to the roles it feeds (see
+/// [ModuleDescriptor.feeds]), and the template of a role likewise to the
+/// role, the roles it requires or uses and the roles it feeds (see
+/// [Role.feeds]). Data applies only when [role] is present, in addition to
+/// [when], so a module that only uses or feeds a role can contribute data
 /// to it unconditionally; hooks and rules never see data that does not
 /// apply.
 ///

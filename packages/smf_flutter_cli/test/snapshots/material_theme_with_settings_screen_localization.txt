@@ -128,7 +128,7 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. An entry may show only at times, such as one that hides on a platform: the screen asks it each time it builds. While no module of the app has a setting, or while none of its entries shows, the screen shows a note for the developer of the app in place of the group: the first entry that shows replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
@@ -1019,6 +1019,7 @@ class StatusBarIcons extends StatelessWidget {
   }
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../preferences/app_preferences.dart';
@@ -1048,7 +1049,8 @@ final appLocale = AppLocaleController._();
 
 /// Keeps the language that the user chose for the app, and saves each
 /// choice in the preferences of the app.
-final class AppLocaleController extends ChangeNotifier {
+final class AppLocaleController extends ChangeNotifier
+    implements ValueListenable<Locale?> {
   AppLocaleController._();
 
   Locale? _locale;
@@ -1058,6 +1060,7 @@ final class AppLocaleController extends ChangeNotifier {
 
   /// The language that the user chose, one of [appLocales], or `null` while
   /// the app follows the languages of the device.
+  @override
   Locale? get value => _locale;
 
   /// Chooses the language of [locale] as the language of the app, or with
@@ -1107,6 +1110,11 @@ Locale? _ofApp(String? code) {
   }
   return null;
 }
+
+/// The language that the user chose, as a [ValueListenable] for the state
+/// manager of the app: [appLocale], which changes it only through
+/// [AppLocaleController.choose].
+ValueListenable<Locale?> localizationLocaleListenable() => appLocale;
 
 /// Restores the language that the user chose from [preferences], which the
 /// app opened, and keeps them for the choices to come: a restorer of the
@@ -1181,23 +1189,29 @@ class LanguageSetting extends StatelessWidget {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final chosen = AppLocaleScope.of(context);
-    final choice = Text(
-      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
-      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-    );
+    final choice = chosen == null
+        ? context.l10n.localizationSystem
+        : _nameOf(chosen);
+    final style = theme.textTheme.bodyMedium?.copyWith(color: muted);
     final arrow = Icon(Icons.chevron_right, color: muted);
     // At a large text size, the choice goes below the title, where it has
-    // the width of the row.
+    // the width of the row, and the two wrap between their words.
     final below = MediaQuery.textScalerOf(context).scale(10) > 13;
     return ListTile(
       leading: const Icon(Icons.language),
-      title: Text(context.l10n.localizationLanguage),
-      subtitle: below ? choice : null,
+      title: _WholeWords(context.l10n.localizationLanguage),
+      subtitle: below
+          ? DefaultTextStyle.merge(style: style, child: _WholeWords(choice))
+          : null,
       trailing: below
           ? arrow
           : Row(
               mainAxisSize: MainAxisSize.min,
-              children: [choice, const SizedBox(width: 4), arrow],
+              children: [
+                Text(choice, style: style),
+                const SizedBox(width: 4),
+                arrow,
+              ],
             ),
       onTap: () => showModalBottomSheet<void>(
         context: context,
@@ -1234,9 +1248,9 @@ class _LanguageSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: Semantics(
               header: true,
-              child: Text(
-                context.l10n.localizationLanguage,
+              child: DefaultTextStyle.merge(
                 style: theme.textTheme.headlineSmall,
+                child: _WholeWords(context.l10n.localizationLanguage),
               ),
             ),
           ),
@@ -1246,12 +1260,15 @@ class _LanguageSheet extends StatelessWidget {
                 horizontal: 24,
                 vertical: 4,
               ),
-              title: Text(
-                locale == null
-                    ? context.l10n.localizationSystem
-                    : _nameOf(locale),
-                // Larger than the text of a row of the screen.
+              // Larger than the text of a row of the screen, and so the
+              // name of a language wraps between its words too.
+              title: DefaultTextStyle.merge(
                 style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+                child: _WholeWords(
+                  locale == null
+                      ? context.l10n.localizationSystem
+                      : _nameOf(locale),
+                ),
               ),
               selected: locale == chosen,
               trailing: locale == chosen
@@ -1268,6 +1285,77 @@ class _LanguageSheet extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
     );
   }
 }
@@ -2482,6 +2570,7 @@ ThemeData _themeOf(Brightness brightness) {
   );
 }
 === lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -2497,7 +2586,8 @@ final appThemeMode = AppThemeModeController._();
 /// Keeps the theme mode that the user selected for the app, tells its
 /// listeners when the mode changes, and saves each choice in the
 /// preferences of the app. The app has one, [appThemeMode].
-final class AppThemeModeController extends ChangeNotifier {
+final class AppThemeModeController extends ChangeNotifier
+    implements ValueListenable<ThemeMode> {
   AppThemeModeController._();
 
   /// The key of the mode in the preferences, which keep it by its name.
@@ -2510,6 +2600,7 @@ final class AppThemeModeController extends ChangeNotifier {
 
   /// The mode of the app: [ThemeMode.system], which follows the device,
   /// unless the user selected another.
+  @override
   ThemeMode get value => _mode;
 
   /// Chooses [mode] as the mode of the app, at once, and saves the choice:
@@ -2540,6 +2631,11 @@ final class AppThemeModeController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// The theme mode that the user selected, as a [ValueListenable] for the
+/// state manager of the app: [appThemeMode], which changes it only through
+/// [AppThemeModeController.choose].
+ValueListenable<ThemeMode> themeModeListenable() => appThemeMode;
 
 /// Restores the theme mode that the user selected from [preferences], which
 /// the app opened, and keeps them for the choices to come: a restorer of
@@ -2601,9 +2697,11 @@ class ThemeModeSetting extends StatelessWidget {
               ),
               const SizedBox(width: 16),
               Expanded(
-                child: Text(
-                  context.l10n.themeTitle,
+                // At a large text size the title wraps in the entry between
+                // its words.
+                child: DefaultTextStyle.merge(
                   style: theme.textTheme.bodyLarge,
+                  child: _WholeWords(context.l10n.themeTitle),
                 ),
               ),
             ],
@@ -2663,6 +2761,77 @@ class ThemeModeSetting extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
     );
   }
 }

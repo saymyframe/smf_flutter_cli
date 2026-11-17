@@ -19,37 +19,58 @@ Future<String> _packageDirectoryOf(SmfModule module) async {
   return p.dirname(p.fromUri(lib));
 }
 
-/// The words of [text] in lower case: its runs of letters and digits, split
-/// at the humps of camelCase, such as `crashlytics`, `phase` and `fix` of
-/// `crashlyticsPhaseFix`.
-Set<String> _wordsOf(String text) => {
+/// The words of [text] in lower case, in their order: its runs of letters
+/// and digits, split at the humps of camelCase, such as `crashlytics`,
+/// `phase` and `fix` of `crashlyticsPhaseFix`.
+List<String> _wordsOf(String text) => [
       for (final match
           in RegExp('[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+').allMatches(text))
         match[0]!.toLowerCase(),
-    };
+    ];
+
+/// Where [words] stand one after another, in their order, among [line], the
+/// words of a line: the index of the first of them, or -1.
+int _indexOfRun(List<String> line, List<String> words) {
+  for (var start = 0; start + words.length <= line.length; start++) {
+    var at = 0;
+    while (at < words.length && line[start + at] == words[at]) {
+      at++;
+    }
+    if (at == words.length) return start;
+  }
+  return -1;
+}
 
 /// The lines of the package in [directory] of [module] that name a module of
 /// [modules] that depends on it, which it knows nothing of, each as
-/// `<path>:<line>: <word> of <module>`, by the path from [directory], in the
-/// order of the paths and of the lines: a line of a file of its `lib/` but
-/// its bundles, which its bricks generate, of its `bricks/`, of its
-/// `example/`, which pub.dev shows, or of its `README.md` that has a word of
-/// the id of such a module that is not a word of the id of [module],
-/// whatever its case, such as `crashlytics` of `firebase_crashlytics` in the
-/// package of `firebase_core`. A file that is not text, such as an image of
-/// a brick, has no lines.
+/// `<path>:<line>: <words> of <module>`, by the path from [directory], in the
+/// order of the paths, of the lines and of where the words stand: a line of a
+/// file of its `lib/` but its bundles, which its bricks generate, of its
+/// `bricks/`, of its `example/`, which pub.dev shows, or of its `README.md`
+/// whose words have the words of the id of such a module that are not words
+/// of the id of [module] one after another, in their order, whatever their
+/// case. So `crashlytics` of `firebase_crashlytics` in the package of
+/// `firebase_core` is found as before, and `remote config` of
+/// `firebase_remote_config` in `Remote Config` and `remoteConfig`, but not in
+/// `a remote machine` or `npm config`. A file that is not text, such as an
+/// image of a brick, has no lines.
 List<String> _dependentsNamedIn(
   String directory,
   ModuleDescriptor module,
   List<SmfModule> modules,
 ) {
   final own = module.id.value.split('_').toSet();
-  final dependents = <String, ModuleId>{
+  final dependents = <(ModuleId, List<String>)>[
     for (final other in modules)
       if (other.descriptor.dependsOn.contains(module.id))
-        for (final word in other.descriptor.id.value.split('_'))
-          if (!own.contains(word)) word: other.descriptor.id,
-  };
+        (
+          other.descriptor.id,
+          [
+            for (final word in other.descriptor.id.value.split('_'))
+              if (!own.contains(word)) word,
+          ],
+        ),
+  ];
   final bundles = p.join(directory, 'lib', 'bundles');
   final files = [
     for (final root in ['lib', 'bricks', 'example'])
@@ -75,11 +96,18 @@ List<String> _dependentsNamedIn(
     }
     final path = paths[file]!;
     for (final (index, line) in const LineSplitter().convert(text).indexed) {
-      for (final word in _wordsOf(line)) {
-        if (dependents[word] case final dependent?) {
-          named.add('$path:${index + 1}: $word of $dependent');
+      final words = _wordsOf(line);
+      final found = <(int, String)>[];
+      for (final (dependent, rest) in dependents) {
+        final at = rest.isEmpty ? -1 : _indexOfRun(words, rest);
+        if (at >= 0) {
+          found.add(
+            (at, '$path:${index + 1}: ${rest.join(' ')} of $dependent'),
+          );
         }
       }
+      found.sort((a, b) => a.$1.compareTo(b.$1));
+      named.addAll([for (final (_, entry) in found) entry]);
     }
   }
   return named;
@@ -402,6 +430,8 @@ void main() {
       core,
       _Module(ModuleId('firebase_crashlytics'), dependsOn: {id}),
       _Module(ModuleId('firebase_analytics'), dependsOn: {id}),
+      // Of its id, two words are not words of the id of core.
+      _Module(ModuleId('firebase_remote_config'), dependsOn: {id}),
       // It does not depend on core, which may name it.
       _Module(ModuleId('event_logger')),
     ];
@@ -468,6 +498,37 @@ void main() {
       expect(
         _dependentsNamedIn(package.path, core.descriptor, modules),
         isEmpty,
+      );
+    });
+
+    test(
+        'of two words or more are found where the words stand one after '
+        'another in their order, in any case and in identifiers', () {
+      write(
+        'README.md',
+        'Reads remoteConfig after Firebase.\n'
+            'Set up Remote Config in the console.\n'
+            'Configures the app on a remote machine.\n'
+            'Runs npm config get prefix.\n'
+            'Passes --ios-build-config to flutterfire.\n'
+            'The config of a remote.\n',
+      );
+      write(
+        'lib/src/options.dart',
+        '// FirebaseRemoteConfig, firebase_remote_config and Crashlytics.\n',
+      );
+
+      expect(
+        _dependentsNamedIn(package.path, core.descriptor, modules),
+        [
+          'README.md:1: remote config of firebase_remote_config',
+          'README.md:2: remote config of firebase_remote_config',
+          equals(
+            'lib/src/options.dart:1: remote config of '
+            'firebase_remote_config',
+          ),
+          'lib/src/options.dart:1: crashlytics of firebase_crashlytics',
+        ],
       );
     });
 

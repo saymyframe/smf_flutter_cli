@@ -311,6 +311,24 @@ final String _scope = _scriptOf('''
   result['asked of the context below no scope'] = outside.asked;
 ''');
 
+/// Reads the mode through the function through which the state manager of
+/// the app follows it: the listenable that it returns at each call, its
+/// value, and what its listeners hear of a choice.
+final String _listenable = _scriptOf('''
+  final listenable = themeModeListenable();
+  final heardByIt = <String>[];
+  listenable.addListener(() => heardByIt.add(listenable.value.name));
+  result['the same listenable at each call'] =
+      identical(listenable, themeModeListenable());
+  result['the controller of the mode'] = identical(listenable, appThemeMode);
+  result['at first'] = listenable.value.name;
+  await appThemeMode.choose(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.dark);
+  await appThemeMode.choose(ThemeMode.light);
+  result['after two choices'] = listenable.value.name;
+  result['heard'] = heardByIt;
+''');
+
 /// The files of the test app: the file of the mode, as the template of the
 /// role generates it, the file of the preferences role with the restorer
 /// that the template puts into its socket, and the fake preferences.
@@ -565,6 +583,35 @@ void main() {
       for (final contribution in [wrapper, ...args]) {
         expect(contribution.when, isEmpty);
       }
+    });
+
+    test(
+        'gives the state manager the mode, through a function of the file of '
+        'the mode, in every app', () {
+      final data = _contributions().whereType<RoleData<Object>>().where(
+            (data) => data.role == stateManagementRole,
+          );
+
+      expect(data.single.value, ThemeRole.modeState);
+      expect(data.single.when, isEmpty);
+      expect(data.single.whenChosen, isEmpty);
+      // The role only feeds the state management, which an app may lack.
+      expect(themeRole.feeds, {stateManagementRole});
+      const state = ThemeRole.modeState;
+      expect(state.name, 'themeMode');
+      expect(state.listenable.name, 'themeModeListenable');
+      expect(state.listenable.import, _themeMode);
+      expect(
+        state.type,
+        const TypeRef(
+          'ThemeMode',
+          import: ImportRef('package:flutter/material.dart'),
+        ),
+      );
+      expect(state.nullable, isFalse);
+      expect(state.listenableType, 'ValueListenable<ThemeMode>');
+      expect(state.description, contains('`appThemeMode.choose()`'));
+      expect(state.problems(), isEmpty);
     });
 
     test(
@@ -964,6 +1011,23 @@ void main() {
     });
 
     test(
+        'is the value of the controller of the mode, which the function of '
+        'the file returns to the state manager, and whose listeners hear of '
+        'each change once', () async {
+      final app = await _app();
+      addTearDown(app.delete);
+
+      expect(await app.run(_listenable), {
+        'the same listenable at each call': true,
+        'the controller of the mode': true,
+        'at first': 'system',
+        'after two choices': 'light',
+        // The same choice again changes nothing.
+        'heard': ['dark', 'light'],
+      });
+    });
+
+    test(
         'comes from the scope around the context that asks for it, which '
         'rebuilds its widget when the mode changes; below no scope there is '
         'none', () async {
@@ -985,7 +1049,7 @@ void main() {
 
   group('the entry of the theme mode on the settings screen', () {
     /// The file of the entry in an app with a settings screen, parsed, with
-    /// its calls.
+    /// the calls of its widget.
     Future<(CompilationUnit, Map<String, List<MethodInvocation>>)> entry({
       required bool localized,
     }) async {
@@ -997,7 +1061,12 @@ void main() {
         content: rendered.files[ThemeRole.themeModeSettingFile]!,
       ).unit;
       final calls = _Calls();
-      unit.accept(calls);
+      unit.declarations
+          .whereType<ClassDeclaration>()
+          .singleWhere(
+            (type) => type.namePart.typeName.lexeme == 'ThemeModeSetting',
+          )
+          .accept(calls);
       return (unit, calls.byName);
     }
 
@@ -1006,7 +1075,11 @@ void main() {
         'without arguments', () async {
       final (unit, _) = await entry(localized: false);
 
-      final widget = unit.declarations.whereType<ClassDeclaration>().single;
+      // The one public class of the file.
+      final widget = unit.declarations
+          .whereType<ClassDeclaration>()
+          .where((type) => !type.namePart.typeName.lexeme.startsWith('_'))
+          .single;
       expect(
         widget.namePart.typeName.lexeme,
         settingsScreenRole
@@ -1115,6 +1188,16 @@ void main() {
       expect(control.parent!.parent, same(clamped.argumentList));
     });
 
+    test(
+        'keeps the words of its title whole at a large text size, with a '
+        'copy of WholeWords of its own', () async {
+      final rendered = await renderTemplate(
+        themeRole,
+        present: _rolesOf(settings: true, localized: false),
+      );
+      expectWholeWordsCopy(rendered.files[ThemeRole.themeModeSettingFile]!);
+    });
+
     for (final localized in [true, false]) {
       final how = localized
           ? 'from the texts of the app, in an app with the localization role'
@@ -1126,8 +1209,9 @@ void main() {
             localized ? 'context.l10n.${text.getter}' : "'${text.en}'";
 
         final control = calls['SegmentedButton']!.single;
+        final title = calls['_WholeWords']!.single;
         final shown = calls['Text']!;
-        for (final node in [...shown, control]) {
+        for (final node in [title, ...shown, control]) {
           expect(
             _inConstant(node),
             isFalse,
@@ -1135,14 +1219,16 @@ void main() {
                 '${node.toSource()}',
           );
         }
-        // The title, in the text style of the theme, and then the name of
-        // a mode.
+        // The title, in the text style of the theme, with its words whole,
+        // and then the name of a mode.
+        expect(
+          calls['merge']!.single.toSource(),
+          'DefaultTextStyle.merge(style: theme.textTheme.bodyLarge, child: '
+          '_WholeWords(${code(_texts.first)}))',
+        );
         expect(
           [for (final text in shown) text.toSource()],
-          [
-            'Text(${code(_texts.first)}, style: theme.textTheme.bodyLarge)',
-            'Text(name, maxLines: 1, softWrap: false)',
-          ],
+          ['Text(name, maxLines: 1, softWrap: false)'],
         );
         // The name of each mode, in the order of the modes.
         expect(

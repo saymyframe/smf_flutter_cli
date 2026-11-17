@@ -2298,6 +2298,37 @@ void main() {
     List<Contribution> contributions() =>
         localizationRole.template.contribute(testContext);
 
+    test(
+        'gives the state manager the language that the user chose, through '
+        'a function of the file of the choice, in every app', () {
+      final data = contributions().whereType<RoleData<Object>>().where(
+            (data) => data.role == stateManagementRole,
+          );
+
+      expect(data.single.value, LocalizationRole.localeState);
+      expect(data.single.when, isEmpty);
+      expect(localizationRole.feeds, {stateManagementRole});
+      const state = LocalizationRole.localeState;
+      expect(state.name, 'localizationLocale');
+      expect(state.listenable.name, 'localizationLocaleListenable');
+      expect(
+        state.listenable.import,
+        const ImportRef.app('core/l10n/app_locale.dart'),
+      );
+      expect(
+        state.type,
+        const TypeRef(
+          'Locale',
+          import: ImportRef('package:flutter/widgets.dart'),
+        ),
+      );
+      // The app follows the device while the user chose none.
+      expect(state.nullable, isTrue);
+      expect(state.listenableType, 'ValueListenable<Locale?>');
+      expect(state.description, contains('`appLocale.choose()`'));
+      expect(state.problems(), isEmpty);
+    });
+
     test('gives the root its language, its languages and the delegates', () {
       final sockets = contributions().whereType<SocketContribution>().toList();
       const flutterLocalizations = ImportRef(
@@ -2601,26 +2632,48 @@ class $name {
         );
       });
 
-      test('generates the choice, its scope and its restorer', () {
+      test(
+          'generates the choice, its scope, its restorer and the function '
+          'through which the state manager follows it', () {
         final classes = {
           for (final declaration
               in unit.declarations.whereType<ClassDeclaration>())
             declaration.namePart.typeName.lexeme: declaration,
         };
-        final restorer =
-            unit.declarations.whereType<FunctionDeclaration>().singleWhere(
-                  (function) => !function.name.lexeme.startsWith('_'),
-                );
+        final functions = {
+          for (final function
+              in unit.declarations.whereType<FunctionDeclaration>())
+            if (!function.name.lexeme.startsWith('_'))
+              function.name.lexeme: function,
+        };
+        final restorer = functions['restoreAppLocale']!;
 
         expect(classes.keys, ['AppLocaleController', 'AppLocaleScope']);
+        expect(
+          functions.keys,
+          ['localizationLocaleListenable', 'restoreAppLocale'],
+        );
         expect(
           classes['AppLocaleScope']!.extendsClause!.superclass.toSource(),
           'InheritedNotifier<AppLocaleController>',
         );
-        // The root listens to the choice.
+        // The root listens to the choice, and so may the state manager.
         expect(
           classes['AppLocaleController']!.extendsClause!.superclass.toSource(),
           'ChangeNotifier',
+        );
+        expect(
+          [
+            for (final type
+                in classes['AppLocaleController']!.implementsClause!.interfaces)
+              type.toSource(),
+          ],
+          ['ValueListenable<Locale?>'],
+        );
+        expect(
+          functions['localizationLocaleListenable']!.toSource(),
+          'ValueListenable<Locale?> localizationLocaleListenable() => '
+          'appLocale;',
         );
         // A restorer of the preferences takes them, and returns nothing.
         expect(restorer.name.lexeme, 'restoreAppLocale');
@@ -2637,7 +2690,10 @@ class $name {
             directive.uri.stringValue!,
         ];
 
+        // The foundation library has the type of the function through
+        // which the state manager follows the choice.
         expect(imports, [
+          'package:flutter/foundation.dart',
           'package:flutter/widgets.dart',
           '../preferences/app_preferences.dart',
         ]);
@@ -3169,6 +3225,12 @@ class $name {
         for (final declaration in unit.declarations) {
           // The names of the languages.
           if (declaration is TopLevelVariableDeclaration) continue;
+          // The copy of WholeWords, whose one literal is the pattern of the
+          // white space between two words, which no user sees.
+          if (declaration is ClassDeclaration &&
+              declaration.namePart.typeName.lexeme == '_WholeWords') {
+            continue;
+          }
           declaration.accept(literals);
         }
 
@@ -3195,23 +3257,34 @@ class $name {
           'do not fit one row', () {
         final row = createdIn('LanguageSetting', 'ListTile').single;
 
-        expect(row['title'], 'Text(context.l10n.localizationLanguage)');
+        expect(row['title'], '_WholeWords(context.l10n.localizationLanguage)');
         // The choice: the option of the device, or the name of the
         // language.
         expect(
           code,
           contains(
-            'final choice = Text(\n'
-            '      chosen == null ? context.l10n.localizationSystem : '
-            '_nameOf(chosen),\n',
+            'final choice = chosen == null ? '
+            'context.l10n.localizationSystem : _nameOf(chosen);',
+          ),
+        );
+        expect(
+          code,
+          contains(
+            'final style = '
+            'theme.textTheme.bodyMedium?.copyWith(color: muted);',
           ),
         );
         expect(
           row['trailing'],
           'below ? arrow : Row(mainAxisSize: MainAxisSize.min, children: '
-          '[choice, const SizedBox(width: 4), arrow])',
+          '[Text(choice, style: style), const SizedBox(width: 4), arrow])',
         );
-        expect(row['subtitle'], 'below ? choice : null');
+        // Below the title, the choice wraps between its words too.
+        expect(
+          row['subtitle'],
+          'below ? DefaultTextStyle.merge(style: style, child: '
+          '_WholeWords(choice)) : null',
+        );
         expect(
           code,
           contains(
@@ -3251,11 +3324,20 @@ class $name {
         // No column of a fixed height, which the options of many languages
         // or a large text size would overflow.
         expect(createdIn('_LanguageSheet', 'Column'), isEmpty);
-        // Its title, as a header for a screen reader.
-        expect(
-          createdIn('_LanguageSheet', 'Semantics').single['header'],
-          'true',
-        );
+        // Its title, as a header for a screen reader, with its words
+        // whole.
+        expect(createdIn('_LanguageSheet', 'Semantics').single, {
+          'header': 'true',
+          'child': 'DefaultTextStyle.merge(style: '
+              'theme.textTheme.headlineSmall, child: '
+              '_WholeWords(context.l10n.localizationLanguage))',
+        });
+      });
+
+      test(
+          'keeps the words of its texts whole at a large text size, with a '
+          'copy of WholeWords of its own', () {
+        expectWholeWordsCopy(code);
       });
 
       test(
@@ -3273,9 +3355,10 @@ class $name {
         // selected: only the check tells the choice to the eye.
         expect(
           option['title'],
-          'Text(locale == null ? context.l10n.localizationSystem : '
-          '_nameOf(locale), style: '
-          'theme.textTheme.bodyLarge?.copyWith(fontSize: 19))',
+          'DefaultTextStyle.merge(style: '
+          'theme.textTheme.bodyLarge?.copyWith(fontSize: 19), child: '
+          '_WholeWords(locale == null ? context.l10n.localizationSystem : '
+          '_nameOf(locale)))',
         );
       });
 
@@ -3326,6 +3409,8 @@ class Locale {
 
 abstract class Listenable {
   void addListener(VoidCallback listener);
+
+  void removeListener(VoidCallback listener);
 }
 
 class ChangeNotifier implements Listenable {
@@ -3333,6 +3418,9 @@ class ChangeNotifier implements Listenable {
 
   @override
   void addListener(VoidCallback listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(VoidCallback listener) => _listeners.remove(listener);
 
   void notifyListeners() {
     for (final listener in [..._listeners]) {
@@ -3555,6 +3643,27 @@ Future<void> main(List<String> arguments, SendPort port) async {
 
     /// Chooses the second of two locales of one language, in an app whose
     /// languages a developer changed by hand.
+    /// Reads the choice through the function through which the state
+    /// manager of the app follows it, and sends back the listenable that it
+    /// returns at each call, its value, and what its listeners hear.
+    const listenable = r'''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final listenable = localizationLocaleListenable();
+  final heard = <String>[];
+  listenable.addListener(() => heard.add('${listenable.value}'));
+  steps['the same listenable at each call'] =
+      identical(listenable, localizationLocaleListenable());
+  steps['the controller of the choice'] = identical(listenable, appLocale);
+  steps['at first'] = '${listenable.value}';
+  await appLocale.choose(const Locale('uk'));
+  await appLocale.choose(const Locale('uk', 'UA'));
+  await appLocale.choose(null);
+  steps['after the choices'] = '${listenable.value}';
+  steps['heard'] = heard;
+  port.send(steps);
+}
+''';
+
     const twoLocales = '''
 Future<void> main(List<String> arguments, SendPort port) async {
   await initPreferences();
@@ -3679,6 +3788,23 @@ Future<void> main(List<String> arguments, SendPort port) async {
         // A refused locale and a choice that only saves change nothing
         // that the listeners hear of.
         'changes': ['uk', 'en', 'uk', 'null'],
+      });
+    });
+
+    test(
+        'is the value of the controller of the choice, which the function of '
+        'the file returns to the state manager, and whose listeners hear of '
+        'each change once', () async {
+      final steps =
+          (await app.run('$notes$listenable'))! as Map<Object?, Object?>;
+
+      expect(steps, {
+        'the same listenable at each call': true,
+        'the controller of the choice': true,
+        'at first': 'null',
+        'after the choices': 'null',
+        // A locale of the language that is chosen changes nothing.
+        'heard': ['uk', 'null'],
       });
     });
 

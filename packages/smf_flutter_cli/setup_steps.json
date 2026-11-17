@@ -32,6 +32,26 @@
       ]
     },
     {
+      "id": "review.app_store_id",
+      "title": "Copy the App Store ID of the app from App Store Connect into .env",
+      "owner": "review",
+      "ownerKind": "role",
+      "ownerName": "Store reviews",
+      "neededBy": [
+        "in_app_review"
+      ]
+    },
+    {
+      "id": "email_feedback.address",
+      "title": "Put the email address for \"Write to us\" into .env",
+      "owner": "email_feedback",
+      "ownerKind": "module",
+      "ownerName": "email_feedback",
+      "neededBy": [
+        "email_feedback"
+      ]
+    },
+    {
       "id": "firebase_analytics.google_analytics",
       "title": "Turn on Google Analytics in the Firebase project, unless it is on already",
       "owner": "firebase_analytics",
@@ -82,6 +102,26 @@
       ]
     },
     {
+      "id": "firebase_remote_config.parameters",
+      "title": "Create the parameters of the app in Firebase Remote Config",
+      "owner": "firebase_remote_config",
+      "ownerKind": "module",
+      "ownerName": "firebase_remote_config",
+      "neededBy": [
+        "firebase_remote_config"
+      ]
+    },
+    {
+      "id": "posthog.project_token",
+      "title": "Create a PostHog project and copy its token and host into .env",
+      "owner": "posthog",
+      "ownerKind": "module",
+      "ownerName": "posthog",
+      "neededBy": [
+        "posthog"
+      ]
+    },
+    {
       "id": "revenuecat.entitlement_and_offering",
       "title": "Set up the entitlement premium and the default offering in RevenueCat",
       "owner": "revenuecat",
@@ -129,6 +169,16 @@
       "ownerName": "paywall",
       "neededBy": [
         "paywall"
+      ]
+    },
+    {
+      "id": "sentry.dsn",
+      "title": "Create a Flutter project in Sentry and copy its DSN into .env",
+      "owner": "sentry",
+      "ownerKind": "module",
+      "ownerName": "sentry",
+      "neededBy": [
+        "sentry"
       ]
     }
   ],

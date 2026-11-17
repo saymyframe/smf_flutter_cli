@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// The widgets of the entries of the settings screen, in the order of the
-/// settings screen role.
-const List<Widget> _entries = [
+/// The widgets of the entries of the settings screen that show, in the
+/// order of the settings screen role: an entry with a function only while
+/// the function returns true.
+List<Widget> get _entries => [
 {{{entries}}}
 ];
 
@@ -14,12 +15,15 @@ class BrokenSettingsScreen extends StatelessWidget {
   const BrokenSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: ListView(
-      children: [
-        for (final entry in _entries)
-          if (!identical(entry, _entries.last)) entry,
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final entries = _entries;
+    return Scaffold(
+      body: ListView(
+        children: [
+          for (final entry in entries)
+            if (!identical(entry, entries.last)) entry,
+        ],
+      ),
+    );
+  }
 }

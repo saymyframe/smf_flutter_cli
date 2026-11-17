@@ -251,7 +251,7 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. An entry may show only at times, such as one that hides on a platform: the screen asks it each time it builds. While no module of the app has a setting, or while none of its entries shows, the screen shows a note for the developer of the app in place of the group: the first entry that shows replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
@@ -1294,6 +1294,10 @@ final appSession = AppSessionController(
   mode: authMode,
   takeGuestData: takeGuestData,
 );
+
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
 
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
@@ -3026,6 +3030,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
 
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
+
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
 /// one, [appPurchases].
@@ -3857,23 +3866,33 @@ class _RestorePurchasesSettingState extends State<RestorePurchasesSetting> {
 
   @override
   Widget build(BuildContext context) {
-    final message = switch (_outcome) {
+    final found = switch (_outcome) {
       null => null,
       _Outcome.premium => 'Your premium access is back.',
       _Outcome.nothing => 'No purchases to restore.',
-      _Outcome.failed => [
-        'Couldn\'t restore purchases. Try again.',
-        // The words of the provider are for the developer of the app.
-        if (_hint case final hint? when kDebugMode) hint,
-      ].join('\n'),
+      _Outcome.failed => 'Couldn\'t restore purchases. Try again.',
     };
     return ListTile(
       leading: const Icon(Icons.restore),
-      title: Text('Restore purchases'),
+      // At a large text size the title and what the restore found wrap
+      // between their words.
+      title: _WholeWords('Restore purchases'),
       // A screen reader reads what the restore found once it comes.
-      subtitle: message == null
+      subtitle: found == null
           ? null
-          : Semantics(liveRegion: true, child: Text(message)),
+          : Semantics(
+              liveRegion: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _WholeWords(found),
+                  // The words of the provider are for the developer of the
+                  // app, and break where they need to, as in an address.
+                  if (_hint case final hint? when kDebugMode) Text(hint),
+                ],
+              ),
+            ),
       trailing: _restoring
           ? const SizedBox.square(
               dimension: 20,
@@ -3881,6 +3900,77 @@ class _RestorePurchasesSettingState extends State<RestorePurchasesSetting> {
             )
           : null,
       onTap: _restore,
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
     );
   }
 }

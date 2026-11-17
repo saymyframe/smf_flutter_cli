@@ -28,12 +28,14 @@ workspace:
   - packages/smf_modules/smf_contribution_engine
   - packages/smf_modules/smf_dart_define
   - packages/smf_modules/smf_dio
+  - packages/smf_modules/smf_email_feedback
   - packages/smf_modules/smf_event_bus
   - packages/smf_modules/smf_firebase_analytics
   - packages/smf_modules/smf_firebase_auth
   - packages/smf_modules/smf_firebase_core
   - packages/smf_modules/smf_firebase_crashlytics
   - packages/smf_modules/smf_firebase_messaging
+  - packages/smf_modules/smf_firebase_remote_config
   - packages/smf_modules/smf_flutter_core
   - packages/smf_modules/smf_gen_l10n
   - packages/smf_modules/smf_get_it
@@ -41,17 +43,21 @@ workspace:
   - packages/smf_modules/smf_go_router
   - packages/smf_modules/smf_google_sign_in
   - packages/smf_modules/smf_home_flutter
+  - packages/smf_modules/smf_in_app_review
   - packages/smf_modules/smf_launcher_icons
   - packages/smf_modules/smf_local_notifications
   - packages/smf_modules/smf_material_theme
   - packages/smf_modules/smf_native_splash
   - packages/smf_modules/smf_onboarding
   - packages/smf_modules/smf_paywall
+  - packages/smf_modules/smf_posthog
   - packages/smf_modules/smf_revenuecat
   - packages/smf_modules/smf_riverpod
+  - packages/smf_modules/smf_sentry
   - packages/smf_modules/smf_settings
   - packages/smf_modules/smf_shared_preferences
   - packages/smf_modules/smf_sign_in
+  - packages/smf_modules/smf_update_required
 
 executables:
   smfflutter: smfflutter_dev

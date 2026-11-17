@@ -6,7 +6,8 @@
 //
 // It knows only the role. The matrix writes settings.dart next to it, from
 // the data of the settings screen role of the app: the location and the
-// type of the screen, and the types of the widgets of the entries. It sets
+// type of the screen, and the types of the widgets of the entries that the
+// screen shows and of those that it does not, by their functions. It sets
 // up the mocks of the platform side of every module of the app before the
 // tests of each test file (flutter_test_config.dart).
 import 'package:flutter/foundation.dart';
@@ -44,6 +45,18 @@ Future<void> openSettings(WidgetTester tester, {bool settle = true}) async {
   } else {
     await showFrames(tester);
   }
+}
+
+/// Has the app run on [platform], as the platform that the app runs on, or
+/// on the platform of the test again for `null`, and builds every widget of
+/// the app again, as after a hot reload: the settings screen asks the
+/// function of each entry that has one whether the entry shows when it
+/// builds. A test that calls it calls it with `null` before it ends:
+/// flutter_test checks that the test put the platform back.
+Future<void> usePlatform(WidgetTester tester, TargetPlatform? platform) async {
+  debugDefaultTargetPlatformOverride = platform;
+  tester.binding.buildOwner!.reassemble(tester.binding.rootElement!);
+  await tester.pumpAndSettle();
 }
 
 /// Shows frames for two seconds of the fake time of the test, enough for a

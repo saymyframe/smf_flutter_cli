@@ -22,7 +22,9 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_local_notifications` | `local_notifications`, notifications |
 | `smf_firebase_core` | `firebase_core`, Firebase |
 | `smf_firebase_crashlytics` | `firebase_crashlytics`, crash reporting |
+| `smf_sentry` | `sentry`, crash reporting with Sentry |
 | `smf_firebase_analytics` | `firebase_analytics`, analytics |
+| `smf_posthog` | `posthog`, analytics with PostHog |
 | `smf_firebase_messaging` | `firebase_messaging`, push messages |
 | `smf_firebase_auth` | `firebase_auth`, sign-in |
 | `smf_google_sign_in` | `google_sign_in`, Google sign-in on Android and iOS |
@@ -31,6 +33,10 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_dio` | `dio`, REST requests with dio |
 | `smf_revenuecat` | `revenuecat`, premium access sold with RevenueCat |
 | `smf_paywall` | `paywall`, the paywall and the screen of the subscription |
+| `smf_in_app_review` | `in_app_review`, the review dialog of the App Store and Google Play |
+| `smf_email_feedback` | `email_feedback`, feedback by email from the mail app of the device |
+| `smf_firebase_remote_config` | `firebase_remote_config`, remote config with Firebase Remote Config |
+| `smf_update_required` | `update_required`, the screen "Update required" for a version below the lowest one in remote config |
 | `smf_github_actions` | `github_actions`, CI on GitHub Actions |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.

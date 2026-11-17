@@ -184,16 +184,22 @@ final class ContractResult {
   String? get appKey {
     final resolution = this.resolution;
     if (resolution == null) return null;
-    final modules = [
-      for (final module in resolution.modules)
-        '${module.id}(${module.variant ?? ''})',
-    ]..sort();
-    final options = [
-      for (final MapEntry(:key, :value) in contractCase.roleOptions.entries)
-        if (value != null) '--$key=$value',
-    ]..sort();
-    return [modules.join(','), ...options].join(' ');
+    return _appKeyOf(contractCase, resolution);
   }
+}
+
+/// The [ContractResult.appKey] of [contractCase], whose app has the modules
+/// of [resolution].
+String _appKeyOf(ContractCase contractCase, Resolution resolution) {
+  final modules = [
+    for (final module in resolution.modules)
+      '${module.id}(${module.variant ?? ''})',
+  ]..sort();
+  final options = [
+    for (final MapEntry(:key, :value) in contractCase.roleOptions.entries)
+      if (value != null) '--$key=$value',
+  ]..sort();
+  return [modules.join(','), ...options].join(' ');
 }
 
 /// The contract test harness: checks that the modules and roles of a
@@ -214,6 +220,16 @@ final class ContractResult {
 /// builds one more app of each provider of the role for each value of the
 /// option after the first, and [casesOfModes] has the apps with every
 /// module once more for those values.
+///
+/// A module or the template of a role that only feeds a role (see
+/// [ModuleDescriptor.feeds] and [Role.feeds]) gets no case for that role.
+/// Whatever the app has, it renders the same files, and its data reaches
+/// an app only with a provider of the role, which the apps with every
+/// module have ([casesOfAll]): they take each provider of a role that has
+/// several with every module that fits, feeders included. So the role
+/// adds no app to the cases of its feeders, and [uncheckedProviders] does
+/// not ask for its providers either.
+///
 /// Each app goes through the stages 3 to 5 of the pipeline, in a run
 /// without a terminal that skips external setup, as the Flutter job
 /// generates apps; stage 5 includes [checkTemplateTags], and the
@@ -325,6 +341,9 @@ final class ContractHarness {
   /// or not, provide a role that takes one provider twice, and each of them
   /// that has variants has one for the provider of the role of its variants
   /// among them.
+  ///
+  /// A role that the module only feeds gives it no case: see
+  /// [ContractHarness].
   ///
   /// A role left out of a subset is still present when a module of the case
   /// brings it, such as a provider of several roles or a module that
@@ -1359,6 +1378,12 @@ final class ContractHarness {
   /// returns the results of the cases whose app no case before built. A
   /// case with a value of a role option builds an app of its own, as the
   /// cases of the mode options do (see [casesOfRole]).
+  ///
+  /// A case whose app a case before built is not checked, since it gets no
+  /// result: the harness only resolves it, as its modules and the values of
+  /// its options tell its app (see [ContractResult.appKey]). In the
+  /// registries of the CLI and of the fixtures, more than two cases in five
+  /// are such cases.
   Future<List<ContractResult>> checkAll() async {
     final results = <ContractResult>[];
     final apps = <String>{};
@@ -1367,9 +1392,12 @@ final class ContractHarness {
         ...casesOfModule(module.descriptor.id),
       for (final role in registry.roles) ...casesOfRole(role),
     ]) {
-      final result = await check(contractCase);
-      final key = result.appKey;
-      if (key == null || apps.add(key)) results.add(result);
+      final resolution = await _resolutionOf(contractCase);
+      if (resolution != null &&
+          !apps.add(_appKeyOf(contractCase, resolution))) {
+        continue;
+      }
+      results.add(await check(contractCase));
     }
     return results;
   }
@@ -1501,10 +1529,11 @@ final class ContractHarness {
   ///   fragments may use: their own files, the files of the modules they
   ///   depend on directly, the files of the roles they provide,
   ///   require or use (the files of each role's template and the files of
-  ///   its required symbols). The template and the providers of a role
-  ///   render the data that its hooks read, so the code that a render hook
-  ///   of theirs gives may also import the files of those who contribute
-  ///   data to the role or to a role that it requires or uses: an import
+  ///   its required symbols), and not those of a role they only feed. The
+  ///   template and the providers of a role render the data that its hooks
+  ///   read, so the code that a render hook of theirs gives may also import
+  ///   the files of those who contribute data to the role, feeders
+  ///   included, or to a role that it requires or uses: an import
   ///   that the pipeline added for a fragment of the hook, one of
   ///   [RoleOutput.fragments] or a fragment variable, and one in a file
   ///   that the hook generated. No other import of theirs reaches a file

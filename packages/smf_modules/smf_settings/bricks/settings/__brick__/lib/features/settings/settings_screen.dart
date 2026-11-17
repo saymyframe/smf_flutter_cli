@@ -1,12 +1,15 @@
-import 'package:flutter/material.dart';{{^with_entries}}
+import 'package:flutter/material.dart';{{#with_note}}
 import 'package:flutter/services.dart';
 
 /// The path of this file in the app, which the screen names for the
 /// developer of the app.
-const _file = 'lib/features/settings/settings_screen.dart';{{/with_entries}}
+const _file = 'lib/features/settings/settings_screen.dart';{{/with_note}}
 
 {{#with_entries}}/// The settings of the app: an entry for each setting that a module of the
-/// app has, one below the other in one group.{{/with_entries}}{{^with_entries}}/// The settings of the app, which has none yet: no module of the app has a
+/// app has, one below the other in one group.{{#with_conditions}} An entry with a condition
+/// shows only while the condition holds{{#with_note}}, and while none holds, the screen
+/// says that the app has no settings yet and tells the developer of the app
+/// where a setting goes{{/with_note}}.{{/with_conditions}}{{/with_entries}}{{^with_entries}}/// The settings of the app, which has none yet: no module of the app has a
 /// setting, so the screen says so and tells the developer of the app where
 /// a setting goes.{{/with_entries}}
 ///
@@ -37,23 +40,18 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
     // Whether a screen below this one is there to go back to.
-    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;
-    return Scaffold(
+    final back = ModalRoute.of(context)?.impliesAppBarDismissal ?? false;{{#with_entries}}{{#with_note}}
+    // The entries that show, in their order: each only while its condition
+    // holds, which the screen asks each time it builds.
+    final entries = <Widget>[{{/with_note}}{{/with_entries}}
+{{{shown_entries}}}
+{{#with_entries}}{{#with_note}}    ];
+{{/with_note}}{{/with_entries}}    return Scaffold(
       appBar: back ? AppBar() : null,
       body: SafeArea(
-        bottom: false,{{#with_entries}}
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
-          children: [
-            title,
-            const SizedBox(height: 20),
-            const _Group(
-              children: [{{/with_entries}}
-{{{entries}}}
-{{#with_entries}}              ],
-            ),
-          ],
-        ),{{/with_entries}}{{^with_entries}}        child: LayoutBuilder(
+        bottom: false,
+        child: {{#with_entries}}{{#with_note}}entries.isEmpty
+            ? {{/with_note}}{{/with_entries}}{{#with_note}}LayoutBuilder(
           // The note in the middle of the rest of the screen, and below
           // the title on a screen too small for both, where the two
           // scroll. The column is at least as tall as the screen, and as
@@ -77,7 +75,19 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
-        ),{{/with_entries}}
+        ){{/with_note}}{{#with_entries}}{{#with_note}}
+            : {{/with_note}}ListView(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
+          children: [
+            title,
+            const SizedBox(height: 20),
+            {{^with_conditions}}const {{/with_conditions}}_Group(
+              children: {{#with_note}}entries,{{/with_note}}{{^with_note}}[{{/with_note}}{{/with_entries}}
+{{{entries}}}
+{{#with_entries}}{{^with_note}}              ],
+{{/with_note}}            ),
+          ],
+        ){{/with_entries}},
       ),
     );
   }
@@ -103,11 +113,13 @@ class _Group extends StatelessWidget {
       ],
     ),
   );
-}{{/with_entries}}{{^with_entries}}
+}{{/with_entries}}{{#with_note}}
 
-/// What the screen shows while no module of the app has a setting: that
+{{#with_entries}}/// What the screen shows while none of its entries shows: that the app has
+/// no settings yet, and the file in which its developer adds one. It comes
+/// in once. The first entry that shows takes its place.{{/with_entries}}{{^with_entries}}/// What the screen shows while no module of the app has a setting: that
 /// the app has none yet, and the file in which its developer adds one. It
-/// comes in once. The first setting of the app takes its place.
+/// comes in once. The first setting of the app takes its place.{{/with_entries}}
 class _NoSettings extends StatelessWidget {
   const _NoSettings();
 
@@ -272,4 +284,4 @@ class _NoSettings extends StatelessWidget {
       ),
     );
   }
-}{{/with_entries}}
+}{{/with_note}}

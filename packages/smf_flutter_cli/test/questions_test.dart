@@ -226,6 +226,10 @@ const _signInChoice = 'sign_in — Sign-in, sign-up and password reset with '
 const _paywallChoice = 'paywall — A paywall with the plans of the purchases '
     'of the app, and a subscription screen';
 
+/// How a run in a terminal offers the feature `update_required`.
+const _updateRequiredChoice = 'update_required — A screen in place of the '
+    'app below the lowest version of remote config';
+
 void main() {
   test('a run in a terminal offers home selected, and no other module',
       () async {
@@ -240,6 +244,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -247,6 +252,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -277,6 +284,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -284,6 +292,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -302,6 +312,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -309,9 +320,11 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
+      'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Values in .env: which module provides it?',
+      'Remote config: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -320,6 +333,7 @@ void main() {
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
       _paywallChoice,
+      _updateRequiredChoice,
     ]);
     expect(run.asked[1].shown, [
       'firebase_core — Firebase with firebase_core',
@@ -337,14 +351,14 @@ void main() {
     // The roles come in the order in which the modules of the list bring
     // them: the layout, with the router, brings the localization, whose
     // labels it shows. The theme follows, then the push messages before the
-    // notifications that their role requires, and then the preferences of
-    // the localization, the theme and the notifications and the DI
-    // container, all before the state managers.
+    // notifications that their role requires, the store reviews, and then
+    // the preferences of the localization, the theme, the notifications and
+    // the store reviews and the DI container, all before the state managers.
     expect(run.asked.last.shown, [
       'github_actions — CI on GitHub Actions',
       'None',
     ]);
-    expect(run.asked[11].shown, [
+    expect(run.asked[12].shown, [
       'bloc — BLoC with flutter_bloc',
       'riverpod — Riverpod with flutter_riverpod',
       'None',
@@ -393,6 +407,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -400,6 +415,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -418,6 +435,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -425,9 +443,11 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
+      'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Values in .env: which module provides it?',
+      'Remote config: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -480,6 +500,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -487,6 +508,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -513,6 +536,7 @@ void main() {
       'home — Start screen with a welcome and the next steps',
       _signInChoice,
       _paywallChoice,
+      _updateRequiredChoice,
     ]);
     expect(
       run.lines,
@@ -579,6 +603,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -586,6 +611,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -639,6 +666,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -646,6 +674,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -664,6 +694,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -671,9 +702,11 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
+      'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Values in .env: which module provides it?',
+      'Remote config: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -716,6 +749,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -723,6 +757,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -742,6 +778,7 @@ void main() {
       'Theme: which module provides it?',
       'Push messages: which module provides it?',
       'Notifications: which module provides it?',
+      'Store reviews: which module provides it?',
       'Preferences: which module provides it?',
       'Dependency injection: which module provides it?',
       'State management: which module provides it?',
@@ -749,9 +786,11 @@ void main() {
       'Authentication: which module provides it?',
       'REST API: which module provides it?',
       'Purchases: which module provides it?',
-      'Values in .env: which module provides it?',
+      'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
+      'Values in .env: which module provides it?',
+      'Remote config: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
@@ -786,6 +825,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['gen_l10n'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -793,6 +833,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -816,11 +858,12 @@ void main() {
     );
     // The preferences have one provider, so the run does not ask for them.
     expect(
-      messages.sublist(localization + 1, localization + 5),
+      messages.sublist(localization + 1, localization + 6),
       [
         'Theme: which module provides it?',
         'Push messages: which module provides it?',
         'Notifications: which module provides it?',
+        'Store reviews: which module provides it?',
         'Dependency injection: which module provides it?',
       ],
     );
@@ -932,6 +975,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -939,6 +983,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1007,6 +1053,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['event_bus'],
@@ -1014,6 +1061,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1082,6 +1131,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['get_it'],
       'Events': ['None'],
@@ -1089,6 +1139,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['shared_preferences'],
       'Crash reporting': [],
       'Analytics': [],
@@ -1102,19 +1154,20 @@ void main() {
       'Preferences: which module provides it?',
     );
     // The roles come in the order in which the modules of the list bring
-    // them, and the localization, the theme and the notifications, whose
-    // roles require the preferences, come before the preferences and
-    // before get_it, and the push messages, whose role requires the
-    // notifications, before the notifications. So the question of the
-    // preferences knows whether the answers on the localization, on the
-    // theme and on the notifications need them.
+    // them, and the localization, the theme, the notifications and the
+    // store reviews, whose roles require the preferences, come before the
+    // preferences and before get_it, and the push messages, whose role
+    // requires the notifications, before the notifications. So the question
+    // of the preferences knows whether the answers on the localization, on
+    // the theme, on the notifications and on the store reviews need them.
     expect(
-      messages.sublist(preferences - 4, preferences + 1),
+      messages.sublist(preferences - 5, preferences + 1),
       [
         'Localization: which module provides it?',
         'Theme: which module provides it?',
         'Push messages: which module provides it?',
         'Notifications: which module provides it?',
+        'Store reviews: which module provides it?',
         'Preferences: which module provides it?',
       ],
     );
@@ -1178,6 +1231,7 @@ void main() {
       'Theme': ['None'],
       'Splash screen': ['native_splash'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1185,6 +1239,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Preferences': ['None'],
       'Crash reporting': <String>[],
       'Analytics': <String>[],
@@ -1252,6 +1308,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1259,6 +1316,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1347,6 +1406,7 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Localization': ['None'],
       'Dependency injection': ['None'],
       'Events': ['None'],
@@ -1354,6 +1414,8 @@ void main() {
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Crash reporting': [],
       'Analytics': [],
       'Authentication': ['None'],
@@ -1468,6 +1530,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1475,6 +1538,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -1532,8 +1597,9 @@ void main() {
 
   test(
       'a run in a terminal asks which modules provide the crash reporting '
-      'after the values of .env, and offers Firebase Crashlytics, which brings '
-      'Firebase', () async {
+      'after the events and before the values of .env, which Sentry requires, '
+      'and offers Firebase Crashlytics, which brings Firebase, and Sentry',
+      () async {
     final run = await _create(
       {
         'Features': [],
@@ -1547,6 +1613,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -1554,6 +1621,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': ['firebase_crashlytics'],
         'Analytics': [],
@@ -1565,9 +1634,10 @@ void main() {
 
     expect(run.code, 0, reason: run.lines.join('\n'));
     // The roles come in the order of the list of modules, and
-    // firebase_crashlytics comes after event_bus. An app can report to more
-    // than one service, so the question takes any number of answers, none
-    // included.
+    // firebase_crashlytics comes after event_bus, each after the roles that
+    // require it: sentry requires the values of .env. An app can report to
+    // more than one service, so the question takes any number of answers,
+    // none included.
     final messages = [for (final question in run.asked) question.message];
     final crashReporting = messages.indexOf(
       'Crash reporting: which module provides it?',
@@ -1576,8 +1646,13 @@ void main() {
       crashReporting,
       greaterThan(messages.indexOf('Events: which module provides it?')),
     );
+    expect(
+      crashReporting,
+      lessThan(messages.indexOf('Values in .env: which module provides it?')),
+    );
     expect(run.asked[crashReporting].shown, [
       'firebase_crashlytics — Firebase Crashlytics with firebase_crashlytics',
+      'sentry — Sentry with sentry_flutter',
     ]);
     // Firebase was not chosen among the infrastructure, but Crashlytics
     // depends on it.
@@ -1651,8 +1726,9 @@ void main() {
 
   test(
       'a run in a terminal asks which modules provide the analytics after '
-      'the crash reporting, and offers Firebase Analytics, which brings '
-      'Firebase and listens to the screen the user sees', () async {
+      'the purchases and before the values of .env, which PostHog requires, '
+      'and offers Firebase Analytics, which brings Firebase and listens to '
+      'the screen the user sees, and PostHog', () async {
     final run = await _create(
       {
         'Features': ['home'],
@@ -1665,6 +1741,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -1672,9 +1749,12 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['No: only once'],
         'Authentication': ['None'],
         'CI': ['None'],
       },
@@ -1682,20 +1762,38 @@ void main() {
     );
 
     expect(run.code, 0, reason: run.lines.join('\n'));
-    // The roles come in the order of the list of modules, and
-    // firebase_analytics comes after firebase_crashlytics. An app can
-    // record to more than one service, so the question takes any number of
-    // answers, none included.
+    // The roles come in the order of the list of modules, each after the
+    // roles that require it: posthog requires the values of .env, so the
+    // analytics come before them, and so before the crash reporting, which
+    // comes after them. An app can record to more than one service, so the
+    // question takes any number of answers, none included.
     final messages = [for (final question in run.asked) question.message];
     final analytics = messages.indexOf('Analytics: which module provides it?');
     expect(
       analytics,
-      greaterThan(
-        messages.indexOf('Crash reporting: which module provides it?'),
-      ),
+      greaterThan(messages.indexOf('Purchases: which module provides it?')),
+    );
+    expect(
+      analytics,
+      lessThan(messages.indexOf('Values in .env: which module provides it?')),
     );
     expect(run.asked[analytics].shown, [
       'firebase_analytics — Firebase Analytics with firebase_analytics',
+      'posthog — PostHog with posthog_flutter',
+    ]);
+    // Once the modules of the app are known, the analytics role asks
+    // whether the app collects before the user agrees, with the default
+    // first. This app collects nothing until its code turns collection on,
+    // and Firebase Analytics, which starts before any Dart code runs, has
+    // its collection off by default in the native projects.
+    final collection = run.asked.last;
+    expect(
+      collection.message,
+      'Does the app collect analytics before the user agrees?',
+    );
+    expect(collection.shown, [
+      'Yes, from its first start',
+      'No: only once your code turns it on, as after the user agrees',
     ]);
     // Firebase was not chosen among the infrastructure, but Analytics
     // depends on it.
@@ -1722,6 +1820,25 @@ void main() {
         contains('void logFirebaseScreenView(String? route, String location)'),
       ),
     );
+    expect(
+      app
+          .childFile('lib/core/analytics/analytics_service.dart')
+          .readAsStringSync(),
+      contains('const bool analyticsCollectedFromFirstStart = false;'),
+    );
+    expect(
+      app
+          .childFile('android/app/src/main/AndroidManifest.xml')
+          .readAsStringSync(),
+      contains(
+        'android:name="firebase_analytics_collection_enabled" '
+        'android:value="false"',
+      ),
+    );
+    expect(
+      app.childFile('ios/Runner/Info.plist').readAsStringSync(),
+      contains('<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>'),
+    );
     // The router tells the listener of Firebase Analytics about the screen
     // the user sees, in the main navigation too, and its navigators have no
     // observer.
@@ -1740,7 +1857,8 @@ void main() {
       ),
     );
     // The service starts without waiting, so bootstrap() only initializes
-    // Firebase.
+    // Firebase, after a debug build printed that collection waits for the
+    // code of the app.
     const bootstrap = 'lib/bootstrap.dart';
     final calls = DartFileIndexer.index(
       bootstrap,
@@ -1751,7 +1869,7 @@ void main() {
         for (final call in calls)
           if (call.enclosingDeclaration == 'bootstrap') call.name,
       ],
-      ['initializeApp'],
+      ['debugPrint', 'initializeApp'],
     );
     expect(
       app.childFile('pubspec.yaml').readAsStringSync(),
@@ -1797,12 +1915,15 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
         'Push messages': ['firebase_messaging'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Crash reporting': [],
         'Analytics': [],
         'Authentication': ['None'],
@@ -1897,9 +2018,12 @@ void main() {
       'App icon': ['None'],
       'Splash screen': ['None'],
       'REST API': ['None'],
+      'Remote config': ['None'],
       'Push messages': ['None'],
       'Values in .env': ['None'],
       'Purchases': ['None'],
+      'Store reviews': ['None'],
+      'Feedback': ['None'],
       'Notifications': ['local_notifications'],
       'Dependency injection': ['None'],
       'State management': ['None'],
@@ -1994,6 +2118,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['get_it'],
         'Events': ['None'],
@@ -2001,9 +2126,12 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': ['firebase_analytics'],
+        'Does the app collect analytics': ['Yes'],
         'Authentication': ['None'],
         'CI': ['None'],
       },
@@ -2057,6 +2185,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2064,6 +2193,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2256,6 +2387,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2263,6 +2395,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2381,6 +2515,7 @@ void main() {
         'App icon': ['None'],
         'Splash screen': ['None'],
         'REST API': ['None'],
+        'Remote config': ['None'],
         'Localization': ['None'],
         'Dependency injection': ['None'],
         'Events': ['None'],
@@ -2388,6 +2523,8 @@ void main() {
         'Push messages': ['None'],
         'Values in .env': ['None'],
         'Purchases': ['None'],
+        'Store reviews': ['None'],
+        'Feedback': ['None'],
         'Preferences': ['None'],
         'Crash reporting': [],
         'Analytics': [],
@@ -2495,6 +2632,7 @@ void main() {
     const picked = [
       'home',
       'sign_in',
+      'update_required',
       'firebase_core',
       'google_sign_in',
       'apple_sign_in',
@@ -2510,13 +2648,16 @@ void main() {
       'event_bus',
       'paywall',
       'firebase_crashlytics',
+      'sentry',
       'firebase_analytics',
+      'posthog',
       'dio',
+      'email_feedback',
       'github_actions',
     ];
     final run = await _create(
       {
-        'Features': ['home', 'sign_in', 'paywall'],
+        'Features': ['home', 'sign_in', 'paywall', 'update_required'],
         'Infrastructure': ['firebase_core', 'google_sign_in', 'apple_sign_in'],
         'Layout': ['bottom_tabs'],
         'Onboarding screen': ['onboarding'],
@@ -2530,10 +2671,12 @@ void main() {
         'Dependency injection': ['get_it'],
         'State management': ['bloc'],
         'Events': ['event_bus'],
-        'Crash reporting': ['firebase_crashlytics'],
-        'Analytics': ['firebase_analytics'],
+        'Crash reporting': ['firebase_crashlytics', 'sentry'],
+        'Analytics': ['firebase_analytics', 'posthog'],
+        'Does the app collect analytics': ['Yes'],
         'Who may use the app': ['Nobody'],
         'REST API': ['dio'],
+        'Feedback': ['email_feedback'],
         'CI': ['github_actions'],
       },
       options: ['--skip-external-setup'],
@@ -2546,13 +2689,17 @@ void main() {
     // so come before its question; the look of the app, its languages and
     // its theme; the push messages, before the notifications that their
     // role requires, which come after the two screens that the
-    // notifications role adds to; what is under the hood, the preferences
-    // that the localization, the theme, the onboarding and the
-    // notifications require, the DI container, the state manager and the
-    // events; what the app talks to, the authentication, the REST API and
-    // the purchases; what tells how it runs, the crash reporting and the
-    // analytics; and last what gets it released, its icon, its splash screen
-    // and CI. The choices of the roles come once the modules are known, and
+    // notifications role adds to; what is under the hood,
+    // the preferences that the localization, the theme, the onboarding, the
+    // notifications and the store reviews require, the DI container, the
+    // state manager and the events; what the app talks to, the
+    // authentication, the REST API, the purchases and the feedback; the
+    // store reviews and the remote config, which update_required requires,
+    // need no question; what tells how it runs, the crash reporting and the
+    // analytics, which come before the values of .env that sentry and
+    // posthog require; and last what gets it released, its icon, its splash
+    // screen and CI. The choices of the roles come once the modules are
+    // known, and
     // the question about a step that the user may leave for later once the
     // app is rendered.
     expect(run.asked.map((question) => question.message), [
@@ -2570,11 +2717,13 @@ void main() {
       ),
       'Events: which module provides it?',
       'REST API: which module provides it?',
+      'Feedback: which module provides it?',
       'Crash reporting: which module provides it?',
       'Analytics: which module provides it?',
       'App icon: which module provides it?',
       'Splash screen: which module provides it?',
       'CI: which module provides it?',
+      'Does the app collect analytics before the user agrees?',
       'Who may use the app without an account?',
       startsWith('Making the app icon from assets/branding ('),
       equals(
@@ -2583,9 +2732,9 @@ void main() {
       ),
     ]);
     // The answers before the questions of the settings screen, the router,
-    // the notifications, the preferences, the purchases, the values of .env
-    // and the authentication need those roles, so the run asks none of them
-    // and adds their only providers.
+    // the notifications, the preferences, the purchases, the values of .env,
+    // the remote config, the store reviews and the authentication need those
+    // roles, so the run asks none of them and adds their only providers.
     final added = [
       for (final line in run.lines)
         if (line.startsWith('Adding ')) line,
@@ -2614,6 +2763,14 @@ void main() {
       equals(
         'Adding dart_define: the only provider of the env role, '
         'which paywall requires.',
+      ),
+      equals(
+        'Adding firebase_remote_config: the only provider of the remote '
+        'config role, which update_required requires.',
+      ),
+      equals(
+        'Adding in_app_review: the only provider of the store reviews role, '
+        'which update_required requires.',
       ),
       equals(
         'Adding shared_preferences: the only provider of the preferences '

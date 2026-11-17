@@ -15,8 +15,15 @@
 // breaks after a slash wherever the name that follows fits a line. The
 // note is in English in every app.
 //
+// An entry with a function that says whether it shows shows only while the
+// function returns true. So the test looks at the screen once more on
+// iOS, where an entry of the app may not show: the group has the entries
+// that show there, with no line for an entry that does not, and while none
+// shows, the screen has the note.
+//
 // The matrix writes settings_of_app.dart next to this file, from the
-// settings screen role of the app: how many entries the screen has.
+// settings screen role of the app: how many entries the screen shows,
+// which asks the function of each entry that has one.
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -354,17 +361,33 @@ void main() {
   // A widget test fails after ten minutes by default; a test that hangs
   // fails sooner.
   testWidgets(
-    'the settings screen shows the entries of the app in one group, or, in '
-    'an app without settings, a note for its developer with the path of the '
-    'file of the screen',
+    'the settings screen shows the entries of the app in one group, or, '
+    'while it has none to show, a note for its developer with the path of '
+    'the file of the screen',
     (tester) async {
       await startApp(tester);
       await goToSettings(tester);
 
-      if (settingsEntryCount > 0) {
+      final shown = settingsEntryCount;
+      if (shown > 0) {
         _expectGroup(tester);
       } else {
         await _expectNote(tester);
+      }
+
+      // On iOS, where an entry may not show: the screen asks the functions
+      // of the entries again when it builds.
+      await usePlatform(tester, TargetPlatform.iOS);
+      try {
+        if (settingsEntryCount > 0) {
+          _expectGroup(tester);
+        } else if (shown > 0) {
+          // The note, while no entry shows, which the test has not seen on
+          // the platform of the tests.
+          await _expectNote(tester);
+        }
+      } finally {
+        await usePlatform(tester, null);
       }
       await _expectTitleOnOneLine(tester);
     },

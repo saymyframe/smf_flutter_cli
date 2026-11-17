@@ -323,11 +323,35 @@ final class BrokenProvider {
   /// The fixture modules, with [module] in place of the other providers of
   /// [role]: the registry in which the contract harness checks [module]
   /// with every provider of each role that it requires or uses.
-  List<SmfModule> get registry => [
-        for (final other in fixtureModules())
-          if (!other.descriptor.provides.contains(role)) other,
-        module,
-      ];
+  ///
+  /// A registry has every module that one of its modules depends on and
+  /// every provider that one of them has a variant for, so the fixture
+  /// modules that depend on one of those other providers, or have a variant
+  /// for one, are left out too, and so are the modules that depend on these
+  /// in turn, as the fixture gates and the fixture feature are for a broken
+  /// state manager.
+  List<SmfModule> get registry {
+    final fixtures = {
+      for (final other in fixtureModules()) other.descriptor.id: other,
+    };
+    // The fixture modules have no cycle of dependencies, which the pipeline
+    // refuses, and each module that one of them depends on or has a variant
+    // for is a fixture module too.
+    bool leftOut(SmfModule other) {
+      final descriptor = other.descriptor;
+      return descriptor.provides.contains(role) ||
+          {
+            ...descriptor.dependsOn,
+            ...?descriptor.variants?.byProvider.keys,
+          }.any((id) => leftOut(fixtures[id]!));
+    }
+
+    return [
+      for (final other in fixtureModules())
+        if (!leftOut(other)) other,
+      module,
+    ];
+  }
 
   /// The registry of the app: its app entry, that of the fixtures unless
   /// [module] provides the app entry itself, [module] and the modules of
@@ -1523,8 +1547,7 @@ List<BrokenProvider> brokenProviders() => const [
         failures: [
           MatrixExpectedFailure(
             'test/settings_screen_role/settings_entries_test.dart',
-            'the settings screen shows every entry of the modules once, one '
-                'below the other in the order of the role',
+            _settingsEntriesTest,
             'Every entry of the modules is on the settings screen once.',
           ),
           MatrixExpectedFailure(
@@ -1533,6 +1556,24 @@ List<BrokenProvider> brokenProviders() => const [
                 'shows the mode of the app and chooses the mode that the '
                 'user taps',
             'The settings screen shows the entry of the theme mode once.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenSettingsShowingHiddenModule(),
+        role: settingsScreenRole,
+        bug: 'Its screen shows every entry of the role, also one whose '
+            'function says that it does not show, which it never asks.',
+        // A module without screens whose only setting the screen leaves out
+        // on iOS, where the test of the entries looks at the screen once
+        // more.
+        app: [FakeRouterModule.id, FakeHidingSettingModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/settings_screen_role/settings_entries_test.dart',
+            _settingsEntriesTest,
+            'An entry whose function says that it does not show is not on '
+                'the settings screen.',
           ),
         ],
       ),
@@ -1915,6 +1956,76 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.remoteConfigStaticValues,
+        role: remoteConfigRole,
+        bug: 'Its values give each parameter of the app that the backend '
+            'lacks a value of its type that the provider makes up, an empty '
+            'text, false, 0 or 0.0, as a library does without the defaults, '
+            'so the app reads that value in place of the default of the '
+            'parameter.',
+        // The module that gives the role a parameter of each type, whose
+        // defaults the tests of the role read.
+        app: [FakeConfigUserModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/remote_config_role/provider_test.dart',
+            'on a first launch, the service has no value of a parameter of '
+                'the app, and each parameter of the app reads its default',
+            'a parameter that the backend lacks read a value of the provider '
+                'in place of its default',
+          ),
+          MatrixExpectedFailure(
+            'test/remote_config_role/next_start_test.dart',
+            'the next start ends within startWait with a new service of the '
+                'provider, and each parameter of the app still reads its '
+                'default',
+            'so after the next start each parameter of the app still reads '
+                'its default',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.remoteConfigForgettingActivated,
+        role: remoteConfigRole,
+        bug: 'Its service forgets what was fetched and activated each time it '
+            'opens, so the next start of the app has none of the values that '
+            'the launch before activated, and reads the defaults until the '
+            'next fetch.',
+        // No module with parameters, so that the tests of the role run in an
+        // app without parameters too, which asks the backend nothing.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/remote_config_role/next_start_test.dart',
+            'the device keeps what was activated from one launch to the next',
+            'The device keeps what was activated from one launch of the app '
+                'to the next',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.feedbackCheckingFirst,
+        role: feedbackRole,
+        bug: 'Its open first asks the device whether it has an app that takes '
+            'what the user writes, as canLaunchUrl of url_launcher does, and '
+            'completes with false on a no without opening. The device of the '
+            'tests has such an app and says no, as Android 11 and later say to '
+            'an app whose manifest names no other app, so the way to write '
+            'never opens there.',
+        // The role needs no other module: the fixture feedback alone, with
+        // the app entry of the fixtures.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/feedback_role/feedback_role_test.dart',
+            'open() of the provider opens its way on a device that has one, '
+                'and completes with true',
+            'the provider did not open its way to write, though the device of '
+                'the tests has one',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.purchasesKeptByService,
         role: purchasesRole,
         bug: 'Its service keeps the purchases in a field of its own, for '
@@ -1968,6 +2079,36 @@ List<BrokenProvider> brokenProviders() => const [
                 'after a sign-out of that account has none of them',
             'After the sign-out of an account, the next user of the device is '
                 'a new one, with nothing bought',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.reviewAskingFirst,
+        role: reviewRole,
+        bug: 'Its service asks the user "Do you like the app?" before the '
+            'review dialog, and asks the store only after a yes: the question '
+            'that the stores forbid, after which a request waits for the '
+            'user.',
+        // The fixture preferences and the fixture values of .env, which the
+        // role requires.
+        app: [FakePreferencesModule.id, FakeEnvModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/review_role/nothing_around_test.dart',
+            'the provider asks the store for its dialog and shows nothing of '
+                'its own around it',
+            'The provider asks the store for its dialog and shows nothing of '
+                'its own around it, as the stores ask: the app showed '
+                'something of its own around the review dialog.',
+          ),
+          MatrixExpectedFailure(
+            'test/review_role/request_test.dart',
+            'requestIfDue() on a launch on which a review is due asks the '
+                'store at once through the provider of the app, and the app '
+                'saves the request once the store took it',
+            'The provider asks the store for its dialog at once, and the '
+                'request completes once the store took it: the app then saves '
+                'the time and the version of the request.',
           ),
         ],
       ),
@@ -2369,6 +2510,70 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.analyticsCollectingAtEachStart,
+        role: analyticsRole,
+        bug: 'Its start sets its platform side up with collection on, as a '
+            'provider does that starts its SDK with collection on at each '
+            'start: an app that collects nothing before its code chose '
+            'collects at its first start, and a collection that the code '
+            'turned off is on again at the next start.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        // The app collects nothing before its code chose, so its first start
+        // shows the bug too.
+        roleOptions: {'analytics-collection': 'off'},
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/first_start_test.dart',
+            'at its first start, the app collects analytics exactly when it '
+                'was generated to collect from its first start',
+            'An app that collects nothing before its code chose collects '
+                'nothing at its first start, not even a session that its SDK '
+                'would record itself.',
+          ),
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.analyticsKeepingOptOutInMemory,
+        role: analyticsRole,
+        bug: 'It keeps the opt-out in Dart memory alone: a call that turns '
+            'collection off never reaches its platform side, which collects '
+            'again at the next start, a session among what it records itself.',
+        // The tests of the analytics role and of the crash reporting role
+        // that the app of several providers runs apply to the app too, and
+        // use the files of the service log of the fixtures and of the
+        // fixture crash reporting.
+        app: [FakeServiceLogModule.id, FakeCrashModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/analytics_collection/next_start_test.dart',
+            'a collection that the code turned off stays off at the next '
+                'start',
+            'A collection that the code turned off stays off at the next '
+                'start, also for a session that the SDK records itself.',
+          ),
+          // The call that turns collection off does not reach its platform
+          // side, nor do the calls after it.
+          MatrixExpectedFailure(
+            'test/analytics_role_test.dart',
+            'the analytics service of the app forwards each call to every '
+                'analytics service once',
+            'Each call reaches every analytics service once, in the order of '
+                'the calls.',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.crashReportingTakingFlutterErrors,
         role: crashReportingRole,
         bug: 'Its start sets the handler of the errors of Flutter to a report '
@@ -2409,7 +2614,33 @@ List<BrokenProvider> brokenProviders() => const [
           ),
         ],
       ),
+      BrokenProvider(
+        BrokenModule.stateReadOnce,
+        role: stateManagementRole,
+        bug: 'Its bridges read the value of their listenable once, when a '
+            'widget first reads them, and do not follow it, so a widget that '
+            'reads the theme mode through its bridge keeps the mode of the '
+            'start once the controller changed it.',
+        // The fixture theme, whose template gives the role the theme mode,
+        // and the preferences that the theme role requires.
+        app: [FakeThemeModule.id, FakePreferencesModule.id],
+        failures: [
+          // The values at the start are right, so the first change, that of
+          // the theme mode, fails.
+          MatrixExpectedFailure(
+            _stateBridgesTest,
+            'the state manager follows each value that a controller of the '
+                'app keeps through its bridge, at the start and once the '
+                'controller changed the value',
+            'The bridge of an entry gives the value that the controller of '
+                'the entry has, also once that value changed.',
+          ),
+        ],
+      ),
     ];
+
+/// The file of the test of the bridges of the state management role.
+const _stateBridgesTest = 'test/state_management_role/state_bridges_test.dart';
 
 /// The other modules of the app of a router that breaks what the role says
 /// of the guards of the routes: the fixture late gate and the fixture
@@ -2512,6 +2743,12 @@ const _retryAfterOnFailure =
 const _connectionCloses =
     'When RestExchange.stop completes, a provider closes the connection at '
     'once.';
+
+/// The name of the test of the entries of the settings screen.
+const _settingsEntriesTest =
+    'the settings screen shows every entry of the modules once, one below '
+    'the other in the order of the role, and no entry whose function says '
+    'that it does not show';
 
 /// The other modules of the app of a broken layout: a router, the two
 /// fixture features, whose destinations the main navigation shows, and what

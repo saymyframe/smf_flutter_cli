@@ -110,37 +110,47 @@ void main() {
           collected.contribution,
       ];
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       final dependency = contributions.first as PubspecDependency;
       expect(dependency.package, 'flutter_bloc');
       expect(dependency.constraint, '^9.1.1');
       expect(dependency.dev, isFalse);
-      final note = contributions.last as SocketContribution;
+      final note = contributions[1] as SocketContribution;
       expect(note.socket, AppEntryRole.agentSections);
       expect(note.entryKey, stateManagementRole.description);
       expect(note.entryValue, AgentNote(agentNote));
       expect(note.when, isEmpty);
+      // How a widget follows the cubits of the values that controllers
+      // keep, for code that knows only the role.
+      final bridges = contributions.last as RoleData<Object>;
+      expect(bridges.role, stateManagementRole);
+      expect(bridges.value, isA<StateBridges>());
+      expect(bridges.when, isEmpty);
     });
 
     test(
         'has the section of the state management in its guide for coding '
         'agents, which is the note of the module', () {
       const bloc = ModuleOrigin(BlocModule.id);
+      const role = RoleTemplateOrigin(stateManagementRole);
       final notes = withBloc.entriesOf(AppEntryRole.agentSections);
 
-      // The role has no template, so the module says all of the section.
-      expect(stateManagementRole.template, isNull);
+      // The note of the role comes first, then the note of the module. An
+      // app without values that controllers keep has no note of the module
+      // on their cubits.
       expect(
-        notes.where((note) => note.$1 != bloc),
+        notes.where((note) => note.$1 != bloc && note.$1 != role),
         without.entriesOf(AppEntryRole.agentSections),
       );
       expect(
         notes.where((note) => note.$1 == bloc),
         [(bloc, 'State management', AgentNote(agentNote))],
       );
+      final ofRole = notes.singleWhere((note) => note.$1 == role).$3;
+      expect(ofRole.isOfRole, isTrue);
       expect(
         withBloc.files[AppEntryRole.agentsFile]!.text,
-        endsWith('\n## State management\n\n$agentNote'),
+        endsWith('\n## State management\n\n${ofRole.text}\n\n$agentNote'),
       );
       // The package of the module, whose classes the note names.
       expect(agentNote, startsWith('With `flutter_bloc`:\n'));

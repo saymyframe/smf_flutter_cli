@@ -29,27 +29,33 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_dio/smf_dio.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
+import 'package:smf_firebase_remote_config/smf_firebase_remote_config.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_in_app_review/smf_in_app_review.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
 import 'package:smf_native_splash/smf_native_splash.dart';
 import 'package:smf_onboarding/smf_onboarding.dart';
 import 'package:smf_paywall/smf_paywall.dart';
+import 'package:smf_posthog/smf_posthog.dart';
 import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_riverpod/smf_riverpod.dart';
+import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
+import 'package:smf_update_required/smf_update_required.dart';
 
 /// Every fixture module, with a fake DI container of all capabilities, or
 /// of [diCapabilities] if set, and the real modules: flutter_core, which
@@ -87,10 +93,14 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeNotificationsModule(),
       const FakePushModule(),
       const FakePurchasesModule(),
+      const FakeReviewModule(),
       const FakeEnvModule(),
       const FakeEnvUserModule(),
       const FakeRestModule(),
       const FakeRestUserModule(),
+      const FakeRemoteConfigModule(),
+      const FakeConfigUserModule(),
+      const FakeFeedbackModule(),
       const FakeCiModule(),
       const FakeRegistrationsModule(),
       const FakeParentModule(),
@@ -99,7 +109,8 @@ List<SmfModule> fixtureModules({Set<DiCapability>? diCapabilities}) => [
       const FakeClockBadgeModule(),
       const FakeClockUserModule(),
       const BottomTabsModule(),
-      // Last, so its start-up runs last in the late phase of the start-up.
+      // Last, so its start-up runs after that of every other module in the
+      // late phase of the start-up.
       const FakeStartFailureModule(),
     ];
 
@@ -144,22 +155,28 @@ List<ModuleId> everyFixture({
       FakeNotificationsModule.id,
       FakePushModule.id,
       FakePurchasesModule.id,
+      FakeReviewModule.id,
       FakeEnvModule.id,
       FakeEnvUserModule.id,
       FakeRestModule.id,
       FakeRestUserModule.id,
+      FakeRemoteConfigModule.id,
+      FakeConfigUserModule.id,
+      FakeFeedbackModule.id,
       FakeCiModule.id,
       FakeChildModule.id,
       FakeClockUserModule.id,
       FakeClockBadgeModule.id,
-      // Last, so its start-up runs last in the late phase of the start-up,
-      // after crash reporting has started.
+      // Last, so its start-up runs after that of every other module in the
+      // late phase of the start-up, after crash reporting has started.
       FakeStartFailureModule.id,
     ];
 
 /// The registry of several providers: the modules of the CLI that provide a
-/// role an app can have several providers of, Firebase Crashlytics and
-/// Firebase Analytics, with the module they depend on, next to the fixture
+/// role an app can have several providers of, Firebase Crashlytics, Sentry,
+/// which reads its DSN from the values of .env, Firebase Analytics and
+/// PostHog, which reads its project token from the values of .env, with the
+/// modules they depend on, next to the fixture
 /// providers of the same roles, whose start-up and services go through
 /// platform channels of their own; a fixture that provides both roles and
 /// notes each call that reaches it, which the tests of the roles look at;
@@ -172,9 +189,10 @@ List<ModuleId> everyFixture({
 /// preferences role, for the test of that role that the CLI keeps; the
 /// settings module of the CLI, for the app test that it keeps for its
 /// screen and for the tests of the settings screen role that the CLI keeps,
-/// with the two fixtures that have a setting, a feature and a module
+/// with the three fixtures that have a setting, a feature and two modules
 /// without screens, so that those tests check a screen with entries on a
-/// provider that must work; material_theme, a provider of the theme role,
+/// provider that must work, among them an entry that the screen leaves out
+/// on iOS; material_theme, a provider of the theme role,
 /// for the tests of that role that the CLI keeps: the theme mode, which
 /// shared_preferences remembers, and its entry, which the settings screen
 /// shows below those of the two fixtures; native_splash, a provider of the
@@ -228,7 +246,22 @@ List<ModuleId> everyFixture({
 /// the purchases of RevenueCat: that of the paywall, whose entry of the
 /// subscription the settings screen shows below the entries of the other
 /// features, and that of its step of the onboarding, which comes after the
-/// steps of the fixture steps and of the notifications role.
+/// steps of the fixture steps and of the notifications role. After them
+/// comes in_app_review, the provider of the review role that the CLI has, for
+/// the app test that it keeps and for the tests of that role that the CLI
+/// keeps, of the role and of its entry of the settings screen, which reads
+/// the App Store ID from the values of .env and shows on iOS only with one.
+/// Then comes email_feedback, the provider of the feedback role that the CLI
+/// has, for the app test that it keeps and for the tests of that role that
+/// the CLI keeps, of the role and of its entry "Write to us" of the settings
+/// screen, which shows only while the module has the address of .env. Then
+/// comes Firebase Remote Config, the provider of the remote config role that
+/// the CLI has, for the app test that it keeps and for the test of that role
+/// that the CLI keeps, which run there next to the other Firebase modules.
+/// Then comes update_required, the screen "Update required" of the CLI, for
+/// the app test that it keeps, whose guard of the routes comes after that of
+/// the onboarding there, and whose parameter of remote config the tests of
+/// that role and of Firebase Remote Config read there too.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -248,7 +281,9 @@ List<SmfModule> severalProvidersModules() => const [
       GetItModule(),
       FirebaseCoreModule(),
       FirebaseCrashlyticsModule(),
+      SentryModule(),
       FirebaseAnalyticsModule(),
+      PostHogModule(),
       FakeCrashModule(),
       FakeAnalyticsModule(),
       FakeServiceLogModule(),
@@ -257,6 +292,7 @@ List<SmfModule> severalProvidersModules() => const [
       FakeSlowStartModule(),
       FakeSecondModule(),
       FakeScreenLogModule(),
+      FakeHidingSettingModule(),
       SettingsModule(),
       MaterialThemeModule(),
       NativeSplashModule(),
@@ -276,5 +312,9 @@ List<SmfModule> severalProvidersModules() => const [
       DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      InAppReviewModule(),
+      EmailFeedbackModule(),
+      FirebaseRemoteConfigModule(),
+      UpdateRequiredModule(),
       LauncherIconsModule(),
     ];

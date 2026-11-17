@@ -113,10 +113,70 @@ final class TemplateScan {
   final int? delimiterLine;
 }
 
-/// The text of [file], a file of a bundle, or `null` if mason copies it as
-/// it is: a file the bundle calls binary, or one that is not UTF-8, since
-/// mason's bundler calls a file binary only by some extensions.
-String? templateTextOf(MasonBundledFile file) {
+/// The text files of [brick], by path with forward slashes, decoded from
+/// its bundle; see [BundledFileRead.text].
+Map<String, String> templateFilesOf(BrickContribution brick) => {
+      for (final MapEntry(key: path, value: read)
+          in templateReadsOf(brick).entries)
+        path: read.text!,
+    };
+
+/// What the pipeline reads of the text files of [brick], by path with
+/// forward slashes; see [templateFilesOf] and [BundledFileRead].
+Map<String, BundledFileRead> templateReadsOf(BrickContribution brick) => {
+      for (final file in brick.bundle.files)
+        if (bundledFileRead(file) case final read when read.text != null)
+          read.path: read,
+    };
+
+/// What the pipeline reads of a file of a bundle: its path and its text,
+/// and of a text file whether mason renders it, its scan and whether
+/// mustache takes it.
+///
+/// A file of a bundle never changes, and the pipeline reads the same files
+/// several times for each app that it renders: when it validates the app,
+/// when it renders it, and in the contract harness once more, which renders
+/// an app for each of its cases. So it reads each file once and keeps what
+/// it read with the file ([bundledFileRead]); reading the same templates
+/// again took about half of the time of the harness.
+final class BundledFileRead {
+  BundledFileRead._(MasonBundledFile file)
+      : path = file.path.replaceAll(r'\', '/'),
+        text = _decodedTextOf(file);
+
+  /// The path of the file, with forward slashes.
+  final String path;
+
+  /// The text of the file, or `null` if mason copies it as it is: a file
+  /// the bundle calls binary, or one that is not UTF-8, since mason's
+  /// bundler calls a file binary only by some extensions.
+  final String? text;
+
+  /// Whether the text of a text file has a tag that mason renders
+  /// ([masonTag]).
+  late final bool hasMasonTag = masonTag.hasMatch(text!);
+
+  /// The scan of the text of a text file; see [scanTemplate].
+  late final TemplateScan scan = scanTemplate(path, text!);
+
+  /// The error with which mustache refuses the text of a text file, or
+  /// `null` if it renders it.
+  late final Object? mustacheError = _mustacheErrorOf(text!);
+}
+
+/// What the pipeline read of each file of a bundle that it read, kept with
+/// the file, which is the same object for every app.
+final Expando<BundledFileRead> _bundledFileReads = Expando(
+  'what the pipeline read of a file of a bundle',
+);
+
+/// What the pipeline reads of [file], a file of a bundle: read the first
+/// time, and kept with the file; see [BundledFileRead].
+BundledFileRead bundledFileRead(MasonBundledFile file) =>
+    _bundledFileReads[file] ??= BundledFileRead._(file);
+
+/// The text of [file]; see [BundledFileRead.text].
+String? _decodedTextOf(MasonBundledFile file) {
   if (file.type != 'text') return null;
   try {
     return utf8.decode(base64.decode(file.data));
@@ -125,13 +185,16 @@ String? templateTextOf(MasonBundledFile file) {
   }
 }
 
-/// The text files of [brick], by path with forward slashes, decoded from
-/// its bundle; see [templateTextOf].
-Map<String, String> templateFilesOf(BrickContribution brick) => {
-      for (final file in brick.bundle.files)
-        if (templateTextOf(file) case final text?)
-          file.path.replaceAll(r'\', '/'): text,
-    };
+/// The error with which mustache refuses [text], or `null` if mason renders
+/// it.
+Object? _mustacheErrorOf(String text) {
+  try {
+    text.render(const {});
+    return null;
+  } on Object catch (error) {
+    return error;
+  }
+}
 
 /// A tag that mason renders; mason copies a text file without one as it
 /// is.
@@ -261,10 +324,12 @@ final class _TemplateScanner {
         ),
       );
     }
+    // Unmodifiable, since the scan of a file of a bundle is shared by every
+    // app that reads it (see BundledFileRead).
     return TemplateScan(
-      _tags,
-      sections: _opened,
-      partialLines: _partialLines,
+      List.unmodifiable(_tags),
+      sections: List.unmodifiable(_opened),
+      partialLines: List.unmodifiable(_partialLines),
       delimiterLine: _delimiterLine,
     );
   }
@@ -429,9 +494,8 @@ final class _BrickScanner {
     // The presence flags the pipeline sets for the brick.
     final flagged = rolesOf(origin, registry, resolution).access;
     final conditional = brick.whenChosen.isNotEmpty;
-    for (final MapEntry(key: path, value: text)
-        in templateFilesOf(brick).entries) {
-      _scanFile(path, text, origin, flagged, conditional: conditional);
+    for (final read in templateReadsOf(brick).values) {
+      _scanFile(read, origin, flagged, conditional: conditional);
     }
   }
 
@@ -479,21 +543,19 @@ final class _BrickScanner {
         'provide, require or use, so the pipeline does not set it';
   }
 
-  /// Checks [text], the template at [path] of [origin], whose presence
-  /// flags are those of the [flagged] roles, and records the places of the
-  /// tags of sockets that it holds; its brick has conditions on what roles
-  /// chose if it is [conditional].
+  /// Checks the template that [read] read, a text file of a brick of
+  /// [origin], whose presence flags are those of the [flagged] roles, and
+  /// records the places of the tags of sockets that it holds; its brick has
+  /// conditions on what roles chose if it is [conditional].
   void _scanFile(
-    String path,
-    String text,
+    BundledFileRead read,
     ContributionOrigin origin,
     Set<Role> flagged, {
     required bool conditional,
   }) {
-    if (masonTag.hasMatch(text)) {
-      try {
-        text.render(const {});
-      } on Object catch (error) {
+    final path = read.path;
+    if (read.hasMasonTag) {
+      if (read.mustacheError case final error?) {
         _issues.add(
           SmfIssue(
             'The template $path of $origin is not valid mustache: $error',
@@ -504,7 +566,7 @@ final class _BrickScanner {
         return;
       }
     }
-    final scan = scanTemplate(path, text);
+    final scan = read.scan;
     if (scan.delimiterLine case final line?) {
       _issues.add(
         SmfIssue(

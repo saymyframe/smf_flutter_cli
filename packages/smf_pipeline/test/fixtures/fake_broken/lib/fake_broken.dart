@@ -16,9 +16,11 @@ import 'package:fake_broken/bundles/broken_layout_bundle.dart';
 import 'package:fake_broken/bundles/broken_layout_labels_bundle.dart';
 import 'package:fake_broken/bundles/broken_onboarding_bundle.dart';
 import 'package:fake_broken/bundles/broken_settings_bundle.dart';
+import 'package:fake_broken/bundles/broken_settings_shows_hidden_bundle.dart';
 import 'package:fake_di/fake_di.dart';
 import 'package:fake_infra/fake_infra.dart';
 import 'package:fake_router/fake_router.dart';
+import 'package:fake_state/fake_state.dart';
 import 'package:mason/mason.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
@@ -683,6 +685,78 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture analytics whose start sets its platform side up with
+  /// collection on, as a provider does that starts its SDK with collection
+  /// on at each start, rather than leave it to the setting that the SDK
+  /// keeps and to `analyticsCollectedFromFirstStart` of the role: an app
+  /// that collects nothing before its code chose collects at its first
+  /// start, and a collection that the code turned off is on again at the
+  /// next start.
+  static const analyticsCollectingAtEachStart = BrokenModule._(
+    FakeAnalyticsModule(),
+    ModuleId('broken_analytics_collects_at_each_start'),
+    'Analytics that turns collection on at each start (fixture)',
+    'lib/core/fixture_analytics/fixture_analytics.dart',
+    [
+      (
+        "    {'collectByDefault': analyticsCollectedFromFirstStart},\n",
+        "    {'collectByDefault': true},\n",
+      ),
+      (
+        '  return const FixtureAnalytics();\n',
+        '  await fixtureAnalyticsChannel.invokeMethod<void>(\n'
+            "    'setAnalyticsCollectionEnabled',\n"
+            "    {'enabled': true},\n"
+            '  );\n'
+            '  return const FixtureAnalytics();\n',
+      ),
+    ],
+  );
+
+  /// The fixture analytics that keeps the opt-out in Dart memory alone, as
+  /// a provider does that stops sending events while the code turned
+  /// collection off but never tells its SDK: only a call that turns
+  /// collection on reaches its platform side. So the setting holds while
+  /// the app runs, and at the next start the SDK collects again, a session
+  /// among what it records itself.
+  static const analyticsKeepingOptOutInMemory = BrokenModule._(
+    FakeAnalyticsModule(),
+    ModuleId('broken_analytics_keeps_opt_out_in_memory'),
+    'Analytics that keeps the opt-out in memory alone (fixture)',
+    'lib/core/fixture_analytics/fixture_analytics.dart',
+    [
+      (
+        '  Future<void> setAnalyticsCollectionEnabled(bool enabled) =>\n'
+            "      _record('setAnalyticsCollectionEnabled', "
+            "{'enabled': enabled});\n",
+        '  Future<void> setAnalyticsCollectionEnabled(bool enabled) async {\n'
+            '    _optedOut = !enabled;\n'
+            '    if (enabled) {\n'
+            "      await _send('setAnalyticsCollectionEnabled', "
+            "{'enabled': enabled});\n"
+            '    }\n'
+            '  }\n'
+            '\n'
+            '  static bool _optedOut = false;\n',
+      ),
+      (
+        '  Future<void> _record(String method, Map<String, Object?> arguments) '
+            '=>\n'
+            '      fixtureAnalyticsChannel.invokeMethod<void>(method, '
+            'arguments);\n',
+        '  Future<void> _record(String method, Map<String, Object?> arguments) '
+            'async {\n'
+            '    if (!_optedOut) await _send(method, arguments);\n'
+            '  }\n'
+            '\n'
+            '  Future<void> _send(String method, '
+            'Map<String, Object?> arguments) =>\n'
+            '      fixtureAnalyticsChannel.invokeMethod<void>(method, '
+            'arguments);\n',
+      ),
+    ],
+  );
+
   /// The fixture crash reporting whose start sets the handler of the errors
   /// of Flutter to a report of its own, as the guide of a crash reporting
   /// SDK may tell an app to do, rather than leaving the handlers to the
@@ -1153,6 +1227,179 @@ final class BrokenModule extends SmfModule {
     ],
   );
 
+  /// The fixture remote config whose values give each parameter of the app
+  /// that the backend lacks the value of its type that a provider has
+  /// without the defaults, as `getValue()` of a library does without them:
+  /// an empty text, `false`, `0` or `0.0`. So the app reads such a value of
+  /// the provider in place of the default of the parameter.
+  static const remoteConfigStaticValues = BrokenModule._(
+    FakeRemoteConfigModule(),
+    ModuleId('broken_remote_config_static_values'),
+    'Remote config with a value of its own for each parameter (fixture)',
+    _fixtureRemoteConfigFile,
+    [
+      (
+        '  Duration _interval = Duration.zero;\n',
+        '  Duration _interval = Duration.zero;\n'
+            '\n'
+            '  /// The parameters of the app with their defaults.\n'
+            '  Map<String, Object> _defaults = const {};\n',
+      ),
+      (
+        '    _interval = fetchInterval;\n',
+        '    _interval = fetchInterval;\n    _defaults = defaults;\n',
+      ),
+      (
+        '  Map<String, String> get values => Map.unmodifiable(_active);\n',
+        '  Map<String, String> get values => Map.unmodifiable({\n'
+            '    for (final MapEntry(:key, :value) in _defaults.entries)\n'
+            '      key: switch (value) {\n'
+            "        bool() => 'false',\n"
+            "        int() => '0',\n"
+            "        double() => '0.0',\n"
+            "        _ => '',\n"
+            '      },\n'
+            '    ..._active,\n'
+            '  });\n',
+      ),
+    ],
+  );
+
+  /// The fixture remote config whose service forgets what was fetched and
+  /// activated each time it opens, as a provider does that keeps the values
+  /// only in memory: the next start of the app has none of them, and reads
+  /// the defaults until the next fetch.
+  static const remoteConfigForgettingActivated = BrokenModule._(
+    FakeRemoteConfigModule(),
+    ModuleId('broken_remote_config_forgets_activated'),
+    'Remote config that forgets its values at each start (fixture)',
+    _fixtureRemoteConfigFile,
+    [
+      (
+        '    _interval = fetchInterval;\n',
+        '    _interval = fetchInterval;\n'
+            '    _fetched = const {};\n'
+            '    _active = const {};\n'
+            '    _lastFetch = null;\n',
+      ),
+    ],
+  );
+
+  /// The file of the fixture remote config.
+  static const _fixtureRemoteConfigFile =
+      'lib/core/fixture_remote_config/fixture_remote_config.dart';
+
+  /// The fixture reviews whose service asks the user a question of its own
+  /// before the review dialog, "Do you like the app?" with No and Yes, on
+  /// the navigator at the root of the app, which it finds from the root
+  /// element of the app, and asks the store only after a yes: the question
+  /// that the stores forbid. A request then waits for the user, and an app
+  /// without a screen asks the store nothing.
+  static const reviewAskingFirst = BrokenModule._(
+    FakeReviewModule(),
+    ModuleId('broken_review_asks_first'),
+    'Store reviews with a question of their own before the dialog (fixture)',
+    'lib/core/fixture_review/fixture_review.dart',
+    [
+      (
+        "import '../review/review_service.dart';\n",
+        "import 'package:flutter/material.dart';\n"
+            '\n'
+            "import '../review/review_service.dart';\n",
+      ),
+      (
+        '  Future<void> requestReview() async {\n'
+            '    await _answer();\n'
+            '  }\n',
+        '  Future<void> requestReview() async {\n'
+            '    final navigator = _rootNavigator();\n'
+            '    if (navigator == null) return;\n'
+            '    final likes = await showDialog<bool>(\n'
+            '      context: navigator,\n'
+            '      builder: (context) => AlertDialog(\n'
+            "        title: const Text('Do you like the app?'),\n"
+            '        actions: [\n'
+            '          TextButton(\n'
+            '            onPressed: () => Navigator.of(context).pop(false),\n'
+            "            child: const Text('No'),\n"
+            '          ),\n'
+            '          TextButton(\n'
+            '            onPressed: () => Navigator.of(context).pop(true),\n'
+            "            child: const Text('Yes'),\n"
+            '          ),\n'
+            '        ],\n'
+            '      ),\n'
+            '    );\n'
+            '    if (likes != true) return;\n'
+            '    await _answer();\n'
+            '  }\n'
+            '\n'
+            '  /// The context of the navigator at the root of the app, the\n'
+            '  /// first that the root element of the app has below it, or\n'
+            '  /// `null` while the app shows nothing.\n'
+            '  static BuildContext? _rootNavigator() {\n'
+            '    BuildContext? found;\n'
+            '    void visit(Element element) {\n'
+            '      if (found != null) return;\n'
+            '      if (element is StatefulElement &&\n'
+            '          element.state is NavigatorState) {\n'
+            '        found = element;\n'
+            '        return;\n'
+            '      }\n'
+            '      element.visitChildren(visit);\n'
+            '    }\n'
+            '\n'
+            '    WidgetsBinding.instance.rootElement?.visitChildren(visit);\n'
+            '    return found;\n'
+            '  }\n',
+      ),
+    ],
+  );
+
+  /// The fixture feedback whose open first asks the device whether it has an
+  /// app that takes what the user writes, as `canLaunchUrl` of url_launcher
+  /// does, and completes with false on a no without opening. The device of
+  /// the tests has such an app and says no, as Android 11 and later say to an
+  /// app whose manifest names no other app: so the way to write never opens
+  /// there, though it would.
+  static const feedbackCheckingFirst = BrokenModule._(
+    FakeFeedbackModule(),
+    ModuleId('broken_feedback_checks_first'),
+    'Feedback that asks the device first whether it can open (fixture)',
+    'lib/core/fixture_feedback/fixture_feedback.dart',
+    [
+      (
+        '    return FixtureFeedbackDevice.open(message);\n',
+        '    if (!await FixtureFeedbackDevice.canOpen()) return false;\n'
+            '    return FixtureFeedbackDevice.open(message);\n',
+      ),
+    ],
+  );
+
+  /// The fixture Riverpod whose bridges read the value of their listenable
+  /// once, when a widget first reads them, and do not follow it: a widget
+  /// that reads the theme mode through its bridge keeps the mode of the
+  /// start once the controller changed it, as a provider does that reads
+  /// the value of a controller rather than listen to it.
+  static const stateReadOnce = BrokenModule._(
+    FakeRiverpodModule(),
+    ModuleId('broken_state_reads_once'),
+    'State with Riverpod whose bridges read each value once (fixture)',
+    FakeRiverpodModule.listenableFile,
+    [
+      (
+        '  T build() {\n'
+            '    final listenable = _listenable();\n'
+            '    void follow() => state = listenable.value;\n'
+            '    listenable.addListener(follow);\n'
+            '    ref.onDispose(() => listenable.removeListener(follow));\n'
+            '    return listenable.value;\n'
+            '  }\n',
+        '  T build() => _listenable().value;\n',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 
@@ -1605,8 +1852,9 @@ final class _BrokenEnvSuppliedProvider extends RoleProvider<EnvData> {
 /// its file, but shows them all but the last one.
 ///
 /// The file of the screen still creates the widget of every entry, as the
-/// rule `settings_screen.entries_rendered` of the role wants, and the app
-/// analyzes: only a running app shows the bug.
+/// rule `settings_screen.entries_rendered` of the role wants, and asks the
+/// function of an entry that has one, as the role wants of a screen, and
+/// the app analyzes: only a running app shows the bug.
 final class BrokenSettingsModule extends SmfModule {
   /// Creates the module.
   const BrokenSettingsModule();
@@ -1614,44 +1862,88 @@ final class BrokenSettingsModule extends SmfModule {
   /// The id of the module.
   static const id = ModuleId('broken_settings_hides_last_entry');
 
-  /// The name of the route of the screen.
-  static const _route = 'settings';
-
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(
         id: id,
         description: 'A settings screen that hides its last entry (fixture)',
         kind: ModuleKinds.feature,
-        providers: [_BrokenSettingsProvider()],
+        providers: [_BrokenSettingsProvider(asksFunctions: true)],
       );
 
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(brokenSettingsBundle),
-        routerRole.data(
-          const RoutesData([
-            Route(
-              '/',
-              name: _route,
-              screen: ScreenRef(
-                'BrokenSettingsScreen',
-                import: ImportRef.app(
-                  'features/broken_settings_hides_last_entry/'
-                  'broken_settings_screen.dart',
-                ),
-              ),
-            ),
-          ]),
+        ..._screenOf(
+          'features/broken_settings_hides_last_entry/'
+          'broken_settings_screen.dart',
         ),
-        settingsScreenRole.data(const SettingsScreenRoute(_route)),
       ];
 }
 
+/// A provider of the settings screen role with one known bug: a feature
+/// whose screen shows every entry of the role, also one whose function says
+/// that it does not show ([SettingsEntry.showIf]), which it never asks.
+///
+/// The file of the screen still creates the widget of every entry, as the
+/// rule `settings_screen.entries_rendered` of the role wants, and the app
+/// analyzes: only a running app shows the bug, once the function of an
+/// entry returns `false`.
+final class BrokenSettingsShowingHiddenModule extends SmfModule {
+  /// Creates the module.
+  const BrokenSettingsShowingHiddenModule();
+
+  /// The id of the module.
+  static const id = ModuleId('broken_settings_shows_hidden');
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A settings screen that shows the entries that hide '
+            '(fixture)',
+        kind: ModuleKinds.feature,
+        providers: [_BrokenSettingsProvider(asksFunctions: false)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(brokenSettingsShowsHiddenBundle),
+        ..._screenOf(
+          'features/broken_settings_shows_hidden/broken_settings_screen.dart',
+        ),
+      ];
+}
+
+/// The route of a broken settings screen, `/` of its feature, which shows
+/// `BrokenSettingsScreen` of the file at [file] below `lib/`, and names the
+/// route as the settings screen of the role.
+List<Contribution> _screenOf(String file) => [
+      routerRole.data(
+        RoutesData([
+          Route(
+            '/',
+            name: 'settings',
+            screen: ScreenRef(
+              'BrokenSettingsScreen',
+              import: ImportRef.app(file),
+            ),
+          ),
+        ]),
+      ),
+      settingsScreenRole.data(const SettingsScreenRoute('settings')),
+    ];
+
 /// Renders the widgets of the entries of the settings screen role as the
 /// items of the list of the file of the screen, in the order of the role,
-/// each through an import of its file with a prefix of its own.
+/// each through an import of its file with a prefix of its own, and, if
+/// [asksFunctions], the function of each entry that has one through an
+/// import of its file with a prefix of its own as well, as
+/// `if (entry1.settingShows()) const entry0.Setting(),`, for a list that is
+/// no constant. Otherwise the items are those of a constant list.
 final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
-  const _BrokenSettingsProvider();
+  const _BrokenSettingsProvider({required this.asksFunctions});
+
+  /// Whether the screen asks the function of an entry that has one.
+  final bool asksFunctions;
 
   @override
   Role<SettingsData> get role => settingsScreenRole;
@@ -1659,18 +1951,26 @@ final class _BrokenSettingsProvider extends RoleProvider<SettingsData> {
   @override
   RoleOutput render(RoleHookInput<SettingsData> input) {
     final files = <String, ImportRef>{};
+    String? prefixOf(ImportRef import) => files
+        .putIfAbsent(
+          import.uri,
+          () => import.withPrefix('entry${files.length}'),
+        )
+        .prefix;
     final items = <String>[];
     for (final entry in settingsScreenRole.entriesIn(input)) {
       // The template of the role rejects an entry outside the app, so each
-      // has an import.
-      final import = entry.widget.import!;
-      final prefix = files
-          .putIfAbsent(
-            import.uri,
-            () => import.withPrefix('entry${files.length}'),
-          )
-          .prefix;
-      items.add('  ${entry.widget.codeWith(prefix)}(),');
+      // has an import, and so has its function.
+      final widget = entry.widget.codeWith(prefixOf(entry.widget.import!));
+      if (!asksFunctions) {
+        items.add('  $widget(),');
+        continue;
+      }
+      final condition = switch (entry.showIf) {
+        final showIf? => 'if (${showIf.codeWith(prefixOf(showIf.import))}()) ',
+        null => '',
+      };
+      items.add('  ${condition}const $widget(),');
     }
     return RoleOutput(
       vars: {

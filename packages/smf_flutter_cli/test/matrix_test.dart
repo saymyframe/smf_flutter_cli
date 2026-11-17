@@ -228,14 +228,16 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
 /// since the app has no layout. The apps of a module with the settings
-/// screen, such as those of the theme, of RevenueCat, of the paywall and of
-/// the notifications, get the settings feature for it, and the apps of the
+/// screen, such as those of the theme, of RevenueCat, of the paywall, of
+/// the notifications, of in_app_review and of email_feedback, get the
+/// settings feature for it, and the apps of the
 /// notifications and of the paywall with the onboarding screen get the
 /// onboarding feature, which has no route to start on either, and neither
 /// has the paywall. An
 /// app of Google sign-in has no way to sign in that the App Store takes as
 /// its equivalent on iOS, which the apps with every module have in Sign in
-/// with Apple (guideline 4.8).
+/// with Apple (guideline 4.8). The apps of update_required have no route to
+/// start on either, but no destination, so no main navigation is missing.
 const _warningApps = <String, List<String>>{
   'settings with localization': [
     'router.no_main_navigation',
@@ -340,6 +342,24 @@ const _warningApps = <String, List<String>>{
   ],
   'sign_in (bloc)': ['router.no_main_navigation', 'router.no_start'],
   'sign_in (riverpod)': ['router.no_main_navigation', 'router.no_start'],
+  'in_app_review with router, settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'in_app_review with router, settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'email_feedback with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'email_feedback with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'update_required with localization': ['router.no_start'],
+  'update_required': ['router.no_start'],
 };
 
 void main() {
@@ -359,7 +379,10 @@ void main() {
       'localization and without each, which all get the values of .env, the '
       'apps of the paywall for each state manager with the localization, '
       'the settings screen and the onboarding screen and without each, which '
-      'get RevenueCat, the values of .env and the router, the apps of CI with '
+      'get RevenueCat, the values of .env and the router, the app of Firebase '
+      'Remote Config, which gets Firebase, the apps of update_required with '
+      'the localization and without, which get the router, remote config and '
+      'the reviews, the apps of CI with '
       'the values of .env and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
@@ -368,7 +391,9 @@ void main() {
       'app of Firebase, the app of Crashlytics '
       'with the DI container and without, which gets Firebase, the apps of '
       'Firebase Analytics with and without the DI container and the router, '
-      'which get Firebase, the app of Firebase Cloud Messaging, which gets '
+      'which get Firebase, the apps of PostHog with and without the DI '
+      'container and the router, which get the values of .env, the app of '
+      'Firebase Cloud Messaging, which gets '
       'Firebase and the notifications with their preferences, the apps of '
       'Firebase Authentication with and '
       'without the localization and the router, which get Firebase, the '
@@ -377,8 +402,12 @@ void main() {
       'apps of the sign-in for each state manager with the localization '
       'and without, which get Firebase Authentication and the router, one '
       'of Firebase Authentication with the router for each other mode of '
-      'the auth role, and one of every module for each state manager, each '
-      'once more for each other mode', () async {
+      'the auth role, one each of Firebase Analytics and of PostHog with the '
+      'DI container and the router that collects nothing before its code '
+      'chose, and one of '
+      'every module for each state manager, each once more for each other '
+      'combination of the mode of the auth role and of the collection of '
+      'the analytics role', () async {
     final (:apps, :failed) = await _cliMatrix;
     // The modules whose labels and titles are texts of the app, each with
     // the provider of the texts. The app of settings with it is the app of
@@ -390,8 +419,9 @@ void main() {
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
-        'revenuecat, paywall, dart_define, firebase_crashlytics, '
-        'firebase_analytics, '
+        'revenuecat, paywall, in_app_review, email_feedback, '
+        'firebase_remote_config, update_required, dart_define, '
+        'firebase_crashlytics, sentry, firebase_analytics, posthog, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
@@ -407,11 +437,30 @@ void main() {
     String inMode(String mode) => 'auth by firebase_auth with router, '
         'localization --auth-mode=$mode (firebase_auth, go_router, gen_l10n, '
         'firebase_core, flutter_core, shared_preferences)';
-    // An app with every module in another mode of the auth role.
-    String everyModuleIn(String stateManager, String mode) =>
+    // The app of Firebase Analytics with the DI container and the router,
+    // which its role uses, that collects nothing before its code chose.
+    const analyticsOff = 'analytics by firebase_analytics with di, router '
+        '--analytics-collection=off (firebase_analytics, get_it, go_router, '
+        'firebase_core, flutter_core)';
+    // The same app of PostHog, which gets the values of .env.
+    const postHogOff = 'analytics by posthog with di, router '
+        '--analytics-collection=off (posthog, get_it, go_router, '
+        'flutter_core, dart_define)';
+    // The options of the apps with every module of the other combinations
+    // of the mode of the auth role and of the collection of the analytics
+    // role, in the order of the matrix.
+    const otherModes = [
+      '--analytics-collection=off',
+      '--auth-mode=guest',
+      '--auth-mode=guest --analytics-collection=off',
+      '--auth-mode=anonymous',
+      '--auth-mode=anonymous --analytics-collection=off',
+    ];
+    // An app with every module with the options [modes].
+    String everyModuleIn(String stateManager, String modes) =>
         everyModule(stateManager).replaceFirst(
           'every module ($stateManager)',
-          'every module ($stateManager) --auth-mode=$mode',
+          'every module ($stateManager) $modes',
         );
 
     expect(failed, isEmpty);
@@ -622,6 +671,71 @@ void main() {
             'paywall ($stateManager)$uses (paywall,',
             '${others.replaceFirst('%', stateManager)})',
           ].join(' '),
+      // in_app_review with each subset of the roles that the review role
+      // uses, the settings screen with the router that it requires, and the
+      // providers of the preferences and of the values of .env, which the
+      // role requires.
+      equals(
+        'in_app_review with router, settings_screen, localization '
+        '(in_app_review, go_router, settings, gen_l10n, flutter_core, '
+        'shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with router, settings_screen (in_app_review, '
+        'go_router, settings, flutter_core, shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with router, localization (in_app_review, go_router, '
+        'gen_l10n, flutter_core, shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with router (in_app_review, go_router, flutter_core, '
+        'shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review with localization (in_app_review, gen_l10n, '
+        'flutter_core, shared_preferences, dart_define)',
+      ),
+      equals(
+        'in_app_review (in_app_review, flutter_core, shared_preferences, '
+        'dart_define)',
+      ),
+      // email_feedback with each subset of the roles that the feedback role
+      // uses, the settings screen with the router that it requires and the
+      // localization with the preferences that it requires, and the
+      // provider of the values of .env, which the module requires.
+      equals(
+        'email_feedback with settings_screen, localization (email_feedback, '
+        'settings, gen_l10n, flutter_core, dart_define, go_router, '
+        'shared_preferences)',
+      ),
+      equals(
+        'email_feedback with settings_screen (email_feedback, settings, '
+        'flutter_core, dart_define, go_router)',
+      ),
+      equals(
+        'email_feedback with localization (email_feedback, gen_l10n, '
+        'flutter_core, dart_define, shared_preferences)',
+      ),
+      'email_feedback (email_feedback, flutter_core, dart_define)',
+      equals(
+        'firebase_remote_config (firebase_remote_config, firebase_core, '
+        'flutter_core)',
+      ),
+      // update_required with the localization and without, which gets the
+      // router, the providers of remote config and of the reviews that it
+      // requires, Firebase, and the preferences and the values of .env that
+      // the review role requires.
+      equals(
+        'update_required with localization (update_required, gen_l10n, '
+        'flutter_core, firebase_remote_config, firebase_core, in_app_review, '
+        'go_router, shared_preferences, dart_define)',
+      ),
+      equals(
+        'update_required (update_required, flutter_core, '
+        'firebase_remote_config, firebase_core, in_app_review, go_router, '
+        'shared_preferences, dart_define)',
+      ),
       'dart_define (dart_define, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -631,6 +745,10 @@ void main() {
         'firebase_crashlytics (firebase_crashlytics, firebase_core, '
         'flutter_core)',
       ),
+      // Sentry with the DI container, which registers the reporter, and
+      // without, each with the provider of the env role, which it requires.
+      'sentry with di (sentry, get_it, flutter_core, dart_define)',
+      'sentry (sentry, flutter_core, dart_define)',
       equals(
         'firebase_analytics with di, router (firebase_analytics, get_it, '
         'go_router, firebase_core, flutter_core)',
@@ -646,6 +764,16 @@ void main() {
       equals(
         'firebase_analytics (firebase_analytics, firebase_core, flutter_core)',
       ),
+      // PostHog with the DI container and the router, which its role uses,
+      // and without each, each with the provider of the env role, which it
+      // requires.
+      equals(
+        'posthog with di, router (posthog, get_it, go_router, flutter_core, '
+        'dart_define)',
+      ),
+      'posthog with di (posthog, get_it, flutter_core, dart_define)',
+      'posthog with router (posthog, go_router, flutter_core, dart_define)',
+      'posthog (posthog, flutter_core, dart_define)',
       'launcher_icons (launcher_icons, flutter_core)',
       'native_splash (native_splash, flutter_core)',
       // CI with the values of .env, which its build writes, and without.
@@ -653,14 +781,15 @@ void main() {
       'github_actions (github_actions, flutter_core)',
       inMode('guest'),
       inMode('anonymous'),
+      analyticsOff,
+      postHogOff,
       everyModule('bloc'),
       everyModule('riverpod'),
-      // The apps with every module in the other modes of the auth role
-      // come last.
-      everyModuleIn('bloc', 'guest'),
-      everyModuleIn('bloc', 'anonymous'),
-      everyModuleIn('riverpod', 'guest'),
-      everyModuleIn('riverpod', 'anonymous'),
+      // The apps with every module of the other combinations of the mode of
+      // the auth role and of the collection of the analytics role come
+      // last.
+      for (final stateManager in const ['bloc', 'riverpod'])
+        for (final modes in otherModes) everyModuleIn(stateManager, modes),
     ]);
     // The apps with every module tell apart by the providers other than
     // the first of their roles, bloc of the state managers, and those of
@@ -668,17 +797,21 @@ void main() {
     expect(
       [for (final app in apps) app.everyModuleWith],
       [
-        for (final _ in apps.skip(6)) isNull,
+        for (final _ in apps.skip(12)) isNull,
         isEmpty,
         [RiverpodModule.id],
-        isEmpty,
-        isEmpty,
-        [RiverpodModule.id],
-        [RiverpodModule.id],
+        for (final _ in otherModes) isEmpty,
+        for (final _ in otherModes) [RiverpodModule.id],
       ],
     );
     // An app of another mode has the mode as its option, and any other app
     // has no option: its role chooses the first mode.
+    const authApp = 'auth by firebase_auth with router, localization';
+    const analyticsApp = 'analytics by firebase_analytics with di, router';
+    Map<String, String> optionsOf(String modes) => {
+          for (final option in modes.split(' '))
+            option.substring(2).split('=').first: option.split('=').last,
+        };
     expect(
       [
         for (final app in apps)
@@ -686,16 +819,27 @@ void main() {
             [app.name, app.modes, app.roleOptions],
       ],
       [
-        for (final name in const [
-          'auth by firebase_auth with router, localization',
-          'every module (bloc)',
-          'every module (riverpod)',
+        for (final mode in const ['guest', 'anonymous'])
+          [
+            '$authApp --auth-mode=$mode',
+            {'auth-mode': mode},
+            {'auth-mode': mode},
+          ],
+        for (final app in const [
+          analyticsApp,
+          'analytics by posthog with di, router',
         ])
-          for (final mode in const ['guest', 'anonymous'])
+          [
+            '$app --analytics-collection=off',
+            {'analytics-collection': 'off'},
+            {'analytics-collection': 'off'},
+          ],
+        for (final stateManager in const ['bloc', 'riverpod'])
+          for (final modes in otherModes)
             [
-              '$name --auth-mode=$mode',
-              {'auth-mode': mode},
-              {'auth-mode': mode},
+              'every module ($stateManager) $modes',
+              optionsOf(modes),
+              optionsOf(modes),
             ],
       ],
     );
@@ -856,11 +1000,11 @@ void main() {
       ModuleId('dependent'),
       dependsOn: {ModuleId('external')},
     );
-    // Crash reports come only from Firebase Crashlytics, which depends on
-    // Firebase Core, whose step configures an app in a Firebase project.
-    const reporter = _WithSteps(
-      ModuleId('reporter'),
-      requires: {crashReportingRole},
+    // Push messages come only from Firebase Cloud Messaging, which depends
+    // on Firebase Core, whose step configures an app in a Firebase project.
+    const messages = _WithSteps(
+      ModuleId('messages'),
+      requires: {pushRole},
     );
     final modules = [
       ...smfModules,
@@ -868,7 +1012,7 @@ void main() {
       external,
       followUp,
       dependent,
-      reporter,
+      messages,
     ];
 
     final (:apps, :failed) = await everyModuleAppsOf(
@@ -880,7 +1024,8 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
-        'event_bus, shared_preferences, dio, revenuecat, paywall, dart_define, '
+        'event_bus, shared_preferences, dio, revenuecat, paywall, '
+        'in_app_review, email_feedback, dart_define, sentry, posthog, '
         'launcher_icons, native_splash, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
@@ -902,7 +1047,7 @@ void main() {
           ModuleId('external'),
           ModuleId('follow_up'),
           ModuleId('dependent'),
-          ModuleId('reporter'),
+          ModuleId('messages'),
         ]),
       );
     }
@@ -1264,7 +1409,8 @@ void main() {
 
   test(
       'the report of the app tests names the answer of CI that the probe of '
-      'each asks for, if it asks for one', () async {
+      'each asks for, if it asks for one, and what gives the verdict on it',
+      () async {
     final cli = await _appTestsOf('smf_flutter_cli');
     const probe = 'integration_test/probe.dart';
 
@@ -1277,6 +1423,16 @@ void main() {
             probe,
             'probeMessages',
             answer: 'messages',
+          ),
+        ),
+        MatrixAppTest(
+          '$cli/events',
+          appliesTo: (_) => true,
+          startProbe: const MatrixStartProbe(
+            probe,
+            'probeEvents',
+            answer: 'events',
+            verdict: MatrixAnswerVerdict.exitCode,
           ),
         ),
         MatrixAppTest(
@@ -1294,10 +1450,13 @@ void main() {
     );
 
     expect(
-      [for (final test in report) test['answer']],
-      ['messages', null, null],
+      [for (final test in report) (test['answer'], test['verdict'])],
+      [('messages', 'app'), ('events', 'exitCode'), (null, null), (null, null)],
     );
-    expect(report[1].containsKey('answer'), isFalse);
+    for (final test in report.sublist(2)) {
+      expect(test.containsKey('answer'), isFalse);
+      expect(test.containsKey('verdict'), isFalse);
+    }
   });
 
   test(
@@ -2625,10 +2784,19 @@ Type type() => Types;
           ),
           1,
         );
-        // Only the cases that failed are problems.
+        // Only the cases that failed are problems: those of the provider and
+        // of the app with every module, each also for the other value of the
+        // mode option of the analytics role.
         expect(problems(), [
           startsWith('broken_analytics: error [broken_analytics]'),
+          startsWith(
+            'analytics by broken_analytics --analytics-collection=off: '
+            'error [broken_analytics]',
+          ),
           startsWith('every module: error [broken_analytics]'),
+          startsWith(
+            'every module --analytics-collection=off: error [broken_analytics]',
+          ),
         ]);
       });
     });
@@ -2883,7 +3051,11 @@ Type type() => Types;
               'dio',
               'revenuecat',
               'paywall',
+              'in_app_review',
+              'email_feedback',
               'dart_define',
+              'sentry',
+              'posthog',
               'launcher_icons',
               'native_splash',
               'github_actions',
@@ -3686,8 +3858,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
 
     /// The tests of [directory] with a probe in a file of their own in
     /// `integration_test/`, named after the directory, that asks for
-    /// [answer].
-    MatrixAppTest asking(String directory, String answer) {
+    /// [answer], with the [verdict] on it.
+    MatrixAppTest asking(
+      String directory,
+      String answer, {
+      MatrixAnswerVerdict verdict = MatrixAnswerVerdict.app,
+    }) {
       final probe = 'integration_test/${directory.split('/').last}.dart';
       fileSystem.file('$directory/$probe')
         ..createSync(recursive: true)
@@ -3695,7 +3871,12 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
       return MatrixAppTest(
         directory,
         appliesTo: (_) => true,
-        startProbe: MatrixStartProbe(probe, 'probe', answer: answer),
+        startProbe: MatrixStartProbe(
+          probe,
+          'probe',
+          answer: answer,
+          verdict: verdict,
+        ),
       );
     }
 
@@ -3706,7 +3887,9 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
     test(
         'go into the app with the answers of CI that they ask for and the '
         'arguments that build the app, next to the list, each on a line of '
-        'its own, for the script that starts the app on a device', () {
+        'its own, for the script that starts the app on a device: an answer '
+        'by its name, with exit-code after it when its exit code is the '
+        'verdict on it', () {
       expect(startAnswersFile, 'integration_test/start_answers');
       expect(startBuildArgumentsFile, 'integration_test/start_build_arguments');
       expect(
@@ -3726,6 +3909,11 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           asking('/tests/messages', 'messages'),
           start,
           walk(),
+          asking(
+            '/tests/events',
+            'events',
+            verdict: MatrixAnswerVerdict.exitCode,
+          ),
           asking('/tests/access', 'access_2'),
         ],
         buildArguments: const ['--dart-define-from-file=.env', '--flavor=ci'],
@@ -3742,7 +3930,7 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
           startReleaseArgumentsFile,
         ]),
       );
-      expect(read(startAnswersFile), 'messages\naccess_2\n');
+      expect(read(startAnswersFile), 'messages\nevents exit-code\naccess_2\n');
       expect(
         read(startBuildArgumentsFile),
         '--dart-define-from-file=.env\n--flavor=ci\n',
@@ -3852,6 +4040,32 @@ const List<(String, Future<List<String>> Function(Future<void> Function()))>
         );
       }
       expect(fileSystem.directory('/apps/app_1').existsSync(), isFalse);
+    });
+
+    test(
+        'take the exit code of their answer for the verdict on it only with '
+        'an answer, and the verdict of the app by default', () {
+      MatrixStartProbe probe({String? answer, MatrixAnswerVerdict? verdict}) =>
+          verdict == null
+              ? MatrixStartProbe('integration_test/p.dart', 'p', answer: answer)
+              : MatrixStartProbe(
+                  'integration_test/p.dart',
+                  'p',
+                  answer: answer,
+                  verdict: verdict,
+                );
+
+      expect(probe().verdict, MatrixAnswerVerdict.app);
+      expect(probe(answer: 'messages').verdict, MatrixAnswerVerdict.app);
+      expect(
+        probe(answer: 'events', verdict: MatrixAnswerVerdict.exitCode).verdict,
+        MatrixAnswerVerdict.exitCode,
+      );
+      expect(
+        () => probe(verdict: MatrixAnswerVerdict.exitCode),
+        throwsA(isA<AssertionError>()),
+        reason: 'Without an answer, no command has an exit code.',
+      );
     });
 
     test('the answers and the build arguments are no files of a test', () {

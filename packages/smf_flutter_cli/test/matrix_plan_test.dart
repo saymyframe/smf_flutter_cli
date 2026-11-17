@@ -14,6 +14,7 @@ import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_pipeline/smf_pipeline.dart';
+import 'package:smf_pipeline/testing.dart' show ContractResult;
 import 'package:smf_riverpod/smf_riverpod.dart';
 import 'package:test/test.dart';
 
@@ -277,6 +278,18 @@ final _constrained = <SmfModule>[
   ),
 ];
 
+/// The apps with every module of the CLI, which several tests read: built
+/// once, when a test reads them first. The tests only read them.
+final Future<({List<MatrixApp> apps, List<ContractResult> failed})>
+    _cliEveryModule = everyModuleAppsOf(smfModules);
+
+/// The plan of the jobs of CI of the CLI, with the app entry role as the
+/// role of the native projects, as its matrix tool prints it, which several
+/// tests read: built once, when a test reads it first, since the contract
+/// harness renders the matrix of the CLI for it. The tests only read it.
+final Future<({Map<String, Object> plan, List<String> problems})> _cliPlan =
+    matrixPlanOf(smfModules, native: appEntryRole);
+
 void main() {
   group('a pairwise covering of the apps with every module', () {
     test(
@@ -325,7 +338,7 @@ void main() {
     test(
         'takes one app for each provider of the one role with several, as '
         'the apps of bloc and riverpod of the CLI', () async {
-      final (:apps, :failed) = await everyModuleAppsOf(smfModules);
+      final (:apps, :failed) = await _cliEveryModule;
       final product = _product(const [3]);
 
       expect(failed, isEmpty);
@@ -487,9 +500,7 @@ void main() {
         'one for each provider of a role takes the first app of each, which '
         'is the first combination that fits it', () async {
       final (:apps, :failed) = await everyModuleAppsOf(_constrained);
-      final (apps: cli, failed: cliFailed) = await everyModuleAppsOf(
-        smfModules,
-      );
+      final (apps: cli, failed: cliFailed) = await _cliEveryModule;
 
       expect(failed, isEmpty);
       expect(cliFailed, isEmpty);
@@ -1363,19 +1374,16 @@ void main() {
   group('the plan of the jobs of CI', () {
     test(
         'of the CLI checks its matrix, with a pairwise covering of the apps '
-        'with every module, in four shards, builds and starts each app of '
+        'with every module, in five shards, builds and starts each app of '
         'pairwise coverings, and one app for each app entry', () async {
-      final (:plan, :problems) = await matrixPlanOf(
-        smfModules,
-        native: appEntryRole,
-      );
+      final (:plan, :problems) = await _cliPlan;
 
       expect(problems, isEmpty);
       expect(plan, {
         'combinations': 'pairwise',
-        // More apps than three shards check (appsPerShard): those of the
+        // More apps than four shards check (appsPerShard): those of the
         // matrix, and the apps with every module once more.
-        'shards': ['1/4', '2/4', '3/4', '4/4'],
+        'shards': ['1/5', '2/5', '3/5', '4/5', '5/5'],
         'apps': ['every module (bloc)', 'every module (riverpod)'],
         'start': ['every module (bloc)', 'every module (riverpod)'],
         'entries': ['every module (bloc)'],
@@ -1565,7 +1573,7 @@ void main() {
       expect(out, hasLength(1));
       expect(
         jsonDecode(out.single),
-        (await matrixPlanOf(smfModules, native: appEntryRole)).plan,
+        (await _cliPlan).plan,
       );
       expect(err, isEmpty);
 

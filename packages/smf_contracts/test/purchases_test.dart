@@ -300,6 +300,18 @@ final class FakeAuth implements AuthService {
 }
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the value, and sends back whether it returns the same listenable at each
+/// call, and whether that is appPurchases.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['the same listenable at each call'] =
+      identical(purchasesAccessListenable(), purchasesAccessListenable());
+  result['the controller'] = identical(purchasesAccessListenable(), appPurchases);
+  port.send(result);
+}
+''';
+
 /// What the scripts for the test app share. `pump` lets what is on its way
 /// happen, `show` tells an access, and `failureOf` the failure of a call.
 const _notes = r'''
@@ -1701,6 +1713,36 @@ void main() {
       tearDownAll(() => app.delete());
 
       test(
+          'gives the state manager its value through a function of the file '
+          'of the controller, which returns the same listenable each time',
+          () async {
+        const state = PurchasesRole.accessState;
+
+        expect(await app.run('$_notes$_listenable'), {
+          'the same listenable at each call': true,
+          'the controller': true,
+        });
+        expect(purchasesRole.feeds, {stateManagementRole});
+        expect(
+          [
+            for (final data in _dataFor(stateManagementRole)) data.value,
+          ],
+          [state],
+        );
+        expect(state.name, 'purchasesAccess');
+        expect(state.listenable.name, 'purchasesAccessListenable');
+        expect(
+          state.listenable.import,
+          const ImportRef.app('core/purchases/app_purchases.dart'),
+        );
+        expect(state.type.name, 'AppAccess');
+        expect(state.type.import, state.listenable.import);
+        expect(state.nullable, isFalse);
+        expect(state.listenableType, 'ValueListenable<AppAccess>');
+        expect(state.problems(), isEmpty);
+      });
+
+      test(
           'runs the calls made before the first start within it, after the '
           'start has the access, with those that their completions make, '
           'and completes a start whose access is late after its wait',
@@ -2108,7 +2150,7 @@ void main() {
 
       expect(
         created('ListTile').single['title'],
-        'Text(context.l10n.purchasesRestoreTitle)',
+        '_WholeWords(context.l10n.purchasesRestoreTitle)',
       );
       expect(
         code,
@@ -2128,10 +2170,12 @@ void main() {
       expect(
         english,
         allOf(
-          contains("title: Text('Restore purchases'),"),
+          contains("title: _WholeWords('Restore purchases'),"),
           contains("_Outcome.premium => 'Your premium access is back.',"),
           contains("_Outcome.nothing => 'No purchases to restore.',"),
-          contains(r"'Couldn\'t restore purchases. Try again.',"),
+          contains(
+            r"_Outcome.failed => 'Couldn\'t restore purchases. Try again.',",
+          ),
         ),
       );
       expectParses(english);
@@ -2140,7 +2184,8 @@ void main() {
     test(
         'has in its code a row whose tap calls _restore, which returns while '
         'a restore is on its way, a spinner while _restoring, the result in '
-        'a live region, and the hint of a failure behind kDebugMode', () {
+        'a live region with its words whole, and below it the hint of a '
+        'failure behind kDebugMode', () {
       final row = created('ListTile').single;
       expect(row['leading'], 'const Icon(Icons.restore)');
       expect(row['onTap'], '_restore');
@@ -2151,8 +2196,10 @@ void main() {
       );
       expect(
         row['subtitle'],
-        'message == null ? null : Semantics(liveRegion: true, child: '
-        'Text(message))',
+        'found == null ? null : Semantics(liveRegion: true, child: '
+        'Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: '
+        'CrossAxisAlignment.start, children: [_WholeWords(found), '
+        'if (_hint case final hint? when kDebugMode) Text(hint)]))',
       );
       final state = unit.declarations.whereType<ClassDeclaration>().singleWhere(
             (type) =>
@@ -2175,10 +2222,6 @@ void main() {
         ),
       );
       expect(
-        code,
-        contains('if (_hint case final hint? when kDebugMode) hint'),
-      );
-      expect(
         [
           for (final directive in unit.directives.whereType<ImportDirective>())
             directive.uri.stringValue,
@@ -2191,6 +2234,12 @@ void main() {
           'package:my_app/core/l10n/l10n.dart',
         ]),
       );
+    });
+
+    test(
+        'keeps the words of its texts whole at a large text size, with a '
+        'copy of WholeWords of its own', () {
+      expectWholeWordsCopy(code);
     });
   });
 

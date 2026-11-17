@@ -30,10 +30,11 @@ jobs:
     name: Format, analyze, test
     runs-on: ubuntu-latest
     # The tests of the packages run three at a time, and those of tools/ after
-    # them, in about 25 minutes on a hosted runner, and the job takes about 30
-    # with the analysis, the banlist, coverage and the scan of SonarCloud. 60
-    # leaves room for the tests that the next modules add.
-    timeout-minutes: 60
+    # them. The longest are those of smf_flutter_cli and fixture_registry, about
+    # 25 minutes each on a hosted runner, and the job takes about 50 with the
+    # analysis, the banlist, coverage and the scan of SonarCloud. 90 leaves
+    # room for the tests that the next modules add.
+    timeout-minutes: 90
     env:
       PUB_ENVIRONMENT: ci
 
@@ -169,6 +170,10 @@ jobs:
       # change that makes a test of a role pass whatever the provider does
       # fails here.
       broken_providers: true
+      # The job Android with Firebase publishes a value in the template of
+      # Remote Config of the Firebase project of CI and checks that it
+      # reaches the app, which every run of a pull request into main checks.
+      shared_project_answers: true
     secrets: inherit
 
   # The PowerShell script that installs the Firebase CLI, run for real: it

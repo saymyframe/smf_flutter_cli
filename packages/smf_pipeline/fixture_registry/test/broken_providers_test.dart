@@ -318,6 +318,7 @@ const _warningApps = <String, List<String>>{
   ],
   'fake_gate_stays_closed': ['router.no_start'],
   'broken_onboarding_ignores_conditions': ['router.no_start'],
+  'broken_settings_shows_hidden': ['router.no_start'],
 };
 
 void main() {
@@ -467,10 +468,23 @@ void main() {
         ],
         [id],
       );
-      for (final module in fixtureModules()) {
-        if (module.descriptor.provides.contains(provider.role)) continue;
-        expect(ids, contains(module.descriptor.id));
-      }
+      // Of the fixture modules that are no other provider of the role, the
+      // registry leaves out only those that a registry without the other
+      // providers cannot have: for a state manager, the fixture feature,
+      // which has a variant for each fixture state manager, and the fixture
+      // gates, which depend on one.
+      expect(
+        {
+          for (final module in fixtureModules())
+            if (!module.descriptor.provides.contains(provider.role) &&
+                !ids.contains(module.descriptor.id))
+              '${module.descriptor.id}',
+        },
+        id == BrokenModule.stateReadOnce.id
+            ? {'fake_feature', 'fake_late_gate', 'fake_gate'}
+            : isEmpty,
+        reason: '$id',
+      );
       final modules = [
         for (final module in provider.modules) module.descriptor.id,
       ];
@@ -521,8 +535,12 @@ void main() {
       'that each role chooses as for an app that got none, but for the '
       'sign-in that links as a new user, whose app is in the mode anonymous: '
       'there the session gives an anonymous user the account on a sign-up, '
-      'and the test of the session fails on the bug too', () async {
+      'and the test of the session fails on the bug too; and for the '
+      'analytics that turns collection on at each start, whose app collects '
+      'nothing before its code chose: there its first start shows the bug '
+      'too', () async {
     const linking = ModuleId('broken_auth_links_as_new_user');
+    const collecting = ModuleId('broken_analytics_collects_at_each_start');
 
     expect(
       {
@@ -532,8 +550,44 @@ void main() {
       },
       {
         linking: {'auth-mode': 'anonymous'},
+        collecting: {'analytics-collection': 'off'},
       },
     );
+    for (final provider in providers) {
+      final (:app, :problems) = await _checkOf(provider.failingApp);
+      expect(problems, isEmpty);
+      if (!app!.hook!.presentRoles.contains(analyticsRole)) continue;
+      final collection =
+          analyticsRole.collectionIn(analyticsRole.hookInput(app.hook!));
+      final ofCollecting = provider.module.descriptor.id == collecting;
+      expect(
+        collection,
+        ofCollecting ? AnalyticsCollection.off : AnalyticsCollection.on,
+        reason: '${provider.module.descriptor.id}',
+      );
+      expect(
+        app.createArguments('app_1', '/apps'),
+        ofCollecting
+            ? contains('--analytics-collection=off')
+            : isNot(contains(startsWith('--analytics-collection'))),
+        reason: '${provider.module.descriptor.id}',
+      );
+      // The matrix gives the test of the role whether the app collects from
+      // its first start, as the role chose.
+      final collectionTest = (await brokenProviderAppTests()).singleWhere(
+        (test) => test.directory.endsWith('/analytics_collection'),
+      );
+      expect(
+        collectionTest.appliesTo(app),
+        isTrue,
+        reason: '${provider.module.descriptor.id}',
+      );
+      expect(
+        collectionTest.values!(app),
+        {'collected_from_first_start': '${!ofCollecting}'},
+        reason: '${provider.module.descriptor.id}',
+      );
+    }
     for (final provider in providers) {
       if (!identical(provider.role, authRole)) continue;
       final (:app, :problems) = await _checkOf(provider.failingApp);

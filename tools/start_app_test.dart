@@ -104,9 +104,11 @@ perl() {
   /// an earlier run are before that, and the [answers] go after the mode.
   /// The app asks for the answers [asked], those of [answers] by default, in
   /// the list of the answers next to its start check, unless it has no such
-  /// list, [listsAnswers] `false`. Each sleep of the script stands for
-  /// [sleepSeconds], so that a test of a wait of minutes polls the device a
-  /// dozen times rather than hundreds.
+  /// list, [listsAnswers] `false`. The line of an answer there has its name,
+  /// and after it what [verdicts] gives for the name, if anything, such as
+  /// `exit-code` for an answer whose exit code is its verdict. Each sleep of
+  /// the script stands for [sleepSeconds], so that a test of a wait of
+  /// minutes polls the device a dozen times rather than hundreds.
   ProcessResult run({
     required int seconds,
     String platform = 'android',
@@ -125,13 +127,20 @@ perl() {
     Map<String, String> stale = const {},
     List<String> answers = const [],
     List<String>? asked,
+    Map<String, String> verdicts = const {},
     bool listsAnswers = true,
     int sleepSeconds = 1,
   }) {
     if (listsAnswers) {
       final names = asked ?? [for (final given in answers) given.split('=')[0]];
       File('$app/integration_test/start_answers').writeAsStringSync(
-        [for (final name in names) '$name\n'].join(),
+        [
+          for (final name in names)
+            if (verdicts[name] case final verdict?)
+              '$name $verdict\n'
+            else
+              '$name\n',
+        ].join(),
       );
     }
     // Notes its arguments, one build on each line.
@@ -1353,5 +1362,308 @@ esac''');
       },
       testOn: 'mac-os',
     );
+
+    // An answer that asks a server whether what the app sent has come, such
+    // as an event of a crash reporter: the server sees what arrived, and the
+    // app does not, so the exit code of the answer is the verdict. The app
+    // cannot send again, and the answer waits for the server itself, so the
+    // script runs it once.
+    group('whose exit code is the verdict', () {
+      const request = 'smf_start_request_events';
+      const report = 'smf_start_report_events';
+      // What the app asks for: what only the app and CI are to know, such as
+      // the id of what the app sent, which no line of the log may have.
+      const sent = '{"event":"the-id-of-what-the-app-sent"}';
+      // The second word of the line of the answer in the list of the answers
+      // that the app asks for.
+      const byExitCode = {'events': 'exit-code'};
+
+      test(
+          'runs the answer once the app asked for it, once, with the request '
+          'in a file that only the user of the script may read and that it '
+          'removes, and passes on its exit code 0, without waiting for a '
+          'verdict of the app and without printing the request', () {
+        final result = run(
+          seconds: 240,
+          result: 'passed',
+          files: {request: sent},
+          answers: [answer('events')],
+          verdicts: byExitCode,
+          sleepSeconds: 10,
+        );
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect(linesOf('answered'), ['events']);
+        expect(linesOf('events.asked'), [sent]);
+        expect(
+          linesOf('events.mode'),
+          ['-rw-------'],
+          reason: 'Only the user of the script may read the copy of the '
+              'request.',
+        );
+        expect(linesOf('events.directory'), [app]);
+        expect(
+          File(linesOf('events.paths').single).existsSync(),
+          isFalse,
+          reason: 'The request may have what only the app and CI are to know.',
+        );
+        final passed = RegExp(
+          r'The start check of the app passed .*\n'
+          'The app asked for the answer events [0-9]+ s after its start '
+          r'check passed\.\n'
+          r'The answer events took [0-9]+ s\.\n'
+          'The answer events passed ([0-9]+) s after the start check of the '
+          r'app passed: the server got what the app sent\.\n',
+        ).firstMatch('${result.stdout}');
+        expect(passed, isNotNull, reason: '${result.stdout}');
+        expect(
+          int.parse(passed!.group(1)!),
+          lessThan(150),
+          reason: 'The app writes no verdict on such an answer, so the script '
+              'waits for none, which would take 150 s by its clock.',
+        );
+        expect(
+          '${result.stdout}',
+          isNot(contains('the-id-of-what-the-app-sent')),
+        );
+      });
+
+      test(
+          'fails with the exit code of the answer after it ran once, and '
+          'prints what the app printed below what the answer printed', () {
+        final result = run(
+          seconds: 240,
+          result: 'passed',
+          files: {request: sent},
+          answers: [answer('events', 'echo "No event came." && exit 3')],
+          verdicts: byExitCode,
+          sleepSeconds: 10,
+        );
+
+        expect(result.exitCode, 1);
+        expect(linesOf('answered'), ['events']);
+        expect(File(linesOf('events.paths').single).existsSync(), isFalse);
+        expect(
+          '${result.stdout}',
+          matches(
+            RegExp(
+              r'No event came\.\n'
+              r'(.*\n)*What the app printed:\n'
+              r'(.*\n)*::error::The answer events failed with the exit code '
+              '3: the server did not get what the app sent, as its output '
+              r'above tells\.\n$',
+            ),
+          ),
+        );
+      });
+
+      test('gives the answer 300 s by the clock of the script, and no more',
+          () {
+        ProcessResult taking(int seconds) => run(
+              seconds: 240,
+              result: 'passed',
+              files: {request: sent},
+              answers: [answer('events')],
+              verdicts: byExitCode,
+              slow: 'env',
+              slowSeconds: seconds,
+              sleepSeconds: 10,
+            );
+        final inTime = taking(299);
+        final tooLong = taking(301);
+
+        expect(inTime.exitCode, 0, reason: '${inTime.stdout}${inTime.stderr}');
+        final took =
+            RegExp(r'^The answer events took ([0-9]+) s\.$', multiLine: true)
+                .firstMatch('${inTime.stdout}');
+        expect(took, isNotNull, reason: '${inTime.stdout}');
+        expect(int.parse(took!.group(1)!), greaterThanOrEqualTo(299));
+        expect(tooLong.exitCode, 1);
+        expect(
+          '${tooLong.stdout}',
+          allOf(
+            contains('What the app printed:'),
+            endsWith('::error::The answer events did not finish in 300 s.\n'),
+          ),
+        );
+      });
+
+      test(
+          'takes the verdict of an app that gives it without a request, and '
+          'runs no answer then', () {
+        final failed = run(
+          seconds: 240,
+          result: 'passed',
+          files: {report: 'failed: the app has no key of the service'},
+          answers: [answer('events')],
+          verdicts: byExitCode,
+        );
+        final passed = run(
+          seconds: 240,
+          result: 'passed',
+          files: {report: 'passed'},
+          answers: [answer('events')],
+          verdicts: byExitCode,
+        );
+
+        expect(failed.exitCode, 1);
+        expect(
+          '${failed.stdout}',
+          allOf(
+            contains('What the app printed:'),
+            endsWith('::error::The check of the answer events in the app '
+                'failed: the app has no key of the service\n'),
+          ),
+        );
+        expect(passed.exitCode, 0, reason: '${passed.stdout}${passed.stderr}');
+        expect(
+          '${passed.stdout}',
+          contains('The check of the answer events in the app passed '),
+        );
+        expect(linesOf('answered'), isEmpty);
+      });
+
+      test(
+          'fails when the app asks for no answer in the time that it has for '
+          'that, and prints what the app printed', () {
+        final result = run(
+          seconds: 240,
+          result: 'passed',
+          answers: [answer('events')],
+          verdicts: byExitCode,
+          sleepSeconds: 10,
+        );
+
+        expect(result.exitCode, 1);
+        expect(
+          '${result.stdout}',
+          allOf(
+            contains('What the app printed:'),
+            endsWith('::error::The app did not ask for the answer events in '
+                'the 150 s after its start check passed: a probe of its start '
+                'check writes the request smf_start_request_events into the '
+                'temporary directory of the app.\n'),
+          ),
+        );
+        expect(linesOf('answered'), isEmpty);
+      });
+
+      test(
+          'fails before the build on a line of the list of the answers that '
+          'is not the name of an answer, alone or with exit-code after it, '
+          'whether or not the answer is given', () {
+        for (final (asked, verdicts, line) in [
+          (['events'], {'events': 'app'}, 'events app'),
+          (['events'], {'events': 'exitcode'}, 'events exitcode'),
+          (['events'], {'events': 'exit-code now'}, 'events exit-code now'),
+          (
+            ['events', 'other'],
+            {'events': 'exit-code', 'other': 'later'},
+            'other later',
+          ),
+          (['Events'], const <String, String>{}, 'Events'),
+        ]) {
+          final result = run(
+            seconds: 240,
+            result: 'passed',
+            files: {request: sent},
+            answers: [answer('events')],
+            asked: asked,
+            verdicts: verdicts,
+            sleepSeconds: 10,
+          );
+
+          expect(result.exitCode, 1, reason: line);
+          expect(
+            '${result.stdout}',
+            '::error::The line "$line" of integration_test/start_answers '
+                'names no answer as the script takes it: each line is the '
+                'name of an answer that the app asks for, with exit-code '
+                'after it when the exit code of the answer is its verdict. '
+                'Add the start check with the --add-app-tests of '
+                'packages/smf_flutter_cli/tool/matrix.dart.\n',
+            reason: line,
+          );
+        }
+        expect(File('${temp.path}/builds').existsSync(), isFalse);
+        expect(linesOf('answered'), isEmpty);
+      });
+
+      test(
+          'runs the answers of the two kinds one after another, in their order',
+          () {
+        final result = run(
+          seconds: 240,
+          result: 'passed',
+          files: {
+            'smf_start_request_first': '{}',
+            'smf_start_request_second': '{}',
+            'smf_start_request_third': '{}',
+          },
+          answers: [
+            answer('first'),
+            answer('second', verdict('smf_start_report_second', 'passed')),
+            answer('third'),
+          ],
+          verdicts: {'first': 'exit-code', 'third': 'exit-code'},
+          sleepSeconds: 10,
+        );
+
+        expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+        expect(linesOf('answered'), ['first', 'second', 'third']);
+        expect(
+          '${result.stdout}',
+          matches(
+            RegExp(
+              r'The answer first passed [0-9]+ s after .*\n'
+              r'(.*\n)*The check of the answer second in the app passed .*\n'
+              r'(.*\n)*The answer third passed [0-9]+ s after ',
+            ),
+          ),
+        );
+      });
+
+      test('refuses them for a release app, as it refuses the others', () {
+        final release = run(
+          seconds: 30,
+          mode: 'release',
+          answers: [answer('events')],
+          verdicts: byExitCode,
+        );
+
+        expect(release.exitCode, 64);
+        expect(
+          '${release.stderr}',
+          'The script cannot read the files of a release app, so it answers '
+              'no request of one: start it in debug.\n',
+        );
+        expect(File('${temp.path}/builds').existsSync(), isFalse);
+      });
+
+      test(
+        'runs such an answer on an iOS simulator, with the request from the '
+        'temporary directory of the app',
+        () {
+          final result = run(
+            platform: 'ios',
+            seconds: 240,
+            result: 'passed',
+            files: {request: sent},
+            answers: [answer('events')],
+            verdicts: byExitCode,
+            sleepSeconds: 10,
+          );
+
+          expect(
+            result.exitCode,
+            0,
+            reason: '${result.stdout}${result.stderr}',
+          );
+          expect(linesOf('events.asked'), [sent]);
+          expect('${result.stdout}', contains('The answer events passed '));
+        },
+        testOn: 'mac-os',
+      );
+    });
   });
 }

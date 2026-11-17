@@ -5,10 +5,13 @@ library;
 import 'package:fake_infra/bundles/fake_analytics_bundle.dart';
 import 'package:fake_infra/bundles/fake_auth_bundle.dart';
 import 'package:fake_infra/bundles/fake_codegen_bundle.dart';
+import 'package:fake_infra/bundles/fake_config_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_crash_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_bundle.dart';
 import 'package:fake_infra/bundles/fake_env_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_events_bundle.dart';
+import 'package:fake_infra/bundles/fake_feedback_bundle.dart';
+import 'package:fake_infra/bundles/fake_hiding_setting_bundle.dart';
 import 'package:fake_infra/bundles/fake_l10n_bundle.dart';
 import 'package:fake_infra/bundles/fake_notifications_bundle.dart';
 import 'package:fake_infra/bundles/fake_parent_bundle.dart';
@@ -17,8 +20,10 @@ import 'package:fake_infra/bundles/fake_preferences_user_bundle.dart';
 import 'package:fake_infra/bundles/fake_purchases_bundle.dart';
 import 'package:fake_infra/bundles/fake_push_bundle.dart';
 import 'package:fake_infra/bundles/fake_registrations_bundle.dart';
+import 'package:fake_infra/bundles/fake_remote_config_bundle.dart';
 import 'package:fake_infra/bundles/fake_rest_bundle.dart';
 import 'package:fake_infra/bundles/fake_rest_user_bundle.dart';
+import 'package:fake_infra/bundles/fake_review_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_bundle.dart';
 import 'package:fake_infra/bundles/fake_screen_log_settings_bundle.dart';
 import 'package:fake_infra/bundles/fake_service_log_bundle.dart';
@@ -405,6 +410,12 @@ final class _FakeL10nProvider extends RoleProvider<TextsData> {
 /// mocks of its app tests answer, with a navigator observer for every
 /// navigator of the router, which notes the routes that come on its
 /// navigator, and a listener of the screen the user sees.
+///
+/// Its start sends the platform side whether the app collects before its
+/// code chose (`analyticsCollectedFromFirstStart` of the role), as
+/// `collectByDefault`. The platform side, like the SDK of a provider, keeps
+/// the setting of collection across starts, and takes that default only
+/// when it has kept nothing.
 final class FakeAnalyticsModule extends SmfModule {
   /// Creates the module.
   const FakeAnalyticsModule();
@@ -503,6 +514,50 @@ final class FakeScreenLogModule extends SmfModule {
       ];
 }
 
+/// A module whose only setting the settings screen shows on every platform
+/// but iOS. It uses the settings screen role and has nothing else: in an app
+/// with a settings screen, it generates the widget of the setting and the
+/// function that says whether the screen shows it, and gives the role its
+/// entry with that function ([SettingsEntry.showIf]). So a test that has
+/// the app run on iOS sees the screen leave the entry out, and the line
+/// next to it.
+final class FakeHidingSettingModule extends SmfModule {
+  /// Creates the module.
+  const FakeHidingSettingModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_hiding_setting');
+
+  static const _file = ImportRef.app(
+    'core/fixture_hiding_setting/fixture_hiding_setting.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'A setting that the settings screen leaves out on iOS '
+            '(fixture)',
+        kind: ModuleKinds.infrastructure,
+        uses: {settingsScreenRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        // Only an app with a settings screen gets the widget of the setting
+        // and its function, and only there does the entry apply.
+        BrickContribution(
+          fakeHidingSettingBundle,
+          when: const {settingsScreenRole},
+        ),
+        settingsScreenRole.data(
+          const SettingsEntry(
+            widget: TypeRef('FixtureHidingSetting', import: _file),
+            showIf: FunctionRef('fixtureHidingSettingShows', import: _file),
+          ),
+        ),
+      ];
+}
+
 /// A provider of the crash reporting role whose service is ready only
 /// after an asynchronous start, and which sends every report to a platform
 /// side of its own, which only the mocks of its app tests answer.
@@ -540,6 +595,10 @@ final class FakeCrashModule extends SmfModule {
 /// of those roles read, and misbehave when a test says so: their factories
 /// throw, they throw as they are called or return a future that fails, and
 /// the analytics service changes the map of parameters that it gets.
+///
+/// Its analytics service sends nothing to a backend, so it keeps the
+/// guarantee of the analytics role about collection by nature: with
+/// collection off, it sends nothing, as with collection on.
 ///
 /// The tests of a role that an app can have several providers of look at
 /// what reaches it, next to the other providers of the role, whose own
@@ -621,10 +680,12 @@ final class FakeSlowStartModule extends SmfModule {
 /// plugin that fails to start does. Otherwise it returns at once, so it
 /// leaves no timer to the tests of the other modules.
 ///
-/// It provides, requires and uses no role. Its code runs last in the late
-/// phase of `bootstrap()` when the registry lists it last, after crash
-/// reporting has started, so the test of a failed start sees the error
-/// reach the handlers that the start-up set up too.
+/// It provides, requires and uses no role. Its code runs after that of
+/// every other module in the late phase of `bootstrap()` when the registry
+/// lists it last, after crash reporting has started, so the test of a
+/// failed start sees the error reach the handlers that the start-up set up
+/// too. The code of the templates of roles in that phase, such as the start
+/// of the reviews, comes after it.
 final class FakeStartFailureModule extends SmfModule {
   /// Creates the module.
   const FakeStartFailureModule();
@@ -1186,6 +1247,193 @@ final class FakePurchasesModule extends SmfModule {
           const RoleImplementation.async(
             type: TypeRef('FixturePurchases', import: _file),
             init: FactoryRef('openFixturePurchases', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the remote config role, which has at most one provider, in
+/// memory, whose opening and fetches each take a turn of the event loop, as
+/// calls do that ask the system and a backend.
+///
+/// Its backend has no value of a parameter of the app, and the parameter of
+/// the check of the role ([RemoteConfigRole.checkParameter]), which no app
+/// reads, as the role asks of the mocks of every provider. It publishes
+/// nothing while the app runs, so the service tells of no update. What the
+/// service fetched and activated stands for what the device keeps, which
+/// each start of the app finds as the last one left it.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appRemoteConfig`, with the defaults and the
+/// getters of the parameters that the modules of the app give the role.
+final class FakeRemoteConfigModule extends SmfModule {
+  /// Creates the module.
+  const FakeRemoteConfigModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_remote_config');
+
+  static const _file = ImportRef.app(
+    'core/fixture_remote_config/fixture_remote_config.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Remote config in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(remoteConfigRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(
+          fakeRemoteConfigBundle,
+          vars: {
+            'check_parameter':
+                SmfNames.dartString(RemoteConfigRole.checkParameter),
+          },
+        ),
+        remoteConfigRole.data(
+          const RemoteConfigImplementation(
+            type: TypeRef('FixtureRemoteConfig', import: _file),
+            create: FactoryRef('createFixtureRemoteConfig', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A module that requires the remote config role and gives it one parameter
+/// of each type, whose defaults the app reads while the backend gives no
+/// value: a text, `fake_config_user_greeting`, a Boolean,
+/// `fake_config_user_enabled`, a whole number, `fake_config_user_limit`, and
+/// a number, `fake_config_user_ratio`. Its brick reads each through the
+/// getter of its parameter, so all four types render and analyze.
+final class FakeConfigUserModule extends SmfModule {
+  /// Creates the module.
+  const FakeConfigUserModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_config_user');
+
+  /// The parameters of the module, in their order.
+  static const keys = [
+    RemoteConfigKey.text(
+      'fake_config_user_greeting',
+      defaultValue: 'Hello',
+      description: 'The greeting of the fixture',
+    ),
+    RemoteConfigKey.boolean(
+      'fake_config_user_enabled',
+      defaultValue: true,
+      description: 'Whether the fixture is on',
+    ),
+    RemoteConfigKey.integer(
+      'fake_config_user_limit',
+      defaultValue: 3,
+      description: 'How many the fixture takes',
+    ),
+    RemoteConfigKey.decimal(
+      'fake_config_user_ratio',
+      defaultValue: 0.5,
+      description: 'The ratio of the fixture',
+    ),
+  ];
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Four parameters of remote config (fixture)',
+        kind: ModuleKinds.infrastructure,
+        requires: {remoteConfigRole},
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeConfigUserBundle),
+        for (final key in keys) remoteConfigRole.data(key),
+      ];
+}
+
+/// A provider of the review role, which has at most one provider, whose
+/// service is created with the app and each of whose calls takes a turn of
+/// the event loop, as one does that asks the store. Its store can always
+/// show its dialog, which shows nothing in the tests, a page of the store
+/// always opens, and the version of the app is `1.0.0`, as the mocks of the
+/// platform side of every provider of the role have it.
+///
+/// The template of the role does the rest in an app with it, whichever
+/// module provides the role: `appReview`, which counts the launches of the
+/// app in the preferences and decides when a review is due.
+final class FakeReviewModule extends SmfModule {
+  /// Creates the module.
+  const FakeReviewModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_review');
+
+  static const _file = ImportRef.app(
+    'core/fixture_review/fixture_review.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Store reviews in memory (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(reviewRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeReviewBundle),
+        reviewRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixtureReview', import: _file),
+            create: FactoryRef('createFixtureReview', import: _file),
+          ),
+        ),
+      ];
+}
+
+/// A provider of the feedback role, which has at most one provider, on the
+/// device of the tests, which has an app that takes what the user writes, as
+/// the role asks of the mocks of every provider. The app of the device takes
+/// a message a turn of the event loop after the open and notes it. Asked
+/// whether it has such an app, the device says no, as Android 11 and later
+/// say to an app whose manifest names no other app; the fixture never asks.
+///
+/// The service has what it needs, and its open reads the language of the
+/// app from the context that it gets before it awaits anything. The template
+/// of the role does the rest in an app with it, whichever module provides
+/// the role: `appFeedback`, and in an app with a settings screen the entry
+/// that opens the way to write.
+final class FakeFeedbackModule extends SmfModule {
+  /// Creates the module.
+  const FakeFeedbackModule();
+
+  /// The id of the module.
+  static const id = ModuleId('fake_feedback');
+
+  static const _file = ImportRef.app(
+    'core/fixture_feedback/fixture_feedback.dart',
+  );
+
+  @override
+  ModuleDescriptor get descriptor => const ModuleDescriptor(
+        id: id,
+        description: 'Feedback on the device of the tests (fixture)',
+        kind: ModuleKinds.infrastructure,
+        providers: [RoleProvider.plain(feedbackRole)],
+      );
+
+  @override
+  List<Contribution> contribute(ModuleContext context) => [
+        BrickContribution(fakeFeedbackBundle),
+        feedbackRole.data(
+          const RoleImplementation(
+            type: TypeRef('FixtureFeedback', import: _file),
+            create: FactoryRef('createFixtureFeedback', import: _file),
           ),
         ),
       ];
