@@ -511,7 +511,7 @@ With `flutter_bloc`:
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
 
-- The values that controllers of the app keep, such as the theme mode, have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `ThemeModeCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `ThemeModeCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Theme
 
@@ -12993,8 +12993,8 @@ final class NotificationsPermissionCubit
     : super(state5.notificationsPermissionListenable());
 }
 
-/// The address of the device for push messages, `null` while the platform gives
-/// none.
+/// The address of the device that `appPush.address` keeps, `null` while the
+/// platform gives none.
 final class PushAddressCubit extends ListenableCubit<String?> {
   /// Creates the cubit, with the value that the controller has.
   PushAddressCubit() : super(state6.pushAddressListenable());
@@ -20922,7 +20922,8 @@ class DefaultFirebaseOptions {
 }
 === lib/main.dart (flutter_core) ===
 import 'package:fixture_app/core/l10n/app_locale.dart';
-import 'package:fixture_app/core/state/shared_state_cubits.dart';
+import 'package:fixture_app/core/state/shared_state_cubits.dart'
+    show SharedStateCubits;
 import 'package:fixture_app/core/theme/theme_mode.dart';
 import 'package:fixture_app/features/paywall/paywall_composition.dart'
     show createPremiumCubit;

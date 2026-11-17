@@ -10176,7 +10176,8 @@ import 'package:flutter/material.dart' as state2;
 import 'package:flutter/widgets.dart' as state0;
 import 'package:flutter_riverpod/flutter_riverpod.dart' show NotifierProvider;
 
-/// The language that the user chose, `null` to follow the device; `appLocale.choose()` changes it.
+/// The language that the user chose, `null` to follow the device;
+/// `appLocale.choose()` changes it.
 final localizationLocaleBridge =
     NotifierProvider<FixtureListenableNotifier<state0.Locale?>, state0.Locale?>(
       () => FixtureListenableNotifier(state1.localizationLocaleListenable),
@@ -10196,7 +10197,8 @@ final authSessionBridge =
       state4.AppSession
     >(() => FixtureListenableNotifier(state4.authSessionListenable));
 
-/// Whether the app may show notifications; `appNotifications.request()` changes it.
+/// Whether the app may show notifications; `appNotifications.request()` changes
+/// it.
 final notificationsPermissionBridge =
     NotifierProvider<
       FixtureListenableNotifier<state5.NotificationPermission>,
@@ -10205,7 +10207,8 @@ final notificationsPermissionBridge =
       () => FixtureListenableNotifier(state5.notificationsPermissionListenable),
     );
 
-/// The address of the device for push messages, `null` while the platform gives none.
+/// The address of the device that `appPush.address` keeps, `null` while the
+/// platform gives none.
 final pushAddressBridge =
     NotifierProvider<FixtureListenableNotifier<String?>, String?>(
       () => FixtureListenableNotifier(state6.pushAddressListenable),

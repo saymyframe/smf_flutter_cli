@@ -91,14 +91,27 @@ final class FakeRiverpodModule extends SmfModule {
       ];
 }
 
-/// What the file of the fixture Riverpod takes of its library.
-const _notifier = 'NotifierProvider';
+/// What the file of the fixture Riverpod imports of its own.
+const _riverpodImports = [
+  ImportRef(
+    'package:flutter_riverpod/flutter_riverpod.dart',
+    show: ['NotifierProvider'],
+  ),
+  ImportRef.app('core/state/fixture_listenable_notifier.dart'),
+];
 
-/// What the file of the fixture BLoC takes of the widgets of Flutter.
-const _widgets = 'BuildContext, StatelessWidget, Widget';
-
-/// What the file of the fixture BLoC takes of its library.
-const _bloc = 'BlocProvider, MultiBlocProvider';
+/// What the file of the fixture BLoC imports of its own.
+const _blocImports = [
+  ImportRef(
+    'package:flutter/widgets.dart',
+    show: ['BuildContext', 'StatelessWidget', 'Widget'],
+  ),
+  ImportRef(
+    'package:flutter_bloc/flutter_bloc.dart',
+    show: ['BlocProvider', 'MultiBlocProvider'],
+  ),
+  ImportRef.app('core/state/fixture_listenable_cubit.dart'),
+];
 
 /// The name of the bridge of [entry] in the file of the fixture Riverpod:
 /// its name with `Bridge`, such as `themeModeBridge`.
@@ -158,23 +171,19 @@ final class _FakeRiverpodProvider extends RoleProvider<StateData> {
 
   @override
   RoleOutput render(RoleHookInput<StateData> input) {
-    final entries = stateManagementRole.sharedStateIn(input);
-    if (entries.isEmpty) return const RoleOutput();
-    final appName = input.context.appName;
-    final code = _Code(appName);
-    final bridges = [
-      for (final AppSharedState(:state) in entries)
-        _riverpodBridge(state, code.typeOf(state), code.functionOf(state)),
+    final entries = [
+      for (final entry in stateManagementRole.sharedStateIn(input)) entry.state,
     ];
-    final imports = code.imports([
-      "import 'package:flutter_riverpod/flutter_riverpod.dart' show $_notifier;",
-      "import 'package:$appName/core/state/fixture_listenable_notifier.dart';",
-    ]);
+    if (entries.isEmpty) return const RoleOutput();
+    final code = SharedStateCode(entries, appName: input.context.appName);
+    final bridges = [
+      for (final state in entries) _riverpodBridge(state, code),
+    ];
     return RoleOutput(
       files: {
         FakeRiverpodModule.bridgesFile: '''
 // The bridges of the fixture Riverpod (fixture).
-${imports.join('\n')}
+${code.directives(_riverpodImports).join('\n')}
 
 ${bridges.join('\n\n')}
 ''',
@@ -183,14 +192,17 @@ ${bridges.join('\n\n')}
   }
 }
 
-/// The provider of [state], whose value has the type [type] and whose
-/// listenable [function] returns.
-String _riverpodBridge(SharedState state, String type, String function) => '''
-/// ${state.description}
-final ${_riverpodBridgeOf(state)} =
-    NotifierProvider<FixtureListenableNotifier<$type>, $type>(
-  () => FixtureListenableNotifier($function),
-);''';
+/// The provider of [state], whose type and function [code] writes.
+String _riverpodBridge(SharedState state, SharedStateCode code) {
+  final type = code.typeOf(state);
+  return [
+    ...code.docOf(state),
+    'final ${_riverpodBridgeOf(state)} =',
+    '    NotifierProvider<FixtureListenableNotifier<$type>, $type>(',
+    '  () => FixtureListenableNotifier(${code.functionOf(state)}),',
+    ');',
+  ].join('\n');
+}
 
 /// Writes the cubits of the fixture BLoC, and puts the widget that
 /// provides them around the root of the app.
@@ -202,28 +214,21 @@ final class _FakeBlocProvider extends RoleProvider<StateData> {
 
   @override
   RoleOutput render(RoleHookInput<StateData> input) {
-    final entries = stateManagementRole.sharedStateIn(input);
-    if (entries.isEmpty) return const RoleOutput();
-    final appName = input.context.appName;
-    final code = _Code(appName);
-    final bridges = [
-      for (final AppSharedState(:state) in entries)
-        _blocBridge(state, code.typeOf(state), code.functionOf(state)),
+    final entries = [
+      for (final entry in stateManagementRole.sharedStateIn(input)) entry.state,
     ];
+    if (entries.isEmpty) return const RoleOutput();
+    final code = SharedStateCode(entries, appName: input.context.appName);
+    final bridges = [for (final state in entries) _blocBridge(state, code)];
     final providers = [
-      for (final AppSharedState(:state) in entries)
+      for (final state in entries)
         '        BlocProvider(create: (_) => ${_blocBridgeOf(state)}()),',
     ];
-    final imports = code.imports([
-      "import 'package:flutter/widgets.dart' show $_widgets;",
-      "import 'package:flutter_bloc/flutter_bloc.dart' show $_bloc;",
-      "import 'package:$appName/core/state/fixture_listenable_cubit.dart';",
-    ]);
     return RoleOutput(
       files: {
         FakeBlocModule.bridgesFile: '''
 // The bridges of the fixture BLoC (fixture).
-${imports.join('\n')}
+${code.directives(_blocImports).join('\n')}
 
 ${bridges.join('\n\n')}
 
@@ -251,7 +256,12 @@ ${providers.join('\n')}
           Fragment.wrap(
             'FixtureStateBridges(child: ',
             ')',
-            imports: [ImportRef.app('core/state/fixture_state_cubits.dart')],
+            imports: [
+              ImportRef.app(
+                'core/state/fixture_state_cubits.dart',
+                show: ['FixtureStateBridges'],
+              ),
+            ],
           ),
         ),
       ],
@@ -259,47 +269,15 @@ ${providers.join('\n')}
   }
 }
 
-/// The cubit of [state], whose value has the type [type] and whose
-/// listenable [function] returns.
-String _blocBridge(SharedState state, String type, String function) => '''
-/// ${state.description}
-final class ${_blocBridgeOf(state)} extends FixtureListenableCubit<$type> {
-  /// Creates the cubit (fixture).
-  ${_blocBridgeOf(state)}() : super($function());
-}''';
-
-/// The code of the bridges of an app: the type and the function of each
-/// entry, through an import of each library with a prefix of its own.
-final class _Code {
-  _Code(this._appName);
-
-  final String _appName;
-
-  /// The prefixes of the libraries, by their URIs.
-  final Map<String, String> _prefixes = {};
-
-  String _prefixOf(ImportRef import) => _prefixes.putIfAbsent(
-        import.resolveUri(_appName),
-        () => 'state${_prefixes.length}',
-      );
-
-  /// The type of the value of [entry].
-  String typeOf(SharedState entry) => entry.typeWith(
-        switch (entry.type.import) {
-          null => null,
-          final import => _prefixOf(import),
-        },
-      );
-
-  /// The function of [entry].
-  String functionOf(SharedState entry) =>
-      entry.listenable.codeWith(_prefixOf(entry.listenable.import));
-
-  /// [own] and the imports of the libraries of the types and functions,
-  /// each on a line, sorted.
-  List<String> imports(List<String> own) => [
-        ...own,
-        for (final MapEntry(key: uri, value: prefix) in _prefixes.entries)
-          "import '$uri' as $prefix;",
-      ]..sort();
+/// The cubit of [state], whose type and function [code] writes.
+String _blocBridge(SharedState state, SharedStateCode code) {
+  final bridge = _blocBridgeOf(state);
+  final type = code.typeOf(state);
+  return [
+    ...code.docOf(state),
+    'final class $bridge extends FixtureListenableCubit<$type> {',
+    '  /// Creates the cubit (fixture).',
+    '  $bridge() : super(${code.functionOf(state)}());',
+    '}',
+  ].join('\n');
 }
