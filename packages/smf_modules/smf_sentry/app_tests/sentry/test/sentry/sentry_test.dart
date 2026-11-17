@@ -97,15 +97,18 @@ void main() {
       }
     });
 
+    // The deadline fails a report that waits for good, such as on a future
+    // that never completes. It does not catch the processor above: its error
+    // stops the isolate, so no timer fires, and the test of the processor is
+    // the one that fails on it.
     test('completes a report in time, wherever the app is', () async {
       await reporter
           .recordError(StateError('wherever the app is'), StackTrace.current)
           .timeout(
             const Duration(seconds: 30),
             onTimeout: () => fail(
-              'The report did not complete in 30 seconds: on Windows, a '
-              'processor of Sentry that reads the arguments of flutter_tester '
-              'fails once the path of the app has a letter beyond ASCII.',
+              'The report did not complete in 30 seconds, so a test that '
+              'reports an error to Sentry would wait for good.',
             ),
           );
 
