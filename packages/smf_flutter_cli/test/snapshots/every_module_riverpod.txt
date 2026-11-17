@@ -1578,7 +1578,7 @@ While the version of the app is below the lowest version that may run, the scree
 
 The version of the app is its version name, such as `1.4.0` of `version: 1.4.0+12` in `pubspec.yaml`, without the build number. The two compare number by number, and a missing number is 0, so `1.2` equals `1.2.0` and `1.10.0` is above `1.9.2`. A lowest version that is not one to four numbers between dots, such as `2.0.0-beta`, keeps the app running, and a debug build prints why. The comparison is in `lib/features/update_required/version_compare.dart`.
 
-The screen is hard until the user taps "Update". From then on, or at once when no app of the device opened the store page, which the screen says, it also offers "Not now", which lets the user in for this launch. A store page that does not answer within 10 seconds counts as opened. So a lowest version above the version that the store has, set before the review of a release or during a staged rollout, costs a user one trip to the store and never locks anyone out. The next launch, and another lowest version, show the screen again.
+Until the user taps "Update", the screen offers no way into the app. From then on, or at once when no app of the device opened the store page, which the screen says, it also offers "Not now", which lets the user in for this launch. A store page that does not answer within 10 seconds counts as opened. So a lowest version above the version that the store has, set before the review of a release or during a staged rollout, costs a user one trip to the store and never locks anyone out. The next launch, and another lowest version, show the screen again.
 
 The store page is that of the section Store reviews: on Android the page of the app in Google Play, and on iOS its page in the App Store, which needs the App Store ID of the app in `REVIEW_APP_STORE_ID` of `.env`. Without it, the app has no store page on iOS, and the screen never shows there: a debug build says so. Before the app is in Google Play, "Update" leads to a page that says the item was not found.
 
@@ -22945,11 +22945,11 @@ final updateStatus = UpdateStatus._();
 /// version of the app with it, and keeps what the screen "Update required"
 /// offers. The app has one, [updateStatus].
 ///
-/// The screen is hard until the user taps "Update", which opens the page of
-/// the app in its store. From then on, or at once when the page did not
-/// open, it also offers "Not now", which lets the user in for this launch.
-/// So a lowest version above the version in the store, set too early, costs
-/// a user one trip to the store and never locks anyone out.
+/// Until the user taps "Update", which opens the page of the app in its store,
+/// the screen offers no way into the app. From then on, or at once when the
+/// page did not open, it also offers "Not now", which lets the user in for this
+/// launch. So a lowest version above the version in the store, set too early,
+/// costs a user one trip to the store and never locks anyone out.
 final class UpdateStatus {
   UpdateStatus._();
 
@@ -23105,7 +23105,8 @@ final class UpdateStatus {
         }
       }
     }
-    // The screen is hard again each time it takes the place of the app.
+    // The screen offers no way in again each time it takes the place of the
+    // app.
     if (!supported && _supported.value) _storeVisit.value = StoreVisit.none;
     _supported.value = supported;
   }

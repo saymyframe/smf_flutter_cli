@@ -20,16 +20,16 @@ import 'package:smf_update_required/src/readme.dart';
 /// why. The comparison is in `lib/features/update_required/version_compare.dart`,
 /// which needs only Dart.
 ///
-/// The screen leads to the page of the app in its store, which the
-/// [ReviewRole] opens, so the module requires that role too. On iOS without
-/// the App Store ID of the app, the app has no store page, and the screen
-/// never shows: a debug build says so. The screen is hard until the user
-/// taps "Update". From then on, or at once when the store page did not
-/// open, which the screen says, it also offers "Not now", which lets the
-/// user in for this launch below that lowest version. So a lowest version
-/// above the version in the store, set too early, costs a user one trip to
-/// the store and never locks anyone out. Another lowest version takes the
-/// place of the app again, and so does the next launch.
+/// The screen leads to the page of the app in its store, which the [ReviewRole]
+/// opens, so the module requires that role too. On iOS without the App Store ID
+/// of the app, the app has no store page, and the screen never shows: a debug
+/// build says so. Until the user taps "Update", the screen offers no way into
+/// the app. From then on, or at once when the store page did not open, which
+/// the screen says, it also offers "Not now", which lets the user in for this
+/// launch below that lowest version. So a lowest version above the version in
+/// the store, set too early, costs a user one trip to the store and never locks
+/// anyone out. Another lowest version takes the place of the app again, and so
+/// does the next launch.
 ///
 /// The module declares a guard of the routes, `supported`, whose target is
 /// the route of the screen (see [RouteGuard]): while the version may not
