@@ -1036,11 +1036,13 @@ final class _BrickRenderer {
     String template,
   ) {
     final bytes = base64.decode(file.data);
-    final text = templateTextOf(file);
+    // What the pipeline read of the file, whose path is [template].
+    final read = bundledFileRead(file);
+    final text = read.text;
     if (text == null) return (bytes: bytes, isText: false);
-    if (!masonTag.hasMatch(text)) return (bytes: bytes, isText: true);
+    if (!read.hasMasonTag) return (bytes: bytes, isText: true);
     final _Brick(:origin, :name, :vars, :code) = brick;
-    final scan = scanTemplate(template, text);
+    final scan = read.scan;
     if (!_readFragmentVariables(
       scan,
       template,
@@ -1270,13 +1272,11 @@ Set<String> _namesReadBy(Collection collection, ContributionOrigin owner) => {
 /// The names of the variables and sections that the templates of [brick]
 /// read.
 Set<String> _namesReadIn(BrickContribution brick) => {
-      for (final MapEntry(key: path, value: text)
-          in templateFilesOf(brick).entries)
-        if (masonTag.hasMatch(text))
-          if (scanTemplate(path, text) case final scan) ...[
-            for (final tag in scan.tags) variableOf(tag.name),
-            for (final section in scan.sections) variableOf(section.name),
-          ],
+      for (final read in templateReadsOf(brick).values)
+        if (read.hasMasonTag) ...[
+          for (final tag in read.scan.tags) variableOf(tag.name),
+          for (final section in read.scan.sections) variableOf(section.name),
+        ],
     };
 
 /// The fragment variables, those that hold [code], that the template of
