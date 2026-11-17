@@ -189,7 +189,8 @@ void main() {
 
     test(
         'queries the events of the check with the key, every 15 s, until '
-        'PostHog has the event', () async {
+        'PostHog has the event, each time for a result that PostHog computes '
+        'anew rather than one that it cached', () async {
       posthog.untakenFor = 3;
 
       final found = await _check(posthog, time);
@@ -208,9 +209,16 @@ void main() {
         expect(request.headers['Authorization'], 'Bearer $_key');
         expect(request.headers['Content-Type'], startsWith('application/json'));
         expect(request.headers['Accept'], 'application/json');
-        expect(jsonDecode(request.body), {
-          'query': {'kind': 'HogQLQuery', 'query': _hogql},
-        });
+        expect(
+          jsonDecode(request.body),
+          {
+            'query': {'kind': 'HogQLQuery', 'query': _hogql},
+            'refresh': 'force_blocking',
+          },
+          reason: 'PostHog caches the result of a query, so a query before '
+              'the event came would keep its empty result for the later '
+              'ones.',
+        );
       }
     });
 

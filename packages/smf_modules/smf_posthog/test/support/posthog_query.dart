@@ -157,7 +157,10 @@ String queryOf(String nonce) {
 ///
 /// It asks the query API of PostHog for the events of the check with the
 /// nonce of the request every [interval] until PostHog has one: PostHog takes
-/// an event in some seconds, and has none of it until then. A query that
+/// an event in some seconds, and has none of it until then. Each query asks
+/// PostHog to compute its result anew (`force_blocking`): PostHog caches the
+/// result of a query, so a query made before the event came would otherwise
+/// give its empty result to the later ones. A query that
 /// PostHog may take later, as when it limits the queries, its queue of
 /// queries timed out or it failed itself, goes again at the next interval.
 /// Once PostHog has the event, it checks that it is the one event of the
@@ -189,6 +192,7 @@ Future<String> checkEvent(
   final posthog = _PostHog(client, base, key);
   final query = jsonEncode({
     'query': {'kind': 'HogQLQuery', 'query': queryOf(request.nonce)},
+    'refresh': 'force_blocking',
   });
   final until = now().add(timeout);
   Duration left() => until.difference(now());
