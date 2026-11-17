@@ -19,6 +19,9 @@ dependencies:
 
 dev_dependencies:
   analyzer: ^14.4.0
+  # The state manager that follows whether the onboarding is finished in
+  # the apps of the tests.
+  smf_bloc: ^0.3.5
   # The app entry of the apps that the tests render.
   smf_flutter_core: ^0.7.0
   # The provider of the localization role that gets the texts of the module

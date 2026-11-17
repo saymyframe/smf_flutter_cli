@@ -413,8 +413,7 @@ void main() {
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
         'revenuecat, paywall, in_app_review, email_feedback, '
         'firebase_remote_config, dart_define, '
-        'firebase_crashlytics, '
-        'firebase_analytics, '
+        'firebase_crashlytics, sentry, firebase_analytics, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
     // of the auth role and its Firebase, the settings screen, which has
@@ -720,6 +719,10 @@ void main() {
         'firebase_crashlytics (firebase_crashlytics, firebase_core, '
         'flutter_core)',
       ),
+      // Sentry with the DI container, which registers the reporter, and
+      // without, each with the provider of the env role, which it requires.
+      'sentry with di (sentry, get_it, flutter_core, dart_define)',
+      'sentry (sentry, flutter_core, dart_define)',
       equals(
         'firebase_analytics with di, router (firebase_analytics, get_it, '
         'go_router, firebase_core, flutter_core)',
@@ -956,11 +959,11 @@ void main() {
       ModuleId('dependent'),
       dependsOn: {ModuleId('external')},
     );
-    // Crash reports come only from Firebase Crashlytics, which depends on
-    // Firebase Core, whose step configures an app in a Firebase project.
-    const reporter = _WithSteps(
-      ModuleId('reporter'),
-      requires: {crashReportingRole},
+    // Push messages come only from Firebase Cloud Messaging, which depends
+    // on Firebase Core, whose step configures an app in a Firebase project.
+    const messages = _WithSteps(
+      ModuleId('messages'),
+      requires: {pushRole},
     );
     final modules = [
       ...smfModules,
@@ -968,7 +971,7 @@ void main() {
       external,
       followUp,
       dependent,
-      reporter,
+      messages,
     ];
 
     final (:apps, :failed) = await everyModuleAppsOf(
@@ -981,7 +984,7 @@ void main() {
         '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, dio, revenuecat, paywall, '
-        'in_app_review, email_feedback, dart_define, launcher_icons, '
+        'in_app_review, email_feedback, dart_define, sentry, launcher_icons, '
         'native_splash, github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
@@ -1003,7 +1006,7 @@ void main() {
           ModuleId('external'),
           ModuleId('follow_up'),
           ModuleId('dependent'),
-          ModuleId('reporter'),
+          ModuleId('messages'),
         ]),
       );
     }
@@ -3010,6 +3013,7 @@ Type type() => Types;
               'in_app_review',
               'email_feedback',
               'dart_define',
+              'sentry',
               'launcher_icons',
               'native_splash',
               'github_actions',

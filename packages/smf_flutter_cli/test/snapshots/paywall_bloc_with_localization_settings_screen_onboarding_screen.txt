@@ -307,7 +307,7 @@ With `go_router`:
 
 ## State management
 
-- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. So does a value that only a backend changes, such as the values of remote config in an app with that role; no code of the app changes it. A widget reads such a value through its bridge. Code changes any other such value only through its controller, which the doc of the bridge names, and never in a build.
 
 With `flutter_bloc`:
 
@@ -317,7 +317,7 @@ With `flutter_bloc`:
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
 
-- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `LocalizationLocaleCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `OnboardingCompletedCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 
 ## Values in .env
 
@@ -1497,23 +1497,29 @@ class LanguageSetting extends StatelessWidget {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final chosen = AppLocaleScope.of(context);
-    final choice = Text(
-      chosen == null ? context.l10n.localizationSystem : _nameOf(chosen),
-      style: theme.textTheme.bodyMedium?.copyWith(color: muted),
-    );
+    final choice = chosen == null
+        ? context.l10n.localizationSystem
+        : _nameOf(chosen);
+    final style = theme.textTheme.bodyMedium?.copyWith(color: muted);
     final arrow = Icon(Icons.chevron_right, color: muted);
     // At a large text size, the choice goes below the title, where it has
-    // the width of the row.
+    // the width of the row, and the two wrap between their words.
     final below = MediaQuery.textScalerOf(context).scale(10) > 13;
     return ListTile(
       leading: const Icon(Icons.language),
-      title: Text(context.l10n.localizationLanguage),
-      subtitle: below ? choice : null,
+      title: _WholeWords(context.l10n.localizationLanguage),
+      subtitle: below
+          ? DefaultTextStyle.merge(style: style, child: _WholeWords(choice))
+          : null,
       trailing: below
           ? arrow
           : Row(
               mainAxisSize: MainAxisSize.min,
-              children: [choice, const SizedBox(width: 4), arrow],
+              children: [
+                Text(choice, style: style),
+                const SizedBox(width: 4),
+                arrow,
+              ],
             ),
       onTap: () => showModalBottomSheet<void>(
         context: context,
@@ -1550,9 +1556,9 @@ class _LanguageSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
             child: Semantics(
               header: true,
-              child: Text(
-                context.l10n.localizationLanguage,
+              child: DefaultTextStyle.merge(
                 style: theme.textTheme.headlineSmall,
+                child: _WholeWords(context.l10n.localizationLanguage),
               ),
             ),
           ),
@@ -1562,12 +1568,15 @@ class _LanguageSheet extends StatelessWidget {
                 horizontal: 24,
                 vertical: 4,
               ),
-              title: Text(
-                locale == null
-                    ? context.l10n.localizationSystem
-                    : _nameOf(locale),
-                // Larger than the text of a row of the screen.
+              // Larger than the text of a row of the screen, and so the
+              // name of a language wraps between its words too.
+              title: DefaultTextStyle.merge(
                 style: theme.textTheme.bodyLarge?.copyWith(fontSize: 19),
+                child: _WholeWords(
+                  locale == null
+                      ? context.l10n.localizationSystem
+                      : _nameOf(locale),
+                ),
               ),
               selected: locale == chosen,
               trailing: locale == chosen
@@ -1584,6 +1593,77 @@ class _LanguageSheet extends StatelessWidget {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
     );
   }
 }
@@ -2736,23 +2816,33 @@ class _RestorePurchasesSettingState extends State<RestorePurchasesSetting> {
 
   @override
   Widget build(BuildContext context) {
-    final message = switch (_outcome) {
+    final found = switch (_outcome) {
       null => null,
       _Outcome.premium => context.l10n.purchasesRestoreActive,
       _Outcome.nothing => context.l10n.purchasesRestoreNone,
-      _Outcome.failed => [
-        context.l10n.purchasesRestoreFailed,
-        // The words of the provider are for the developer of the app.
-        if (_hint case final hint? when kDebugMode) hint,
-      ].join('\n'),
+      _Outcome.failed => context.l10n.purchasesRestoreFailed,
     };
     return ListTile(
       leading: const Icon(Icons.restore),
-      title: Text(context.l10n.purchasesRestoreTitle),
+      // At a large text size the title and what the restore found wrap
+      // between their words.
+      title: _WholeWords(context.l10n.purchasesRestoreTitle),
       // A screen reader reads what the restore found once it comes.
-      subtitle: message == null
+      subtitle: found == null
           ? null
-          : Semantics(liveRegion: true, child: Text(message)),
+          : Semantics(
+              liveRegion: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _WholeWords(found),
+                  // The words of the provider are for the developer of the
+                  // app, and break where they need to, as in an address.
+                  if (_hint case final hint? when kDebugMode) Text(hint),
+                ],
+              ),
+            ),
       trailing: _restoring
           ? const SizedBox.square(
               dimension: 20,
@@ -2760,6 +2850,77 @@ class _RestorePurchasesSettingState extends State<RestorePurchasesSetting> {
             )
           : null,
       onTap: _restore,
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
     );
   }
 }
@@ -4935,23 +5096,31 @@ class _DashedEdge extends CustomPainter {
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart'
     show BuildContext, StatelessWidget, Widget;
-import 'package:flutter/widgets.dart' as state0;
+import 'package:flutter/widgets.dart' as state1;
 import 'package:flutter_bloc/flutter_bloc.dart'
     show BlocProvider, Cubit, MultiBlocProvider;
-import 'package:my_app/core/l10n/app_locale.dart' as state1;
-import 'package:my_app/core/purchases/app_purchases.dart' as state2;
+import 'package:my_app/core/l10n/app_locale.dart' as state2;
+import 'package:my_app/core/purchases/app_purchases.dart' as state3;
+import 'package:my_app/features/onboarding/onboarding_status.dart' as state0;
+
+/// Whether the user finished the onboarding; `onboardingStatus.complete()` and
+/// `restart()` change it.
+final class OnboardingCompletedCubit extends ListenableCubit<bool> {
+  /// Creates the cubit, with the value that the controller has.
+  OnboardingCompletedCubit() : super(state0.onboardingCompleted());
+}
 
 /// The language that the user chose, `null` to follow the device;
 /// `appLocale.choose()` changes it.
-final class LocalizationLocaleCubit extends ListenableCubit<state0.Locale?> {
+final class LocalizationLocaleCubit extends ListenableCubit<state1.Locale?> {
   /// Creates the cubit, with the value that the controller has.
-  LocalizationLocaleCubit() : super(state1.localizationLocaleListenable());
+  LocalizationLocaleCubit() : super(state2.localizationLocaleListenable());
 }
 
 /// The premium access of the user; the calls of `appPurchases` change it.
-final class PurchasesAccessCubit extends ListenableCubit<state2.AppAccess> {
+final class PurchasesAccessCubit extends ListenableCubit<state3.AppAccess> {
   /// Creates the cubit, with the value that the controller has.
-  PurchasesAccessCubit() : super(state2.purchasesAccessListenable());
+  PurchasesAccessCubit() : super(state3.purchasesAccessListenable());
 }
 
 /// Provides the cubits of the values that controllers of the app keep to
@@ -4967,6 +5136,7 @@ final class SharedStateCubits extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MultiBlocProvider(
     providers: [
+      BlocProvider(create: (_) => OnboardingCompletedCubit()),
       BlocProvider(create: (_) => LocalizationLocaleCubit()),
       BlocProvider(create: (_) => PurchasesAccessCubit()),
     ],

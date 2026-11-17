@@ -12,12 +12,18 @@ void main() {
         // The bundle of its brick.
         dependencies: {'mason'},
         // The app entry of the apps that the tests render, the router that
-        // renders the route of the module and asks its guard, and the
-        // provider of the localization role that gets its texts. None of
+        // renders the route of the module and asks its guard, the provider
+        // of the localization role that gets its texts, and the state
+        // manager that follows whether the onboarding is finished. None of
         // them tests with this module. The preferences of those apps have a
         // provider of the tests, so that the code of the module runs with
         // the Dart SDK alone.
-        testModules: {'smf_flutter_core', 'smf_gen_l10n', 'smf_go_router'},
+        testModules: {
+          'smf_bloc',
+          'smf_flutter_core',
+          'smf_gen_l10n',
+          'smf_go_router',
+        },
       ).problems(),
       isEmpty,
     );

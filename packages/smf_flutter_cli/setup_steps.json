@@ -150,6 +150,16 @@
       "neededBy": [
         "paywall"
       ]
+    },
+    {
+      "id": "sentry.dsn",
+      "title": "Create a Flutter project in Sentry and copy its DSN into .env",
+      "owner": "sentry",
+      "ownerKind": "module",
+      "ownerName": "sentry",
+      "neededBy": [
+        "sentry"
+      ]
     }
   ],
   "retired": []

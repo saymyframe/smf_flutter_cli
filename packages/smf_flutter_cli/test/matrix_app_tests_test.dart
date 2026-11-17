@@ -24,6 +24,21 @@ import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
 import 'package:test/test.dart';
 
+/// How a widget follows a bridge of a provider of the state management role
+/// of the tests, which reads it with a function of its own.
+final class _BridgesOfTest extends StateBridges {
+  const _BridgesOfTest();
+
+  @override
+  Fragment watch(SharedState entry, String child) => Fragment(
+        '($child)(bridges.read(bridges.${entry.name}Bridge))',
+        imports: const [
+          ImportRef.app('core/state/bridges_of_test.dart', prefix: 'bridges'),
+          ImportRef('package:flutter/widgets.dart', show: ['Widget']),
+        ],
+      );
+}
+
 /// A provider of the auth role for the test of the app test of the role,
 /// which applies to the apps with the role whichever module provides it: a
 /// service that has nobody signed in and takes no call.
@@ -526,9 +541,9 @@ void main() {
       'of the events role, of the preferences role, of the env role, of the '
       'auth role, of the notifications role, of the push role, of the '
       'purchases role, of the review role, of the settings screen role, of '
-      'the theme role, of the localization role and of the app entry role '
-      'with every provider of each, which they tell apart by the roles of the '
-      'app only', () {
+      'the theme role, of the localization role, of the app entry role and '
+      'of the state management role with every provider of each, which they '
+      'tell apart by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -547,6 +562,7 @@ void main() {
         appEntryRole,
         localizationRole,
         splashRole,
+        stateManagementRole,
       ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
@@ -599,6 +615,13 @@ void main() {
     expect(named('app_icon_role').roles, {appIconRole});
     // And the test of the provider of the app icon role.
     expect(named('launcher_icons').roles, isEmpty);
+    // The test of the bridges changes the values of the entries of the
+    // theme role, of the localization role and of the auth role through
+    // their controllers.
+    expect(
+      named('state_management_role').roles,
+      {stateManagementRole, themeRole, localizationRole, authRole},
+    );
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
   });
@@ -2000,6 +2023,7 @@ void main() {
         'event_bus with di',
         'shared_preferences with di',
         'firebase_crashlytics with di',
+        'sentry with di',
         'firebase_analytics with di, router',
         'firebase_analytics with di',
         _analyticsOff,
@@ -2172,10 +2196,13 @@ void main() {
       'the probe of Firebase Cloud Messaging asks the script of CI that '
       'starts the app for the answer firebase_messaging, a push message, '
       'that of RevenueCat for the answer revenuecat, premium access, and that '
-      'of Firebase Remote Config for the answer firebase_remote_config, a '
-      'value published in Remote Config, by the names with which the jobs '
-      'give the answers, and no other probe asks for one; the app gives the '
-      'verdict on each, since what each answer sends reaches the app', () {
+      'of Sentry for the answer sentry, the look-up of its event, and of '
+      'Firebase Remote Config for the answer firebase_remote_config, a value '
+      'published in Remote Config, by the names with which the jobs give '
+      'the answers, and no other probe asks for one; the app gives the '
+      'verdict on all but that of Sentry, since what each sends reaches the '
+      'app, and the exit code of the answer on that of Sentry, since only '
+      'Sentry sees what reached it', () {
     expect(
       {
         for (final test in appTests.tests)
@@ -2186,6 +2213,7 @@ void main() {
       {
         'firebase_messaging': ('firebase_messaging', MatrixAnswerVerdict.app),
         'revenuecat': ('revenuecat', MatrixAnswerVerdict.app),
+        'sentry': ('sentry', MatrixAnswerVerdict.exitCode),
         'firebase_remote_config': (
           'firebase_remote_config',
           MatrixAnswerVerdict.app,
@@ -2251,9 +2279,9 @@ void main() {
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
       'of Firebase Cloud Messaging, the purchases of the role and those of '
-      'RevenueCat, and a fetch of Firebase Remote Config, each a function of '
-      'a file of its tests that takes the one that waits until the screen '
-      'settles', () async {
+      'RevenueCat, Sentry, and a fetch of Firebase Remote Config, each a '
+      'function of a file of its tests that takes the one that waits until '
+      'the screen settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -2272,6 +2300,7 @@ void main() {
         'firebase_messaging': 'integration_test/firebase_messaging/probe.dart '
             'probeFirebaseMessaging',
         'revenuecat': 'integration_test/revenuecat/probe.dart probeRevenueCat',
+        'sentry': 'integration_test/sentry/probe.dart probeSentry',
         'onboarding': 'integration_test/onboarding/probe.dart probeOnboarding',
         'shared_preferences': 'integration_test/shared_preferences/probe.dart '
             'probeSharedPreferences',
@@ -2320,20 +2349,21 @@ void main() {
     // all of them, which the list of the probes names. That of the
     // onboarding comes before the walk of the routes: it finishes the
     // onboarding that a first launch shows, and the walk then goes through
-    // the routes of the app past it. Those of Firebase Authentication, of
-    // Google sign-in, of Firebase Cloud Messaging, of RevenueCat, of the
-    // notifications role, of local_notifications, of email_feedback, of the
-    // push role, of the purchases role and of the review role only read, so
-    // they hold wherever they come, and that of Firebase Remote Config
-    // activates nothing. Those of the review role and of Firebase Remote
-    // Config come before that of the REST role, whose worst case is the
-    // longest.
+    // the routes of the app past it. Those of Sentry, which sends an event
+    // of its own, of Firebase Authentication, of Google sign-in, of Firebase
+    // Cloud Messaging, of RevenueCat, of the notifications role, of
+    // local_notifications, of email_feedback, of the push role, of the
+    // purchases role and of the review role only read, so they hold wherever
+    // they come, and that of Firebase Remote Config activates nothing. Those
+    // of the review role and of Firebase Remote Config come before that of
+    // the REST role, whose worst case is the longest.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
       [for (final test in tests) p.basename(test.directory)],
       [
         'start',
+        'sentry',
         'firebase_auth',
         'google_sign_in',
         'firebase_messaging',
@@ -2388,47 +2418,49 @@ void main() {
     expect(
       [for (final import in index.imports) '${import.prefix}: ${import.uri}'],
       [
-        'probe0: firebase_auth/probe.dart',
-        'probe1: google_sign_in/probe.dart',
-        'probe2: firebase_messaging/probe.dart',
-        'probe3: revenuecat/probe.dart',
-        'probe4: onboarding/probe.dart',
-        'probe5: shared_preferences/probe.dart',
-        'probe6: local_notifications/probe.dart',
-        'probe7: email_feedback/probe.dart',
-        'probe8: di_role/probe.dart',
-        'probe9: preferences_role/probe.dart',
-        'probe10: notifications_role/probe.dart',
-        'probe11: push_role/probe.dart',
-        'probe12: purchases_role/probe.dart',
-        'probe13: router_walk/walk.dart',
-        'probe14: localization_role/probe.dart',
-        'probe15: flavors/probe.dart',
-        'probe16: review_role/probe.dart',
-        'probe17: firebase_remote_config/probe.dart',
-        'probe18: rest_role/probe.dart',
+        'probe0: sentry/probe.dart',
+        'probe1: firebase_auth/probe.dart',
+        'probe2: google_sign_in/probe.dart',
+        'probe3: firebase_messaging/probe.dart',
+        'probe4: revenuecat/probe.dart',
+        'probe5: onboarding/probe.dart',
+        'probe6: shared_preferences/probe.dart',
+        'probe7: local_notifications/probe.dart',
+        'probe8: email_feedback/probe.dart',
+        'probe9: di_role/probe.dart',
+        'probe10: preferences_role/probe.dart',
+        'probe11: notifications_role/probe.dart',
+        'probe12: push_role/probe.dart',
+        'probe13: purchases_role/probe.dart',
+        'probe14: router_walk/walk.dart',
+        'probe15: localization_role/probe.dart',
+        'probe16: flavors/probe.dart',
+        'probe17: review_role/probe.dart',
+        'probe18: firebase_remote_config/probe.dart',
+        'probe19: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
-      ('firebase_auth', 'probe0.probeFirebaseAuth'),
-      ('google_sign_in', 'probe1.probeGoogleSignIn'),
-      ('firebase_messaging', 'probe2.probeFirebaseMessaging'),
-      ('revenuecat', 'probe3.probeRevenueCat'),
-      ('onboarding', 'probe4.probeOnboarding'),
-      ('shared_preferences', 'probe5.probeSharedPreferences'),
-      ('local_notifications', 'probe6.probeLocalNotifications'),
-      ('email_feedback', 'probe7.probeEmailFeedback'),
-      ('di_role', 'probe8.probeServices'),
-      ('preferences_role', 'probe9.probePreferences'),
-      ('notifications_role', 'probe10.probeNotifications'),
-      ('push_role', 'probe11.probePush'),
-      ('purchases_role', 'probe12.probePurchases'),
-      ('router_walk', 'probe13.probeRoutes'),
-      ('localization_role', 'probe14.probeLanguages'),
-      ('flavors', 'probe15.probeFlavor'),
-      ('review_role', 'probe16.probeReview'),
-      ('firebase_remote_config', 'probe17.probeFirebaseRemoteConfig'),
-      ('rest_role', 'probe18.probeRest'),
+      ('sentry', 'probe0.probeSentry'),
+      ('firebase_auth', 'probe1.probeFirebaseAuth'),
+      ('google_sign_in', 'probe2.probeGoogleSignIn'),
+      ('firebase_messaging', 'probe3.probeFirebaseMessaging'),
+      ('revenuecat', 'probe4.probeRevenueCat'),
+      ('onboarding', 'probe5.probeOnboarding'),
+      ('shared_preferences', 'probe6.probeSharedPreferences'),
+      ('local_notifications', 'probe7.probeLocalNotifications'),
+      ('email_feedback', 'probe8.probeEmailFeedback'),
+      ('di_role', 'probe9.probeServices'),
+      ('preferences_role', 'probe10.probePreferences'),
+      ('notifications_role', 'probe11.probeNotifications'),
+      ('push_role', 'probe12.probePush'),
+      ('purchases_role', 'probe13.probePurchases'),
+      ('router_walk', 'probe14.probeRoutes'),
+      ('localization_role', 'probe15.probeLanguages'),
+      ('flavors', 'probe16.probeFlavor'),
+      ('review_role', 'probe17.probeReview'),
+      ('firebase_remote_config', 'probe18.probeFirebaseRemoteConfig'),
+      ('rest_role', 'probe19.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -4278,6 +4310,58 @@ void main() {
     expect(moduleTest.roles, isEmpty, reason: 'It tests one provider.');
     expect(moduleTest.mocks, isNull, reason: 'dio has no platform side.');
     expect(moduleTest.startProbe, isNull);
+  });
+
+  test(
+      'the test of sentry runs in the apps with the module, with the mocks '
+      'that keep the events of Sentry, the default flavor, which is the '
+      'environment of the events under flutter test, a DSN that reaches no '
+      'server in the apps with a DI container and none in the others, and the '
+      'probe whose answer has its exit code for the verdict', () {
+    final test = named('sentry');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      ['sentry with di', 'sentry', ..._everyModule],
+    );
+    expect(test.roles, isEmpty, reason: 'It tests one provider.');
+    expect(
+      (test.mocks?.path, test.mocks?.function),
+      ('test/sentry_mocks.dart', 'mockSentry'),
+    );
+    expect(
+      (
+        test.startProbe?.path,
+        test.startProbe?.function,
+        test.startProbe?.answer,
+        test.startProbe?.verdict,
+      ),
+      (
+        'integration_test/sentry/probe.dart',
+        'probeSentry',
+        'sentry',
+        MatrixAnswerVerdict.exitCode,
+      ),
+    );
+    final byName = {
+      for (final app in apps.where(test.appliesTo)) app.name: app,
+    };
+    expect(test.values!(byName['sentry']!), {
+      'default_flavor': AppEntryRole.defaultFlavor.name,
+    });
+    const dsn = 'https://0123456789abcdef0123456789abcdef@o1.ingest.sentry'
+        '.invalid/1';
+    for (final withDsn in ['sentry with di', 'every module (bloc)']) {
+      expect(
+        test.envValues!(byName[withDsn]!),
+        {'SENTRY_DSN': dsn},
+        reason: withDsn,
+      );
+    }
+    expect(test.envValues!(byName['sentry']!), {'SENTRY_DSN': ''});
   });
 
   test(
@@ -6260,10 +6344,10 @@ void main() {
       expect(test.startProbe, isNull);
       // The matrix of the CLI runs it in the apps whose roles and modules give
       // the role keys: those of dio, whose role gives the key of its address,
-      // of revenuecat and of the paywall, whose tests give the keys values in
-      // .env, those of in_app_review, whose role gives the key of the App
-      // Store ID, those of email_feedback, whose test gives the key of its
-      // address a value, and those with every module.
+      // of revenuecat, of the paywall and of sentry, whose tests give the keys
+      // values in .env, those of in_app_review, whose role gives the key of
+      // the App Store ID, those of email_feedback, whose test gives the key of
+      // its address a value, and those with every module.
       expect(
         [
           for (final app in apps)
@@ -6283,6 +6367,8 @@ void main() {
           ..._paywall,
           ..._inAppReview,
           ..._emailFeedback,
+          'sentry with di',
+          'sentry',
           ..._everyModule,
         ],
       );
@@ -6373,6 +6459,306 @@ void main() {
       expect(
         p.posix.dirname(envKeysFile),
         p.posix.dirname('test/env_role/env_role_test.dart'),
+      );
+    });
+  });
+
+  group('the test of the state management role', () {
+    const counter = SharedState(
+      'counterValue',
+      listenable: FunctionRef(
+        'counterValueListenable',
+        import: ImportRef.app('features/counter/counter.dart'),
+      ),
+      type: TypeRef('int'),
+      description: 'The value of the counter.',
+    );
+
+    /// An app with [roles] and the data of the state management role:
+    /// [entries], each with its owner, and the bridges of a provider of the
+    /// tests.
+    MatrixApp appWith(
+      Set<Role> roles, {
+      List<(ContributionOrigin, SharedState)> entries = const [],
+    }) =>
+        MatrixApp(
+          'state',
+          const [ModuleId('counter')],
+          hook: RoleHookRequest(
+            data: [
+              stateManagementRole
+                  .data(const _BridgesOfTest())
+                  .withOrigin(const ModuleOrigin(ModuleId('state_kit'))),
+              for (final (owner, entry) in entries)
+                stateManagementRole.data(entry).withOrigin(owner),
+            ],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    const theme = RoleTemplateOrigin(themeRole);
+    const localization = RoleTemplateOrigin(localizationRole);
+    const auth = RoleTemplateOrigin(authRole);
+    const purchases = RoleTemplateOrigin(purchasesRole);
+    const counterModule = ModuleOrigin(ModuleId('counter'));
+    // The watcher of the counter, which the provider of the tests gives for
+    // the code of a widget that the test of the role passes it.
+    const child = '((Object? value) => _shown(seen, value))';
+    const watcherOfCounter = '$child(bridges.read(bridges.counterValueBridge))';
+    final withEntries = appWith(
+      {stateManagementRole, themeRole, localizationRole, authRole},
+      entries: [
+        (counterModule, counter),
+        (theme, ThemeRole.modeState),
+        (localization, LocalizationRole.localeState),
+        (auth, AuthRole.sessionState),
+        (purchases, PurchasesRole.accessState),
+      ],
+    );
+
+    test(
+        'applies to the apps whose modules and roles give the role entries, '
+        'whichever modules provide the roles, and has neither mocks nor a '
+        'probe', () async {
+      final test = await stateManagementRoleAppTest();
+
+      expect(p.basename(test.directory), 'state_management_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(
+        test.roles,
+        {stateManagementRole, themeRole, localizationRole, authRole},
+      );
+      expect(test.appliesTo(withEntries), isTrue);
+      expect(
+        test.appliesTo(
+          appWith({stateManagementRole}, entries: [(counterModule, counter)]),
+        ),
+        isTrue,
+      );
+      // A state manager without entries renders no bridge, and an entry
+      // applies only where the state manager is.
+      expect(test.appliesTo(appWith({stateManagementRole})), isFalse);
+      expect(
+        test.appliesTo(appWith(const {}, entries: [(counterModule, counter)])),
+        isFalse,
+      );
+      // The bridges are Dart, and the start of an app on a device builds the
+      // root wrappers of its provider already.
+      expect(test.envValues, isNull);
+      expect(test.values, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps with a state manager and a
+      // value of a controller: those of the sign-in, with the session, those
+      // of the paywall, with the premium access, and those with every
+      // module.
+      expect(
+        [
+          for (final app in apps)
+            if (named('state_management_role').appliesTo(app)) app.name,
+        ],
+        [..._signIn, ..._paywall, ..._everyModule],
+      );
+    });
+
+    test(
+        'gets the entries of the app, each with its function and the watcher '
+        'that the provider of the role gives, in the order of the role, and '
+        'the changes of the values of the roles of the app through their '
+        'controllers, and what puts them back', () async {
+      final test = await stateManagementRoleAppTest();
+
+      final files = test.generatedFiles!(withEntries, 'my_app');
+
+      expect(files.keys, [stateBridgesFile]);
+      final text = files[stateBridgesFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(stateBridgesFile, text);
+      expect(errors, isEmpty);
+      // The library of each function and of each controller once, with a
+      // prefix of its own, those of the code of the watchers as the
+      // provider gives them, and ThemeMode for the changes of the theme.
+      String directive(IndexedImport import) => [
+            import.uri,
+            if (import.prefix case final prefix?) 'as $prefix',
+            if (import.show.isNotEmpty) 'show ${import.show.join(', ')}',
+          ].join(' ');
+      expect(
+        [for (final import in index.imports) directive(import)],
+        [
+          'package:flutter/foundation.dart show ValueListenable',
+          'package:flutter/material.dart show ThemeMode',
+          'package:flutter/widgets.dart show SizedBox, Widget',
+          'package:my_app/core/auth/app_session.dart as entry3',
+          'package:my_app/core/l10n/app_locale.dart as entry2',
+          'package:my_app/core/purchases/app_purchases.dart as entry4',
+          'package:my_app/core/state/bridges_of_test.dart as bridges',
+          'package:my_app/core/theme/theme_mode.dart as entry1',
+          'package:my_app/features/counter/counter.dart as entry0',
+        ],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        [
+          'BridgeEntry',
+          'bridgeEntries',
+          'BridgeChange',
+          'bridgeChanges',
+          'bridgeRestores',
+          '_shown',
+        ],
+      );
+      expect(
+        text,
+        contains(
+          'final List<BridgeEntry> bridgeEntries = [\n'
+          '  (\n'
+          "    name: 'counterValue',\n"
+          '    listenable: entry0.counterValueListenable,\n'
+          '    watch: (seen) =>\n'
+          '        $watcherOfCounter,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'themeMode',\n"
+          '    listenable: entry1.themeModeListenable,\n',
+        ),
+      );
+      expect(
+        [
+          for (final entry in RegExp(r"^    name: '(\w+)',$", multiLine: true)
+              .allMatches(text))
+            entry[1],
+        ],
+        [
+          'counterValue',
+          'themeMode',
+          'localizationLocale',
+          'authSession',
+          'purchasesAccess',
+        ],
+      );
+      // The theme mode, the language and the session change through their
+      // controllers, each to a value other than the one before; the premium
+      // access and the value of a module do not.
+      expect(
+        text,
+        contains(
+          'final List<BridgeChange> bridgeChanges = [\n'
+          '  (\n'
+          "    entry: 'themeMode',\n"
+          "    what: 'choosing the dark theme mode',\n"
+          '    change: () => entry1.appThemeMode.choose(ThemeMode.dark),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'themeMode',\n"
+          "    what: 'choosing the light theme mode',\n"
+          '    change: () => entry1.appThemeMode.choose(ThemeMode.light),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'localizationLocale',\n"
+          "    what: 'choosing the last language of the app',\n"
+          '    change: () => entry2.appLocale.choose(entry2.appLocales.last),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'localizationLocale',\n"
+          "    what: 'following the languages of the device again',\n"
+          '    change: () => entry2.appLocale.choose(null),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'authSession',\n"
+          "    what: 'signing a new account up',\n"
+          '    change: () => entry3.appSession.signUp(\n'
+          "      email: 'state-bridges@state-management-tests.example.com',\n"
+          "      password: 'State-bridges-2468',\n"
+          '    ),\n'
+          '  ),\n'
+          '];\n',
+        ),
+      );
+      // When the test ends, it puts back the theme mode of the device and
+      // the languages of the device; nothing takes the new account away.
+      expect(
+        text,
+        contains(
+          'final List<Future<void> Function()> bridgeRestores = [\n'
+          '  () => entry1.appThemeMode.choose(ThemeMode.system),\n'
+          '  () => entry2.appLocale.choose(null),\n'
+          '];\n',
+        ),
+      );
+      // The changes call the controllers in the files of the roles, the
+      // same files as the functions of their entries.
+      expect(
+        [
+          for (final file in [
+            ThemeRole.themeModeFile,
+            LocalizationRole.appLocaleFile,
+            AuthRole.sessionFile,
+          ])
+            file.substring('lib/'.length),
+        ],
+        [
+          ThemeRole.modeState.listenable.import.uri,
+          LocalizationRole.localeState.listenable.import.uri,
+          AuthRole.sessionState.listenable.import.uri,
+        ],
+      );
+
+      // An app whose entries have no change has an empty list, which is a
+      // constant, and imports nothing for the changes.
+      final without = test.generatedFiles!(
+        appWith(
+          {stateManagementRole},
+          entries: [
+            (counterModule, counter),
+            (purchases, PurchasesRole.accessState),
+          ],
+        ),
+        'my_app',
+      )[stateBridgesFile]!;
+      expect(DartFileIndexer.parse(stateBridgesFile, without).errors, isEmpty);
+      expect(
+        without,
+        contains('const List<BridgeChange> bridgeChanges = [];\n'),
+      );
+      expect(
+        without,
+        contains(
+          'const List<Future<void> Function()> bridgeRestores = [];\n',
+        ),
+      );
+      expect(without, isNot(contains('material.dart')));
+
+      // The test imports the file that the matrix writes next to it, and of
+      // the files of the app only the one with main(), which every app has.
+      final testFile = File(
+        p.join(
+          test.directory,
+          'test',
+          'state_management_role',
+          'state_bridges_test.dart',
+        ),
+      );
+      final parsed = DartFileIndexer.parse(
+        'test/state_management_role/state_bridges_test.dart',
+        testFile.readAsStringSync(),
+      );
+      expect(parsed.errors, isEmpty);
+      expect(
+        [for (final import in parsed.index.imports) import.uri],
+        [
+          'package:flutter/foundation.dart',
+          'package:flutter/widgets.dart',
+          'package:flutter_test/flutter_test.dart',
+          'package:{{app_name}}/main.dart',
+          'of_app.dart',
+        ],
+      );
+      expect(AppEntryRole.mainFile, 'lib/main.dart');
+      expect(p.posix.basename(stateBridgesFile), 'of_app.dart');
+      expect(
+        p.posix.dirname(stateBridgesFile),
+        'test/state_management_role',
       );
     });
   });
