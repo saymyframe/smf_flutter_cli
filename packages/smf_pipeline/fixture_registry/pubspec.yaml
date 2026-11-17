@@ -105,6 +105,9 @@ dependencies:
   # The sign-in of the CLI, for its app test in the app of several
   # providers, whose other tests its mocks sign an account up for.
   smf_sign_in: ^0.7.0
+  # The screen "Update required" of the CLI, for its app test in the app of
+  # several providers, with remote config and the reviews of the CLI there.
+  smf_update_required: ^0.8.0
 
 dev_dependencies:
   analyzer: ^14.4.0

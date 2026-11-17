@@ -33,6 +33,7 @@ import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
+import 'package:smf_update_required/smf_update_required.dart';
 
 /// The modules that `smf create` offers.
 ///
@@ -91,6 +92,7 @@ const List<SmfModule> smfModules = [
   InAppReviewModule(),
   EmailFeedbackModule(),
   FirebaseRemoteConfigModule(),
+  UpdateRequiredModule(),
   DartDefineModule(),
   // What tells how it runs.
   FirebaseCrashlyticsModule(),

@@ -425,6 +425,13 @@ List<String> _paywallWith(
 /// and the localization. The module requires the env role, so each has it.
 const List<String> _emailFeedback = [_efAll, _efSettings, _efL10n, _ef];
 
+/// The apps of update_required, with the localization, which the module
+/// uses, and without it. Each has the router, remote config and the reviews,
+/// which the module requires, and so the preferences and the values of .env,
+/// which the review role requires.
+const _urL10n = 'update_required with localization';
+const _ur = 'update_required';
+
 /// The app of email_feedback alone, and its apps with the roles that its
 /// role uses.
 const _ef = 'email_feedback';
@@ -572,6 +579,8 @@ void main() {
     );
     expect(named('screen_views').roles, contains(routerRole));
     expect(named('onboarding').roles, {routerRole});
+    // The router shows the screen of update_required and leaves it.
+    expect(named('update_required').roles, {routerRole});
     expect(named('sign_in').roles, {routerRole});
     // The onboarding shows the step of the paywall and goes on once the
     // paywall that it shows closes, and the router leaves that paywall over
@@ -1395,6 +1404,10 @@ void main() {
         // The apps of email_feedback with the localization.
         _efAll,
         _efL10n,
+        // The apps of update_required, whose review role requires the
+        // preferences.
+        _urL10n,
+        _ur,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1536,6 +1549,9 @@ void main() {
         // sheet have texts.
         _efAll,
         _efL10n,
+        // The app of update_required with the localization, whose screen has
+        // texts.
+        _urL10n,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1579,6 +1595,7 @@ void main() {
         for (final app in [_iarAll, _iarRouterL10n, _iarL10n])
           app: ['en', 'uk'],
         for (final app in [_efAll, _efL10n]) app: ['en', 'uk'],
+        _urL10n: ['en', 'uk'],
         for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
@@ -2289,9 +2306,10 @@ void main() {
       'permission of the notifications role and the channel of '
       'local_notifications, the push messages of the role and the address '
       'of Firebase Cloud Messaging, the purchases of the role and those of '
-      'RevenueCat, Sentry, PostHog, and a fetch of Firebase Remote Config, '
-      'each a function of a file of its tests that takes the one that waits '
-      'until the screen settles', () async {
+      'RevenueCat, Sentry, PostHog, a fetch of Firebase Remote Config, and '
+      'the version that update_required reads, each a function of a file of '
+      'its tests that takes the one that waits until the screen '
+      'settles', () async {
     expect(named('start').readsStartProbes, isTrue);
     expect(
       {
@@ -2334,6 +2352,8 @@ void main() {
         'firebase_remote_config':
             'integration_test/firebase_remote_config/probe.dart '
                 'probeFirebaseRemoteConfig',
+        'update_required':
+            'integration_test/update_required/probe.dart probeUpdateRequired',
       },
     );
     for (final test in appTests.tests) {
@@ -2366,9 +2386,11 @@ void main() {
     // RevenueCat, of the notifications role, of local_notifications, of
     // email_feedback, of the push role, of the purchases role and of the
     // review role only read, so they hold wherever they come, and that of
-    // Firebase Remote Config activates nothing. Those of the review role and
-    // of Firebase Remote Config come before that of the REST role, whose
-    // worst case is the longest.
+    // Firebase Remote Config activates nothing. So does that of
+    // update_required, which reads the version of the app and whether it may
+    // run. Those of the review role, of Firebase Remote Config and of
+    // update_required come before that of the REST role, whose worst case is
+    // the longest.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -2395,6 +2417,7 @@ void main() {
         'flavors',
         'review_role',
         'firebase_remote_config',
+        'update_required',
         'rest_role',
       ],
     );
@@ -2451,7 +2474,8 @@ void main() {
         'probe17: flavors/probe.dart',
         'probe18: review_role/probe.dart',
         'probe19: firebase_remote_config/probe.dart',
-        'probe20: rest_role/probe.dart',
+        'probe20: update_required/probe.dart',
+        'probe21: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
@@ -2475,7 +2499,8 @@ void main() {
       ('flavors', 'probe17.probeFlavor'),
       ('review_role', 'probe18.probeReview'),
       ('firebase_remote_config', 'probe19.probeFirebaseRemoteConfig'),
-      ('rest_role', 'probe20.probeRest'),
+      ('update_required', 'probe20.probeUpdateRequired'),
+      ('rest_role', 'probe21.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -2583,6 +2608,138 @@ void main() {
         reason: app.name,
       );
     }
+  });
+
+  test(
+      'the test of update_required applies to the apps with the module, '
+      'whatever else they have, declares the mocks that give the version of '
+      'the app for the tests of every module of those apps, has a probe for '
+      'the start check, and gets the screen that the app starts on, the '
+      'texts of the module in each language of the app, the parameter of '
+      'remote config and the key of the App Store ID', () {
+    final test = named('update_required');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [
+        'update_required with localization',
+        'update_required',
+        ..._everyModule,
+      ],
+    );
+    expect(test.devDependencies, isEmpty);
+    expect(test.values, isNull);
+    expect(test.envValues, isNull);
+    expect(test.mocks!.path, 'test/update_required_mocks.dart');
+    expect(test.mocks!.function, 'mockUpdateRequired');
+    expect(
+      test.startProbe!.path,
+      'integration_test/update_required/probe.dart',
+    );
+    expect(test.startProbe!.function, 'probeUpdateRequired');
+    expect(test.startProbe!.answer, isNull);
+    final mocks = DartFileIndexer.parse(
+      test.mocks!.path,
+      File(p.joinAll([test.directory, ...test.mocks!.path.split('/')]))
+          .readAsStringSync(),
+    );
+    expect(mocks.errors, isEmpty);
+    final function = mocks.index.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(
+      [
+        for (final parameter in function.parameters)
+          if (parameter.kind.name.startsWith('required')) parameter.name,
+      ],
+      isEmpty,
+    );
+    // The tests give the remote config role and the review role services of
+    // their own, which run in every app that this test runs in.
+    for (final app in apps.where(test.appliesTo)) {
+      expect(
+        app.hook!.presentRoles,
+        containsAll([remoteConfigRole, reviewRole, routerRole]),
+        reason: app.name,
+      );
+    }
+
+    final screens = <String, String>{};
+    final languages = <String, List<String>>{};
+    for (final app in apps.where(test.appliesTo)) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [updateRequiredOfAppFile], reason: app.name);
+      final text = files[updateRequiredOfAppFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(updateRequiredOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        [
+          'startScreen',
+          'updateRequiredTexts',
+          'minimumParameter',
+          'appStoreIdKey',
+        ],
+        reason: app.name,
+      );
+      expect(
+        text,
+        contains(
+          "const String minimumParameter = 'update_required_minimum_version';",
+        ),
+      );
+      expect(
+        text,
+        contains("const String appStoreIdKey = 'REVIEW_APP_STORE_ID';"),
+      );
+      final import = index.imports.single;
+      expect(import.prefix, 'screen', reason: app.name);
+      screens[app.name] = '${import.uri}: '
+          '${RegExp(r'const Type startScreen = (\S+);').firstMatch(text)![1]}';
+      languages[app.name] = RegExp(r"^  '([a-z]+)': \{$", multiLine: true)
+          .allMatches(text)
+          .map((match) => match[1]!)
+          .toList();
+    }
+    expect(screens, {
+      // No route of the module can start the app.
+      for (final name in [
+        'update_required with localization',
+        'update_required',
+      ])
+        name: 'package:my_app/core/app/fallback_start_screen.dart: '
+            'screen.FallbackStartScreen',
+      // The start screen of home.
+      for (final name in _everyModule)
+        name: 'package:my_app/features/home/home_screen.dart: '
+            'screen.HomeScreen',
+    });
+    expect(languages, {
+      'update_required with localization': ['en', 'uk'],
+      'update_required': ['en'],
+      for (final app in _everyModule) app: ['en', 'uk'],
+    });
+    final english = test.generatedFiles!(
+      apps.singleWhere((app) => app.name == 'update_required'),
+      'my_app',
+    )[updateRequiredOfAppFile]!;
+    expect(
+      english,
+      contains(
+        "  'en': {\n"
+        "    'title': 'Update required',\n"
+        "    'body': 'This version of the app is no longer supported. Update "
+        "the app to keep using it.',\n"
+        "    'update': 'Update',\n"
+        "    'later': 'Not now',\n"
+        "    'storeFailed': 'Couldn\\'t open the store.',\n"
+        '  },\n',
+      ),
+    );
   });
 
   test(
@@ -4796,8 +4953,9 @@ void main() {
     }
     expect(read, {'app_name', ...test.values!(appWith(reviewRole)).keys});
     // The matrix of the CLI runs it in every app with the role, which
-    // in_app_review provides there: the apps of the module and the apps with
-    // every module.
+    // in_app_review provides there: the apps of the module, the apps of
+    // update_required, which requires the role, and the apps with every
+    // module.
     final registered = named('review_role');
     expect(registered.roles, test.roles);
     expect(registered.startProbe!.path, test.startProbe!.path);
@@ -4806,7 +4964,7 @@ void main() {
         for (final app in apps)
           if (registered.appliesTo(app)) app.name,
       ],
-      [..._inAppReview, ..._everyModule],
+      [..._inAppReview, _urL10n, _ur, ..._everyModule],
     );
 
     // As the fixtures take it, only in the apps with every module.
@@ -6474,6 +6632,8 @@ void main() {
           ..._paywall,
           ..._inAppReview,
           ..._emailFeedback,
+          _urL10n,
+          _ur,
           'sentry with di',
           'sentry',
           'posthog with di, router',
@@ -6947,8 +7107,8 @@ void main() {
     test(
         'applies to the apps with the role, with parameters and without, '
         'whichever module provides it, or to those of them that it is given: '
-        'in the CLI, the app of firebase_remote_config and the apps with '
-        'every module', () async {
+        'in the CLI, the app of firebase_remote_config, the apps of '
+        'update_required and the apps with every module', () async {
       final test = await remoteConfigRoleAppTest();
 
       expect(p.basename(test.directory), 'remote_config_role');
@@ -6970,7 +7130,7 @@ void main() {
           for (final app in apps)
             if (test.appliesTo(app)) app.name,
         ],
-        ['firebase_remote_config', ..._everyModule],
+        ['firebase_remote_config', _urL10n, _ur, ..._everyModule],
       );
       expect(named('remote_config_role').directory, test.directory);
       for (final app in apps) {
@@ -7543,7 +7703,7 @@ void main() {
         for (final app in apps)
           if (test.appliesTo(app)) app.name,
       ],
-      [..._inAppReview, ..._everyModule],
+      [..._inAppReview, _urL10n, _ur, ..._everyModule],
     );
     // It tests what only this provider of the review role does, so it names
     // no role: the tests of the role check what every provider keeps to.
@@ -7758,7 +7918,7 @@ void main() {
         for (final app in apps)
           if (test.appliesTo(app)) app.name,
       ],
-      ['firebase_remote_config', ..._everyModule],
+      ['firebase_remote_config', _urL10n, _ur, ..._everyModule],
     );
     // It tests what only this provider of the remote config role does, so
     // it names no role: the test of the role checks what every provider

@@ -55,6 +55,7 @@ import 'package:smf_sentry/smf_sentry.dart';
 import 'package:smf_settings/smf_settings.dart';
 import 'package:smf_shared_preferences/smf_shared_preferences.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
+import 'package:smf_update_required/smf_update_required.dart';
 
 /// Every fixture module, with a fake DI container of all capabilities, or
 /// of [diCapabilities] if set, and the real modules: flutter_core, which
@@ -257,6 +258,10 @@ List<ModuleId> everyFixture({
 /// comes Firebase Remote Config, the provider of the remote config role that
 /// the CLI has, for the app test that it keeps and for the test of that role
 /// that the CLI keeps, which run there next to the other Firebase modules.
+/// Then comes update_required, the screen "Update required" of the CLI, for
+/// the app test that it keeps, whose guard of the routes comes after that of
+/// the onboarding there, and whose parameter of remote config the tests of
+/// that role and of Firebase Remote Config read there too.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -310,5 +315,6 @@ List<SmfModule> severalProvidersModules() => const [
       InAppReviewModule(),
       EmailFeedbackModule(),
       FirebaseRemoteConfigModule(),
+      UpdateRequiredModule(),
       LauncherIconsModule(),
     ];

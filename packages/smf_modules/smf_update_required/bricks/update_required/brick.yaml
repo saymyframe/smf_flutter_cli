@@ -1,0 +1,14 @@
+name: update_required
+description: "The screen \"Update required\" of an SMF app: the comparison of versions, the state of the gate, which follows the lowest version that may run in remote config, and the screen that takes the place of the app below it."
+
+# A brick of the SMF module model. Its files are relative to the root of the
+# generated app. The pipeline renders it with app_name, org_name, the
+# has_<role> flags, the rendered sockets of its tags, and the variables of
+# the module: app_symbol, the symbol of the app in its cell as a Dart string,
+# app_number, the number in that cell, app_store_id_key, the key of .env with
+# the App Store ID of the app, which the review role reads, and text_<name>
+# for each text of the module, the code that reads it.
+version: 0.1.0+1
+
+environment:
+  mason: ^0.1.1
