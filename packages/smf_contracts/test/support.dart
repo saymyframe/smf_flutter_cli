@@ -7,6 +7,7 @@ final class TestRole<D extends Object> extends Role<D> {
     this.cardinality = RoleCardinality.atMostOne,
     Set<Role> requires = const {},
     Set<Role> uses = const {},
+    Set<Role> feeds = const {},
     this.sockets = const [],
     this.options = const [],
     this.template,
@@ -14,7 +15,8 @@ final class TestRole<D extends Object> extends Role<D> {
     this.structuralRules = const [],
     this.openToAllModules = false,
   })  : _requires = requires,
-        _uses = uses;
+        _uses = uses,
+        _feeds = feeds;
 
   @override
   final String id;
@@ -30,12 +32,16 @@ final class TestRole<D extends Object> extends Role<D> {
 
   final Set<Role> _requires;
   final Set<Role> _uses;
+  final Set<Role> _feeds;
 
   @override
   Set<Role> get requires => _requires;
 
   @override
   Set<Role> get uses => _uses;
+
+  @override
+  Set<Role> get feeds => _feeds;
 
   @override
   final List<SocketRef> sockets;

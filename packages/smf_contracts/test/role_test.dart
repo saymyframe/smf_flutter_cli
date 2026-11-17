@@ -73,6 +73,7 @@ void main() {
     test('a role has no relations, sockets, options, template or rules', () {
       expect(role.requires, isEmpty);
       expect(role.uses, isEmpty);
+      expect(role.feeds, isEmpty);
       expect(role.visibleRoles, isEmpty);
       expect(role.sockets, isEmpty);
       expect(role.socketFamilies, isEmpty);
@@ -207,6 +208,26 @@ void main() {
           ),
         ),
       );
+    });
+
+    test(
+        'lets a role read neither the data nor the presence of a role that it '
+        'feeds', () {
+      final feeder = TestRole<NoDsl>('feeder', feeds: {hidden});
+      final input = feeder.hookInput(request);
+
+      expect(feeder.visibleRoles, isEmpty);
+      expect(
+        () => hidden.dataIn(input),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message,
+            'message',
+            contains('feeder role neither requires nor uses the hidden role'),
+          ),
+        ),
+      );
+      expect(() => input.has(hidden), throwsArgumentError);
     });
 
     test('lets a role check the presence of roles it requires or uses', () {

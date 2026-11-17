@@ -6,7 +6,8 @@ part of '../role.dart';
 /// The pipeline treats the template as a pseudo-module named `role:<id>`
 /// (see [RoleTemplateOrigin]). It may put code into the sockets of its own
 /// role, of the roles its role requires or uses, and of the roles open to
-/// all modules (see [Role.openToAllModules]). Its hooks run at these stages
+/// all modules (see [Role.openToAllModules]), and give data alone to the
+/// roles its role feeds (see [Role.feeds]). Its hooks run at these stages
 /// of generation:
 /// 1. [contribute], while contributions are collected;
 /// 2. [validate] and [manualSteps], during validation;
