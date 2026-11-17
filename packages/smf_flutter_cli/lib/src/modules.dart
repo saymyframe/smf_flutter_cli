@@ -17,6 +17,7 @@ import 'package:smf_github_actions/smf_github_actions.dart';
 import 'package:smf_go_router/smf_go_router.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
+import 'package:smf_in_app_review/smf_in_app_review.dart';
 import 'package:smf_launcher_icons/smf_launcher_icons.dart';
 import 'package:smf_local_notifications/smf_local_notifications.dart';
 import 'package:smf_material_theme/smf_material_theme.dart';
@@ -83,6 +84,7 @@ const List<SmfModule> smfModules = [
   DioModule(),
   RevenueCatModule(),
   PaywallModule(),
+  InAppReviewModule(),
   DartDefineModule(),
   // What tells how it runs.
   FirebaseCrashlyticsModule(),
