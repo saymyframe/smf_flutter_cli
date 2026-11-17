@@ -37,13 +37,13 @@ import 'setting.dart';
 /// keeps the words around it together: a line that starts between two of
 /// them starts inside a word.
 final RegExp _joined = RegExp(
-  r'[\p{L}\p{M}\p{N}   ]',
+  r'[\p{L}\p{M}\p{N}\u00A0\u2007\u202F]',
   unicode: true,
 );
 
 /// A white space between two words, where a line may break: every one but a
 /// no-break space.
-final RegExp _space = RegExp(r'[^\S   ]');
+final RegExp _space = RegExp(r'[^\S\u00A0\u2007\u202F]');
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
