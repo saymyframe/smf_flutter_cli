@@ -55,15 +55,20 @@ Future<ContractResult> _resultOf(List<ModuleId> modules) async {
 }
 
 /// The widgets that this module puts around the root widget of the app of
-/// [result], from the outermost, each as the code that opens it: its
+/// [result], from the outermost, each as the fragment that opens it: its
 /// contributions to the root wrappers of the app entry, which the provider
 /// of the app entry renders around the root widget, whichever module it is.
-List<String> _ownRootWrappersOf(ContractResult result) => [
+List<Fragment> _ownRootFragmentsOf(ContractResult result) => [
       for (final collected in result
               .app!.socketOrders[AppEntryRole.rootWrappers]?.contributions ??
           const <Collected>[])
         if (collected.origin == const ModuleOrigin(BlocModule.id))
-          (collected.contribution as SocketContribution).fragment!.code,
+          (collected.contribution as SocketContribution).fragment!,
+    ];
+
+/// The code that opens each widget of [_ownRootFragmentsOf].
+List<String> _ownRootWrappersOf(ContractResult result) => [
+      for (final fragment in _ownRootFragmentsOf(result)) fragment.code,
     ];
 
 void main() {
@@ -245,8 +250,47 @@ void main() {
       );
     });
 
-    test('provides the cubits around the root widget of the app', () {
+    test(
+        'provides the cubits around the root widget of the app, through an '
+        'import of the widget alone', () {
       expect(_ownRootWrappersOf(result), ['SharedStateCubits(child: ']);
+      final directive = "import 'package:my_app/${_bridges.substring(4)}' "
+          'show SharedStateCubits;';
+      expect(
+        [
+          for (final fragment in _ownRootFragmentsOf(result))
+            for (final import in fragment.imports) import.toDirective('my_app'),
+        ],
+        [directive],
+        reason: 'The root of the app has the wrappers of other modules, so '
+            'the import takes no other name of the file of the cubits, such '
+            'as a cubit, into the file of the root.',
+      );
+    });
+
+    test(
+        'names in its second note only what an app without the theme has: '
+        'the cubit of its first value, and no value that it lacks', () async {
+      final languages = (await _resultOf(const [
+        BlocModule.id,
+        GenL10nModule.id,
+        SharedPreferencesModule.id,
+      ]))
+          .app!;
+      final notes = [
+        for (final (from, _, note)
+            in languages.entriesOf(AppEntryRole.agentSections))
+          if (from == const ModuleOrigin(BlocModule.id)) note.text,
+      ];
+
+      expect(notes, hasLength(2));
+      expect(_codeOf(notes.last), contains('LocalizationLocaleCubit'));
+      expect(
+        notes.last,
+        isNot(contains('theme')),
+        reason: 'The note is in every app whose controllers keep values, '
+            'also in one without the theme role.',
+      );
     });
 
     test(

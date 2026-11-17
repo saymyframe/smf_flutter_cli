@@ -29,5 +29,5 @@ With `flutter_bloc`:
 /// entry and the code of a variant for this module use, and the files,
 /// which every app with the note has.
 String bridgesAgentNote(String example) => '''
-- The values that controllers of the app keep, such as the theme mode, have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `$example`, which `SharedStateCubits` provides around the root widget in `${AppEntryRole.mainFile}`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `$example`, which `SharedStateCubits` provides around the root widget in `${AppEntryRole.mainFile}`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
 ''';

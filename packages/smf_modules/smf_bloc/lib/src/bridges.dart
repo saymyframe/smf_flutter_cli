@@ -6,12 +6,17 @@ import 'package:smf_contracts/smf_contracts.dart';
 /// which the module generates in an app with such values.
 const bridgesFile = 'lib/core/state/shared_state_cubits.dart';
 
-/// The import of [bridgesFile].
-const _bridgesImport = ImportRef.app('core/state/shared_state_cubits.dart');
-
 /// The name of the widget of [bridgesFile] that provides the cubits around
 /// the root of the app.
 const providerWidget = 'SharedStateCubits';
+
+/// The import of [providerWidget] alone, for the file of the root of the
+/// app, which has the wrappers of other modules too: no other name of
+/// [bridgesFile] reaches that file, where it could clash with one of them.
+const _bridgesImport = ImportRef.app(
+  'core/state/shared_state_cubits.dart',
+  show: [providerWidget],
+);
 
 /// The name of the cubit that follows the value of [entry]: its name in
 /// UpperCamelCase with `Cubit`, such as `ThemeModeCubit` for `themeMode`.
