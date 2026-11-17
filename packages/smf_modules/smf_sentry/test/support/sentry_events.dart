@@ -39,6 +39,51 @@ const _placeholder = '<the token>';
 /// writes the id of an event and as the check of the app writes its nonce.
 final _hex32 = RegExp(r'^[0-9a-f]{32}$');
 
+/// What the answer takes from the environment of its process, as CI gives
+/// it: the path of the request of the app, `SMF_START_REQUEST`, and what
+/// reads the event in Sentry. A variable whose value is empty counts as
+/// missing, since an unset variable of the settings of GitHub Actions comes
+/// as an empty one.
+final class AnswerSettings {
+  /// The settings in [environment], such as `Platform.environment`.
+  AnswerSettings.of(Map<String, String> environment)
+      : request = _valueOf(environment['SMF_START_REQUEST']),
+        api = _valueOf(environment['SMF_SENTRY_API']) ?? defaultApiOfSentry,
+        org = _valueOf(environment['SMF_SENTRY_ORG']),
+        project = _valueOf(environment['SMF_SENTRY_PROJECT']),
+        tokenFile = _valueOf(environment['SMF_SENTRY_TOKEN']);
+
+  /// The path of the request of the app, or `null` without one: then there is
+  /// nothing to answer.
+  final String? request;
+
+  /// The host of the API of Sentry, of the region of the organization.
+  final String api;
+
+  /// The slugs of the organization and of the project of CI in Sentry.
+  final String? org;
+  final String? project;
+
+  /// The path of a file with a token that may read the project.
+  final String? tokenFile;
+
+  /// What the answer needs and the environment lacks, each with what it is.
+  List<String> get missing => [
+        if (org == null)
+          'SMF_SENTRY_ORG, the slug of the Sentry organization of CI',
+        if (project == null)
+          'SMF_SENTRY_PROJECT, the slug of the Sentry project of CI',
+        if (tokenFile == null) 'SMF_SENTRY_TOKEN, $_tokenIs',
+      ];
+
+  static const _tokenIs =
+      'the path of a file with a token that may read that project';
+
+  /// [value], or `null` when it is missing or empty.
+  static String? _valueOf(String? value) =>
+      value == null || value.trim().isEmpty ? null : value;
+}
+
 /// The event that the check of the start of the app sent, from the request
 /// that it wrote: the id of the event in Sentry, the nonce in the text of its
 /// error, and its environment, the flavor of the build.
@@ -104,10 +149,15 @@ final class EventNotReceived implements Exception {
 /// a project that it does not see, fails at once with what that means. A
 /// request for it that Sentry may take later goes again, [attempts] times in
 /// all, [pause] apart. Then it asks for the event every [interval] until
-/// Sentry has it, for at most [timeout]: until Sentry has processed an event,
-/// it answers 404 for it. Once Sentry has the event, it checks that the event
-/// is the one that the app sent, through the reporter of the app, from a
-/// build whose stack traces are readable (see [problemsOfEvent]).
+/// Sentry has it: until Sentry has processed an event, it answers 404 for
+/// it. Once Sentry has the event, it checks that the event is the one that
+/// the app sent, through the reporter of the app, from a build whose stack
+/// traces are readable (see [problemsOfEvent]).
+///
+/// It is done within [timeout] of its start, the read of the project
+/// included: each request waits for Sentry at most 20 seconds and never past
+/// that time, so that the test fails with what Sentry answered last, within
+/// the time that the test and the script of CI give it.
 ///
 /// Throws an [EventNotReceived] that tells what Sentry answered and what that
 /// means.
@@ -129,10 +179,12 @@ Future<String> checkEvent(
       '${Uri.encodeComponent(project)}/';
   final named = 'the project $org/$project of Sentry at $base';
   final sentry = _Sentry(client, base, token);
+  final until = now().add(timeout);
+  Duration left() => until.difference(now());
   for (var attempt = 1;; attempt++) {
-    final answer = await sentry.get(projectPath);
+    final answer = await sentry.get(projectPath, within: left());
     if (answer.status == 200) break;
-    if (answer.mayGoAgain && attempt < attempts) {
+    if (answer.mayGoAgain && attempt < attempts && left() > pause) {
       await wait(pause);
       continue;
     }
@@ -140,10 +192,9 @@ Future<String> checkEvent(
   }
   final eventPath = '${projectPath}events/${request.eventId}/';
   final event = 'the event ${request.eventId} in $named';
-  final until = now().add(timeout);
   _Answer last;
   while (true) {
-    last = await sentry.get(eventPath);
+    last = await sentry.get(eventPath, within: left());
     if (last.status == 200) {
       final problems = problemsOfEvent(last.json, request);
       if (problems.isNotEmpty) {
@@ -158,15 +209,14 @@ Future<String> checkEvent(
     if (last.status != 404 && !last.mayGoAgain) {
       throw EventNotReceived(sentry.meaningOf(last, event, project: false));
     }
-    if (!now().add(interval).isBefore(until)) break;
+    if (left() <= interval) break;
     await wait(interval);
   }
   throw EventNotReceived(
     last.status == 404
         ? 'Sentry does not have $event ${_secondsOf(timeout)} after the check '
-            'of the '
-            'app sent it: the event did not reach the project. Either the '
-            'DSN of the app in CI_APP_ENV is of another project than '
+            'of the app sent it: the event did not reach the project. Either '
+            'the DSN of the app in CI_APP_ENV is of another project than '
             'SMF_SENTRY_ORG and SMF_SENTRY_PROJECT name, or Sentry dropped '
             'the event, as for a rate limit of the key of the DSN or a quota '
             'that is used up: the stats of the project tell.'
@@ -268,8 +318,8 @@ Future<void> _wait(Duration duration) => Future<void>.delayed(duration);
 /// [duration] in seconds.
 String _secondsOf(Duration duration) => '${duration.inSeconds} s';
 
-/// How long a request waits for Sentry before it counts as one that did not
-/// reach it.
+/// How long a request waits for Sentry at most before it counts as one that
+/// did not reach it.
 const _requestTimeout = Duration(seconds: 20);
 
 /// The status of an answer, with its JSON, or `null` for a request that did
@@ -293,16 +343,21 @@ final class _Sentry {
   final String _base;
   final String _token;
 
-  /// The answer to a GET of [path] of the API.
-  Future<_Answer> get(String path) async {
+  /// The answer to a GET of [path] of the API, which waits for Sentry at
+  /// most [_requestTimeout] and never longer than [within].
+  Future<_Answer> get(String path, {required Duration within}) async {
+    final limit = within < _requestTimeout ? within : _requestTimeout;
+    if (limit <= Duration.zero) {
+      return (status: null, json: null, error: 'no time was left for it');
+    }
     final http.Response response;
     try {
       final request = http.Request('GET', Uri.parse('$_base$path'))
         ..headers['Authorization'] = 'Bearer $_token'
         ..headers['Accept'] = 'application/json';
-      response = await http.Response.fromStream(
-        await _client.send(request).timeout(_requestTimeout),
-      ).timeout(_requestTimeout);
+      response = await Future(
+        () async => http.Response.fromStream(await _client.send(request)),
+      ).timeout(limit);
     } on Object catch (error) {
       if (error is! TimeoutException &&
           error is! SocketException &&

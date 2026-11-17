@@ -6,6 +6,7 @@
 @TestOn('vm')
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -409,6 +410,125 @@ void main() {
         'reporter of the app. Its exception is not handled, though the app '
         'reported it with recordError() and not as fatal.',
       );
+    });
+  });
+
+  group('checkEvent within its time', () {
+    test(
+        'counts the read of the project, and the waits after it, against the '
+        '240 s', () async {
+      final sentry = _Sentry()
+        ..unprocessedFor = 1000
+        ..script(_project, [
+          _json(503, {'detail': 'Down.'}),
+          _json(503, {'detail': 'Down.'}),
+        ]);
+      final time = _Time();
+
+      final failure = await _check(sentry, time);
+
+      expect(failure, startsWith('failed: Sentry does not have the event'));
+      expect(
+        sentry.paths,
+        [
+          for (var i = 0; i < 3; i++) _project,
+          for (var i = 0; i < 46; i++) _event,
+        ],
+        reason: 'The two waits of 5 s of the read of the project leave 230 s '
+            'for the event.',
+      );
+      expect(
+        time.waits.fold(Duration.zero, (all, wait) => all + wait),
+        lessThanOrEqualTo(const Duration(seconds: 240)),
+      );
+    });
+
+    test(
+        'cuts a request that Sentry does not answer when its time is up, and '
+        'tells what that was', () async {
+      final hanging =
+          MockClient((request) => Completer<http.Response>().future);
+      final took = Stopwatch()..start();
+
+      Object? failure;
+      try {
+        await checkEvent(
+          hanging,
+          api: 'https://sentry.io',
+          org: 'smf-ci',
+          project: 'start-app',
+          token: _token,
+          request: _request,
+          timeout: const Duration(milliseconds: 300),
+        );
+      } on EventNotReceived catch (error) {
+        failure = error.meaning;
+      }
+      took.stop();
+
+      expect(took.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(
+        failure,
+        allOf(
+          startsWith('The test did not reach Sentry for the project '
+              'smf-ci/start-app'),
+          contains('TimeoutException'),
+        ),
+      );
+    });
+  });
+
+  group('the settings of the answer', () {
+    test('take the variables that CI sets, and the API of sentry.io by default',
+        () {
+      final settings = AnswerSettings.of({
+        'SMF_START_REQUEST': '/tmp/request',
+        'SMF_SENTRY_ORG': 'smf-ci',
+        'SMF_SENTRY_PROJECT': 'start-app',
+        'SMF_SENTRY_TOKEN': '/tmp/token',
+      });
+
+      expect(
+        (
+          settings.request,
+          settings.api,
+          settings.org,
+          settings.project,
+          settings.tokenFile,
+        ),
+        (
+          '/tmp/request',
+          'https://sentry.io',
+          'smf-ci',
+          'start-app',
+          '/tmp/token'
+        ),
+      );
+      expect(settings.missing, isEmpty);
+      expect(
+        AnswerSettings.of({'SMF_SENTRY_API': 'https://de.sentry.io'}).api,
+        'https://de.sentry.io',
+      );
+    });
+
+    test(
+        'take an empty variable for a missing one, as an unset variable of '
+        'GitHub Actions comes', () {
+      final settings = AnswerSettings.of({
+        'SMF_START_REQUEST': '',
+        'SMF_SENTRY_API': '',
+        'SMF_SENTRY_ORG': '',
+        'SMF_SENTRY_PROJECT': ' ',
+        'SMF_SENTRY_TOKEN': '',
+      });
+
+      expect(settings.request, isNull);
+      expect(settings.api, 'https://sentry.io');
+      expect(settings.missing, [
+        'SMF_SENTRY_ORG, the slug of the Sentry organization of CI',
+        'SMF_SENTRY_PROJECT, the slug of the Sentry project of CI',
+        startsWith('SMF_SENTRY_TOKEN, the path of a file with a token'),
+      ]);
     });
   });
 

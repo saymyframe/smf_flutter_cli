@@ -15,9 +15,10 @@
 // the organization and of the project in SMF_SENTRY_ORG and
 // SMF_SENTRY_PROJECT and the path of a file with the token in
 // SMF_SENTRY_TOKEN, as CI gives them; SMF_SENTRY_API names the host of the
-// API of the region of the organization, https://sentry.io by default. With
-// a request and without any of the others, it fails and names what is
-// missing: a skip would pass the answer. It never prints the token, and a
+// API of the region of the organization, https://sentry.io by default. An
+// empty variable counts as missing (see AnswerSettings). With a request and
+// without any of the others, it fails and names what is missing: a skip would
+// pass the answer. It never prints the token, and a
 // failure tells what it means and what to do (see support/sentry_events.dart,
 // whose tests run everywhere).
 @TestOn('vm')
@@ -31,25 +32,13 @@ import 'package:test/test.dart';
 import 'support/sentry_events.dart';
 
 void main() {
-  final environment = Platform.environment;
-  final request = environment['SMF_START_REQUEST'];
-  final api = environment['SMF_SENTRY_API'] ?? defaultApiOfSentry;
-  final org = environment['SMF_SENTRY_ORG'];
-  final project = environment['SMF_SENTRY_PROJECT'];
-  final tokenFile = environment['SMF_SENTRY_TOKEN'];
+  final settings = AnswerSettings.of(Platform.environment);
+  final request = settings.request;
 
   test(
     'Sentry has the event that the app sent, from its reporter',
     () async {
-      const tokenIs =
-          'the path of a file with a token that may read that project';
-      final missing = [
-        if (org == null)
-          'SMF_SENTRY_ORG, the slug of the Sentry organization of CI',
-        if (project == null)
-          'SMF_SENTRY_PROJECT, the slug of the Sentry project of CI',
-        if (tokenFile == null) 'SMF_SENTRY_TOKEN, $tokenIs',
-      ];
+      final missing = settings.missing;
       if (missing.isNotEmpty) {
         fail(
           'The app sent an event to Sentry and asked for the check of it in '
@@ -57,16 +46,16 @@ void main() {
           '${missing.join('; ')}.',
         );
       }
-      final token = File(tokenFile!).readAsStringSync().trim();
+      final token = File(settings.tokenFile!).readAsStringSync().trim();
       if (token.isEmpty) fail('The file of SMF_SENTRY_TOKEN has no token.');
       final client = http.Client();
       try {
         final asked = EventRequest.parse(File(request!).readAsStringSync());
         final found = await checkEvent(
           client,
-          api: api,
-          org: org!,
-          project: project!,
+          api: settings.api,
+          org: settings.org!,
+          project: settings.project!,
           token: token,
           request: asked,
         );
