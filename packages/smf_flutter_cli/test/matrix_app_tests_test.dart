@@ -23,6 +23,21 @@ import 'package:smf_revenuecat/smf_revenuecat.dart';
 import 'package:smf_sign_in/smf_sign_in.dart';
 import 'package:test/test.dart';
 
+/// How a widget follows a bridge of a provider of the state management role
+/// of the tests, which reads it with a function of its own.
+final class _BridgesOfTest extends StateBridges {
+  const _BridgesOfTest();
+
+  @override
+  Fragment watch(SharedState entry, String child) => Fragment(
+        '($child)(bridges.read(bridges.${entry.name}Bridge))',
+        imports: const [
+          ImportRef.app('core/state/bridges_of_test.dart', prefix: 'bridges'),
+          ImportRef('package:flutter/widgets.dart', show: ['Widget']),
+        ],
+      );
+}
+
 /// A provider of the auth role for the test of the app test of the role,
 /// which applies to the apps with the role whichever module provides it: a
 /// service that has nobody signed in and takes no call.
@@ -491,8 +506,9 @@ void main() {
       'of the events role, of the preferences role, of the env role, of the '
       'auth role, of the notifications role, of the push role, of the '
       'purchases role, of the settings screen role, of the theme role, of '
-      'the localization role and of the app entry role with every provider '
-      'of each, which they tell apart by the roles of the app only', () {
+      'the localization role, of the app entry role and of the state '
+      'management role with every provider of each, which they tell apart '
+      'by the roles of the app only', () {
     expect(
       appTests.testedRoles,
       containsAll([
@@ -510,6 +526,7 @@ void main() {
         appEntryRole,
         localizationRole,
         splashRole,
+        stateManagementRole,
       ]),
     );
     expect(named('screen_views').roles, contains(routerRole));
@@ -559,6 +576,13 @@ void main() {
     expect(named('app_icon_role').roles, {appIconRole});
     // And the test of the provider of the app icon role.
     expect(named('launcher_icons').roles, isEmpty);
+    // The test of the bridges changes the values of the entries of the
+    // theme role, of the localization role and of the auth role through
+    // their controllers.
+    expect(
+      named('state_management_role').roles,
+      {stateManagementRole, themeRole, localizationRole, authRole},
+    );
 
     expect(appTests.roleProblems(smfModules, apps), isEmpty);
   });
@@ -5993,6 +6017,288 @@ void main() {
       expect(
         p.posix.dirname(envKeysFile),
         p.posix.dirname('test/env_role/env_role_test.dart'),
+      );
+    });
+  });
+
+  group('the test of the state management role', () {
+    const counter = SharedState(
+      'counterValue',
+      listenable: FunctionRef(
+        'counterValueListenable',
+        import: ImportRef.app('features/counter/counter.dart'),
+      ),
+      type: TypeRef('int'),
+      description: 'The value of the counter.',
+    );
+
+    /// An app with [roles] and the data of the state management role:
+    /// [entries], each with its owner, and the bridges of a provider of the
+    /// tests.
+    MatrixApp appWith(
+      Set<Role> roles, {
+      List<(ContributionOrigin, SharedState)> entries = const [],
+    }) =>
+        MatrixApp(
+          'state',
+          const [ModuleId('counter')],
+          hook: RoleHookRequest(
+            data: [
+              stateManagementRole
+                  .data(const _BridgesOfTest())
+                  .withOrigin(const ModuleOrigin(ModuleId('state_kit'))),
+              for (final (owner, entry) in entries)
+                stateManagementRole.data(entry).withOrigin(owner),
+            ],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+
+    const theme = RoleTemplateOrigin(themeRole);
+    const localization = RoleTemplateOrigin(localizationRole);
+    const auth = RoleTemplateOrigin(authRole);
+    const purchases = RoleTemplateOrigin(purchasesRole);
+    const counterModule = ModuleOrigin(ModuleId('counter'));
+    // The watcher of the counter, which the provider of the tests gives for
+    // the code of a widget that the test of the role passes it.
+    const child = '((Object? value) => _shown(seen, value))';
+    const watcherOfCounter = '$child(bridges.read(bridges.counterValueBridge))';
+    final withEntries = appWith(
+      {stateManagementRole, themeRole, localizationRole, authRole},
+      entries: [
+        (counterModule, counter),
+        (theme, ThemeRole.modeState),
+        (localization, LocalizationRole.localeState),
+        (auth, AuthRole.sessionState),
+        (purchases, PurchasesRole.accessState),
+      ],
+    );
+
+    test(
+        'applies to the apps whose modules and roles give the role entries, '
+        'whichever modules provide the roles, and has neither mocks nor a '
+        'probe', () async {
+      final test = await stateManagementRoleAppTest();
+
+      expect(p.basename(test.directory), 'state_management_role');
+      expect(Directory(test.directory).existsSync(), isTrue);
+      expect(
+        test.roles,
+        {stateManagementRole, themeRole, localizationRole, authRole},
+      );
+      expect(test.appliesTo(withEntries), isTrue);
+      expect(
+        test.appliesTo(
+          appWith({stateManagementRole}, entries: [(counterModule, counter)]),
+        ),
+        isTrue,
+      );
+      // A state manager without entries renders no bridge, and an entry
+      // applies only where the state manager is.
+      expect(test.appliesTo(appWith({stateManagementRole})), isFalse);
+      expect(
+        test.appliesTo(appWith(const {}, entries: [(counterModule, counter)])),
+        isFalse,
+      );
+      // The bridges are Dart, and the start of an app on a device builds the
+      // root wrappers of its provider already.
+      expect(test.envValues, isNull);
+      expect(test.values, isNull);
+      expect(test.mocks, isNull);
+      expect(test.startProbe, isNull);
+      // The matrix of the CLI runs it in the apps with a state manager and a
+      // value of a controller: those of the sign-in, with the session, those
+      // of the paywall, with the premium access, and those with every
+      // module.
+      expect(
+        [
+          for (final app in apps)
+            if (named('state_management_role').appliesTo(app)) app.name,
+        ],
+        [..._signIn, ..._paywall, ..._everyModule],
+      );
+    });
+
+    test(
+        'gets the entries of the app, each with its function and the watcher '
+        'that the provider of the role gives, in the order of the role, and '
+        'the changes of the values of the roles of the app through their '
+        'controllers', () async {
+      final test = await stateManagementRoleAppTest();
+
+      final files = test.generatedFiles!(withEntries, 'my_app');
+
+      expect(files.keys, [stateBridgesFile]);
+      final text = files[stateBridgesFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(stateBridgesFile, text);
+      expect(errors, isEmpty);
+      // The library of each function and of each controller once, with a
+      // prefix of its own, those of the code of the watchers as the
+      // provider gives them, and ThemeMode for the changes of the theme.
+      String directive(IndexedImport import) => [
+            import.uri,
+            if (import.prefix case final prefix?) 'as $prefix',
+            if (import.show.isNotEmpty) 'show ${import.show.join(', ')}',
+          ].join(' ');
+      expect(
+        [for (final import in index.imports) directive(import)],
+        [
+          'package:flutter/foundation.dart show ValueListenable',
+          'package:flutter/material.dart show ThemeMode',
+          'package:flutter/widgets.dart show SizedBox, Widget',
+          'package:my_app/core/auth/app_session.dart as entry3',
+          'package:my_app/core/l10n/app_locale.dart as entry2',
+          'package:my_app/core/purchases/app_purchases.dart as entry4',
+          'package:my_app/core/state/bridges_of_test.dart as bridges',
+          'package:my_app/core/theme/theme_mode.dart as entry1',
+          'package:my_app/features/counter/counter.dart as entry0',
+        ],
+      );
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        [
+          'BridgeEntry',
+          'bridgeEntries',
+          'BridgeChange',
+          'bridgeChanges',
+          '_shown',
+        ],
+      );
+      expect(
+        text,
+        contains(
+          'final List<BridgeEntry> bridgeEntries = [\n'
+          '  (\n'
+          "    name: 'counterValue',\n"
+          '    listenable: entry0.counterValueListenable,\n'
+          '    watch: (seen) =>\n'
+          '        $watcherOfCounter,\n'
+          '  ),\n'
+          '  (\n'
+          "    name: 'themeMode',\n"
+          '    listenable: entry1.themeModeListenable,\n',
+        ),
+      );
+      expect(
+        [
+          for (final entry in RegExp(r"^    name: '(\w+)',$", multiLine: true)
+              .allMatches(text))
+            entry[1],
+        ],
+        [
+          'counterValue',
+          'themeMode',
+          'localizationLocale',
+          'authSession',
+          'purchasesAccess',
+        ],
+      );
+      // The theme mode, the language and the session change through their
+      // controllers, each to a value other than the one before; the premium
+      // access and the value of a module do not.
+      expect(
+        text,
+        contains(
+          'final List<BridgeChange> bridgeChanges = [\n'
+          '  (\n'
+          "    entry: 'themeMode',\n"
+          "    what: 'choosing the dark theme mode',\n"
+          '    change: () => entry1.appThemeMode.choose(ThemeMode.dark),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'themeMode',\n"
+          "    what: 'choosing the light theme mode',\n"
+          '    change: () => entry1.appThemeMode.choose(ThemeMode.light),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'localizationLocale',\n"
+          "    what: 'choosing the last language of the app',\n"
+          '    change: () => entry2.appLocale.choose(entry2.appLocales.last),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'localizationLocale',\n"
+          "    what: 'following the languages of the device again',\n"
+          '    change: () => entry2.appLocale.choose(null),\n'
+          '  ),\n'
+          '  (\n'
+          "    entry: 'authSession',\n"
+          "    what: 'signing a new account up',\n"
+          '    change: () => entry3.appSession.signUp(\n'
+          "      email: 'state-bridges@state-management-tests.example.com',\n"
+          "      password: 'State-bridges-2468',\n"
+          '    ),\n'
+          '  ),\n'
+          '];\n',
+        ),
+      );
+      // The changes call the controllers in the files of the roles, the
+      // same files as the functions of their entries.
+      expect(
+        [
+          for (final file in [
+            ThemeRole.themeModeFile,
+            LocalizationRole.appLocaleFile,
+            AuthRole.sessionFile,
+          ])
+            file.substring('lib/'.length),
+        ],
+        [
+          ThemeRole.modeState.listenable.import.uri,
+          LocalizationRole.localeState.listenable.import.uri,
+          AuthRole.sessionState.listenable.import.uri,
+        ],
+      );
+
+      // An app whose entries have no change has an empty list, which is a
+      // constant, and imports nothing for the changes.
+      final without = test.generatedFiles!(
+        appWith(
+          {stateManagementRole},
+          entries: [
+            (counterModule, counter),
+            (purchases, PurchasesRole.accessState),
+          ],
+        ),
+        'my_app',
+      )[stateBridgesFile]!;
+      expect(DartFileIndexer.parse(stateBridgesFile, without).errors, isEmpty);
+      expect(
+        without,
+        contains('const List<BridgeChange> bridgeChanges = [];\n'),
+      );
+      expect(without, isNot(contains('material.dart')));
+
+      // The test imports the file that the matrix writes next to it, and of
+      // the files of the app only the one with main(), which every app has.
+      final testFile = File(
+        p.join(
+          test.directory,
+          'test',
+          'state_management_role',
+          'state_bridges_test.dart',
+        ),
+      );
+      final parsed = DartFileIndexer.parse(
+        'test/state_management_role/state_bridges_test.dart',
+        testFile.readAsStringSync(),
+      );
+      expect(parsed.errors, isEmpty);
+      expect(
+        [for (final import in parsed.index.imports) import.uri],
+        [
+          'package:flutter/foundation.dart',
+          'package:flutter/widgets.dart',
+          'package:flutter_test/flutter_test.dart',
+          'package:{{app_name}}/main.dart',
+          'of_app.dart',
+        ],
+      );
+      expect(AppEntryRole.mainFile, 'lib/main.dart');
+      expect(p.posix.basename(stateBridgesFile), 'of_app.dart');
+      expect(
+        p.posix.dirname(stateBridgesFile),
+        'test/state_management_role',
       );
     });
   });

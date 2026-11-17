@@ -645,6 +645,11 @@ Future<MatrixAppTests> smfAppTests() async {
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
+      // The bridges of the state manager of the apps whose modules and
+      // roles give the state management role values that their controllers
+      // keep, whichever modules provide the roles: each bridge has the value
+      // of its controller, at the start and once the controller changed it.
+      await stateManagementRoleAppTest(),
       // The requests of the apps with the REST role, whichever module provides
       // it: an address, the failures, the token, the repeats, the stops and
       // the log. Its probe sees on a device that the stack of the provider
@@ -713,9 +718,10 @@ Future<MatrixAppTests> smfAppTests() async {
     // role, of the env role, of the auth role, of the notifications role,
     // of the push role, of the purchases role, of the REST role, of the
     // settings screen role, of the theme role, of the localization role, of
-    // the app icon role and of the splash role gets the tests of its role. Each
-    // provider of the app entry role gets the test of the theme role, which
-    // checks that its root rebuilds.
+    // the app icon role, of the splash role and of the state management
+    // role gets the tests of its role. Each provider of the app entry role
+    // gets the test of the theme role, which checks that its root
+    // rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -733,6 +739,7 @@ Future<MatrixAppTests> smfAppTests() async {
       localizationRole,
       appIconRole,
       splashRole,
+      stateManagementRole,
     },
   );
 }
@@ -2304,6 +2311,239 @@ const AppLocation settingsLocation = ${route.locationClass}();
 /// The type of the widget of the entry of the theme mode on the settings
 /// screen.
 const Type themeModeEntry = ${widget.codeWith('entry')};
+''',
+  };
+}
+
+/// The test of the state management role that the CLI keeps in its
+/// `app_tests/state_management_role`, for the apps whose modules and roles
+/// give the role entries, whichever module provides it: in an app with a
+/// state manager, such as one with the session of sign-in or with the theme
+/// mode. It starts the app once with `main()`, and puts the watcher of
+/// each entry into the overlay of the navigator at the root of the app,
+/// which a guard of the routes that shows its target in place of the pages
+/// leaves there: a widget that reads the bridge of the entry as the code of
+/// the app does, which the provider gives the role
+/// ([StateBridges.watch]). The function of each entry returns the same
+/// listenable at each call, and each watcher has the value of that
+/// listenable, at the start and once the controller of a role of the app
+/// changed a value: the theme mode, the language and the session, where the
+/// app has those roles. After each change the test shows frames for at most
+/// two seconds until the watchers have the new values, rather than waiting
+/// for the screens to settle.
+///
+/// The test knows only the roles. The matrix writes the entries of each app
+/// and the changes of their values into [stateBridgesFile], from the data
+/// of the state management role and the roles of the app. It has neither
+/// mocks nor a probe for the start check: the bridges are Dart, and the
+/// start of an app on a device builds the root wrappers of its provider
+/// already.
+Future<MatrixAppTest> stateManagementRoleAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/state_management_role',
+      appliesTo: (app) => _sharedStateOf(app).isNotEmpty,
+      generatedFiles: _stateBridgesOf,
+      roles: {stateManagementRole, themeRole, localizationRole, authRole},
+    );
+
+/// The entries of the state management role of [app], an app of the matrix,
+/// in the order of the role ([StateManagementRole.sharedStateIn]), or none
+/// in an app without the role, where its feeders give it data that does not
+/// apply.
+List<SharedState> _sharedStateOf(MatrixApp app) {
+  final hook = app.hook!;
+  if (!hook.presentRoles.contains(stateManagementRole)) return const [];
+  return [
+    for (final entry in stateManagementRole
+        .sharedStateIn(stateManagementRole.hookInput(hook)))
+      entry.state,
+  ];
+}
+
+/// The path in an app of what the matrix writes for the test of the state
+/// management role: `bridgeEntries`, the entries of the app in the order of
+/// the role ([StateManagementRole.sharedStateIn]), each a `BridgeEntry` with
+/// its name, its function and its watcher, the code that the provider of
+/// the role gives for it ([StateBridges.watch]), and `bridgeChanges`, the
+/// changes of the values of entries of the app through the controllers of
+/// their roles, in the order that the test makes them, each a
+/// `BridgeChange` with the name of its entry, what it is and the call.
+const stateBridgesFile = 'test/state_management_role/of_app.dart';
+
+/// A change of the value of `entry`, an entry that the template of a role
+/// gives the state management role, through the controller of the role:
+/// what the change is, `what`, the file of the controller, `file`, the
+/// call, `call`, which takes the prefix of that file, and the `imports`
+/// that the call needs besides.
+typedef _BridgeChange = ({
+  SharedState entry,
+  String what,
+  String file,
+  String Function(String prefix) call,
+  List<ImportRef> imports,
+});
+
+/// The library of Flutter with `ThemeMode`.
+const _themeMode = ImportRef(
+  'package:flutter/material.dart',
+  show: ['ThemeMode'],
+);
+
+/// The changes that the test of the state management role makes in an app
+/// with the entries of the roles: the dark and then the light theme mode,
+/// the last language of the app and then the languages of the device, and
+/// the sign-up of a new account, which takes the place of whoever the mocks
+/// of the modules signed in, and gives an anonymous user the account. Each
+/// changes the value of its entry, whatever the value before: the theme
+/// mode is that of the device and no language is chosen at the start, and
+/// the address of the account is one of its own.
+final List<_BridgeChange> _bridgeChanges = [
+  for (final mode in ['dark', 'light'])
+    (
+      entry: ThemeRole.modeState,
+      what: 'choosing the $mode theme mode',
+      file: ThemeRole.themeModeFile,
+      call: (prefix) => '$prefix.appThemeMode.choose(ThemeMode.$mode)',
+      imports: const [_themeMode],
+    ),
+  (
+    entry: LocalizationRole.localeState,
+    what: 'choosing the last language of the app',
+    file: LocalizationRole.appLocaleFile,
+    call: (prefix) => '$prefix.appLocale.choose($prefix.appLocales.last)',
+    imports: const [],
+  ),
+  (
+    entry: LocalizationRole.localeState,
+    what: 'following the languages of the device again',
+    file: LocalizationRole.appLocaleFile,
+    call: (prefix) => '$prefix.appLocale.choose(null)',
+    imports: const [],
+  ),
+  (
+    entry: AuthRole.sessionState,
+    what: 'signing a new account up',
+    file: AuthRole.sessionFile,
+    call: (prefix) => '$prefix.appSession.signUp(\n'
+        "      email: 'state-bridges@state-management-tests.example.com',\n"
+        "      password: 'State-bridges-2468',\n"
+        '    )',
+    imports: const [],
+  ),
+];
+
+/// The file at [stateBridgesFile] of [app], an app of the matrix whose
+/// modules and roles give the state management role entries, whose package
+/// is [packageName].
+///
+/// It imports the library of each function of an entry and of each
+/// controller of a change once, with a prefix of its own (`entry0`, ...),
+/// so that the names of two owners never clash, and the libraries of the
+/// code of the watchers as the provider of the role gives them.
+Map<String, String> _stateBridgesOf(MatrixApp app, String packageName) {
+  final input = stateManagementRole.hookInput(app.hook!);
+  final entries = _sharedStateOf(app);
+  // The provider gives the role its bridges, which the module rule of the
+  // role checks in every app with the role.
+  final bridges = stateManagementRole.bridgesIn(input)!;
+  final prefixes = <String, String>{};
+  String prefixOf(ImportRef import) => prefixes.putIfAbsent(
+        import.resolveUri(packageName),
+        () => 'entry${prefixes.length}',
+      );
+  final imports = <ImportRef>[
+    const ImportRef(
+      'package:flutter/foundation.dart',
+      show: ['ValueListenable'],
+    ),
+    const ImportRef(
+      'package:flutter/widgets.dart',
+      show: ['SizedBox', 'Widget'],
+    ),
+  ];
+  final entriesCode = StringBuffer();
+  for (final entry in entries) {
+    final watcher = bridges.watch(
+      entry,
+      '(Object? value) => _shown(seen, value)',
+    );
+    imports.addAll(watcher.imports);
+    entriesCode
+      ..writeln('  (')
+      ..writeln('    name: ${SmfNames.dartString(entry.name)},')
+      ..writeln(
+        '    listenable: '
+        '${entry.listenable.codeWith(prefixOf(entry.listenable.import))},',
+      )
+      ..writeln('    watch: (seen) =>')
+      ..writeln('        ${watcher.code},')
+      ..writeln('  ),');
+  }
+  final names = {for (final entry in entries) entry.name};
+  final changesCode = StringBuffer();
+  for (final change in _bridgeChanges) {
+    if (!names.contains(change.entry.name)) continue;
+    final file = ImportRef.app(change.file.substring('lib/'.length));
+    imports.addAll(change.imports);
+    changesCode
+      ..writeln('  (')
+      ..writeln('    entry: ${SmfNames.dartString(change.entry.name)},')
+      ..writeln('    what: ${SmfNames.dartString(change.what)},')
+      ..writeln('    change: () => ${change.call(prefixOf(file))},')
+      ..writeln('  ),');
+  }
+  final directives = [
+    for (final import in ImportRef.merge(
+      [
+        ...imports,
+        for (final MapEntry(key: uri, value: prefix) in prefixes.entries)
+          ImportRef(uri, prefix: prefix),
+      ],
+      appName: packageName,
+    ))
+      import.toDirective(packageName),
+  ];
+  // A list of functions is no constant, and an empty one is.
+  final changes = changesCode.isEmpty
+      ? 'const List<BridgeChange> bridgeChanges = [];'
+      : 'final List<BridgeChange> bridgeChanges = [\n$changesCode];';
+  return {
+    stateBridgesFile: '''
+// The bridges of the state manager of the app and the changes of their
+// values, which the matrix of SMF writes from the data of the state
+// management role and from the roles of the app for the test of the role,
+// state_bridges_test.dart.
+${directives.join('\n')}
+
+/// An entry of the app: its name, the function that returns the listenable
+/// of its value, and its watcher, a widget that reads the bridge of the
+/// entry as the code of the app does, which the provider of the role gives,
+/// and calls seen with the value each time it builds.
+typedef BridgeEntry = ({
+  String name,
+  ValueListenable<Object?> Function() listenable,
+  Widget Function(void Function(Object? value) seen) watch,
+});
+
+/// The entries of the app, in the order of the state management role.
+final List<BridgeEntry> bridgeEntries = [
+$entriesCode];
+
+/// A change of the value of an entry through the controller of its role:
+/// the name of the entry, what the change is, and the call.
+typedef BridgeChange = ({
+  String entry,
+  String what,
+  Future<void> Function() change,
+});
+
+/// The changes that the test makes, in their order.
+$changes
+
+/// Calls [seen] with [value], and shows nothing.
+Widget _shown(void Function(Object? value) seen, Object? value) {
+  seen(value);
+  return const SizedBox.shrink();
+}
 ''',
   };
 }
