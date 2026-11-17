@@ -1918,6 +1918,35 @@ $declaration
   };
 }
 
+/// The test of the feedback role that the CLI keeps in its
+/// `app_tests/feedback_role`, for the apps with the role, whichever module
+/// provides it, that [among] accepts, or all of them:
+/// - `appFeedback`, over a service of feedback of the test that scripts what
+///   a provider answers: it asks the service only while the service has what
+///   it needs and the context is mounted, gives it the context below the root
+///   of the app that it got, which reaches the theme, the language and the
+///   navigator at the root of the app, completes with its answer, runs one
+///   call at a time, and reports an error of the service once, which counts
+///   as false;
+/// - the service of the provider, on the device of its mocks, which has what
+///   the provider opens and says no when it is asked whether it has it: it
+///   has what it needs, and its open completes with true within two seconds
+///   of frames, with nothing for the handlers of the errors.
+///
+/// The test knows only the role. It relies on the convention that the mocks
+/// of every provider keep to, as the role says, and has no probe for the
+/// start check: an open on a device would leave the app.
+Future<MatrixAppTest> feedbackRoleAppTest({
+  bool Function(MatrixApp app)? among,
+}) async =>
+    MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/feedback_role',
+      appliesTo: (app) =>
+          app.hook!.presentRoles.contains(feedbackRole) &&
+          (among?.call(app) ?? true),
+      roles: {feedbackRole},
+    );
+
 /// The test of the entry that restores purchases on the settings screen,
 /// which the template of the purchases role contributes, that the CLI keeps
 /// in its `app_tests/purchases_setting`, for the apps with the purchases

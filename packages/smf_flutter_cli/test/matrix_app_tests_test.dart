@@ -6205,6 +6205,80 @@ void main() {
   });
 
   test(
+      'the test of the feedback role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given; no '
+      'app of the CLI has the role yet', () async {
+    MatrixApp appWith(Set<Role> roles, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'feedback',
+          const [ModuleId('mail')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await feedbackRoleAppTest();
+
+    expect(p.basename(test.directory), 'feedback_role');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    expect(test.roles, {feedbackRole});
+    expect(test.appliesTo(appWith({feedbackRole})), isTrue);
+    expect(
+      test.appliesTo(appWith({feedbackRole, settingsScreenRole})),
+      isTrue,
+    );
+    expect(test.appliesTo(appWith({settingsScreenRole})), isFalse);
+    // It gives no value, writes no file, and has no mocks and no probe: an
+    // open on a device would leave the app.
+    expect(test.envValues, isNull);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      isEmpty,
+    );
+    expect(
+      appTests.tests.map((test) => p.basename(test.directory)),
+      isNot(contains('feedback_role')),
+    );
+    // Each of its two test files starts the app once, since the start-up of
+    // an app may not run twice: one for appFeedback over a service of the
+    // test, and one for the service of the provider.
+    expect(
+      {
+        for (final file
+            in Directory(p.join(test.directory, 'test', 'feedback_role'))
+                .listSync())
+          p.basename(file.path),
+      },
+      {'feedback_role.dart', 'controller_test.dart', 'feedback_role_test.dart'},
+    );
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await feedbackRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith({feedbackRole})), isFalse);
+    expect(
+      everyModule.appliesTo(
+        appWith({feedbackRole}, everyModuleWith: const []),
+      ),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(appWith(const {}, everyModuleWith: const [])),
+      isFalse,
+    );
+  });
+
+  test(
       'the test of local_notifications applies to the apps with the module, '
       'whatever else they have, declares the mocks of its platform side for '
       'the tests of every module of those apps, and has a probe for the '

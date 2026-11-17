@@ -23,6 +23,7 @@ const List<Role> _roles = [
   restRole,
   remoteConfigRole,
   reviewRole,
+  feedbackRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -69,6 +70,7 @@ void main() {
       'REST API role',
       'remote config role',
       'store reviews role',
+      'feedback role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -206,6 +208,15 @@ void main() {
       'requires': {'preferences', 'env'},
       'uses': {'router', 'settings_screen', 'localization'},
       'feeds': <String>{},
+    });
+    // The users write to the developer through the provider, and the template
+    // gives the settings screen an entry for it, with its title in the
+    // language of the app. The role needs no router: a provider shows its way
+    // over the screen of the context that it gets.
+    expect(shape(feedbackRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'settings_screen', 'localization'},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
@@ -368,6 +379,7 @@ void main() {
           'rest',
           'remote_config',
           'review',
+          'feedback',
           'settings_screen',
           'onboarding_screen',
           'theme',
