@@ -425,6 +425,14 @@ void main() {
       expect(codeSpansOf(value.text), isEmpty);
       expect(value.text, contains('bridge'));
       expect(value.text, contains('only through its controller'));
+      // A value that no code of the app changes follows too.
+      expect(
+        value.text,
+        contains(
+          'A value that only the backend changes, such as remote config, '
+          'follows too.',
+        ),
+      );
     });
 
     /// The issues of the template in an app with [data].
@@ -444,6 +452,7 @@ void main() {
             (purchasesRole, PurchasesRole.accessState),
             (notificationsRole, NotificationsRole.permissionState),
             (pushRole, PushRole.addressState),
+            (remoteConfigRole, RemoteConfigRole.valuesState),
           ])
             stateManagementRole
                 .data(state)

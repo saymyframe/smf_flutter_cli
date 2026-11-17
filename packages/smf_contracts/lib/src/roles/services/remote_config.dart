@@ -53,6 +53,9 @@ const remoteConfigRole = RemoteConfigRole._();
 /// not take, such as `abc` for a whole number. A debug build prints such a
 /// text once. `RemoteValues` compares by its values, and the controller
 /// tells its listeners only when a value of a parameter of the app changes.
+/// The template gives the [StateManagementRole] the values as an entry,
+/// [valuesState], so in an app with a state manager a bridge of that role
+/// follows them too.
 ///
 /// `Future<void> initRemoteConfig()` creates the service with the provider's
 /// function and starts `appRemoteConfig` with it. `bootstrap()` awaits it in
@@ -175,6 +178,35 @@ final class RemoteConfigRole extends Role<RemoteConfigData> {
   /// which is no parameter of the app; see [RemoteConfigRole].
   static const checkParameter = 'remote_config_role_check';
 
+  /// The values of remote config as an entry of the [StateManagementRole],
+  /// which the template gives the role in every app, also one without
+  /// parameters: in an app with a state manager, a bridge of the provider of
+  /// that role follows `appRemoteConfig`, through
+  /// `remoteConfigValuesListenable()` of [controllerFile]. A widget that
+  /// needs one parameter selects it from the values of the bridge, and
+  /// `RemoteValues` compares by its values, so a change of another
+  /// parameter does not rebuild it.
+  ///
+  /// The controller tells its listeners of a change from the completion of a
+  /// call of the service and from the values that the service tells of, and
+  /// once from `start()`, which takes the defaults back at once. `start()`
+  /// runs in `bootstrap()` and in tests, never while a widget builds, so a
+  /// bridge that follows the controller never changes in a build, where a
+  /// state manager such as Riverpod refuses a change.
+  static const valuesState = SharedState(
+    'remoteConfigValues',
+    listenable: FunctionRef(
+      'remoteConfigValuesListenable',
+      import: ImportRef.app('core/remote_config/app_remote_config.dart'),
+    ),
+    type: TypeRef(
+      'RemoteValues',
+      import: ImportRef.app('core/remote_config/remote_values.dart'),
+    ),
+    description: 'The values of remote config; they change when the app gets '
+        'new values from the backend.',
+  );
+
   /// The implementation of `RemoteConfigService`, which the template renders
   /// from the provider's [RemoteConfigImplementation]; modules do not
   /// contribute to it.
@@ -192,6 +224,9 @@ final class RemoteConfigRole extends Role<RemoteConfigData> {
 
   @override
   RoleCardinality get cardinality => RoleCardinality.atMostOne;
+
+  @override
+  Set<Role> get feeds => {stateManagementRole};
 
   @override
   List<SocketRef> get sockets => const [implementations];
@@ -844,10 +879,12 @@ final class _RemoteConfigTemplate extends _ServiceTemplate<RemoteConfigData> {
 - A new provider implements `$service` of `${RemoteConfigRole.serviceFile}`, and only the files of that implementation import it. The code of the app imports `$file`, which exports `RemoteValues`, and calls neither `$initFunction()` nor `$factory()` nor `appRemoteConfig.start()`. A test gives `appRemoteConfig.start()` a service of its own.
 ''';
 
-  /// The brick and the note of the role. The role registers nothing in a DI
-  /// container: the code of an app uses `appRemoteConfig`, not the service
-  /// of the provider. The section of the README comes from the render hook,
-  /// since it lists the parameters of the app.
+  /// The brick, the note of the role and the values as an entry of the
+  /// state management role, which applies only in an app with a state
+  /// manager. The role registers nothing in a DI container: the code of an
+  /// app uses `appRemoteConfig`, not the service of the provider. The
+  /// section of the README comes from the render hook, since it lists the
+  /// parameters of the app.
   @override
   List<Contribution> contribute(ModuleContext context) => [
         BrickContribution(bundle),
@@ -855,6 +892,7 @@ final class _RemoteConfigTemplate extends _ServiceTemplate<RemoteConfigData> {
           role.description,
           AgentNote.ofRole(agentNote),
         ),
+        stateManagementRole.data(RemoteConfigRole.valuesState),
       ];
 
   /// Checks the implementation, and what the module rule

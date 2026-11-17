@@ -514,6 +514,25 @@ Future<void> main(List<String> arguments, SendPort port) async {
 }
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the values, and sends back whether it returns `appRemoteConfig` itself at
+/// each call, and what its listeners hear of once a start takes the values
+/// that the device kept.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  final listenable = remoteConfigValuesListenable();
+  result['the same listenable at each call'] =
+      identical(listenable, remoteConfigValuesListenable());
+  result['appRemoteConfig'] = identical(listenable, appRemoteConfig);
+  final heard = <Object?>[];
+  listenable.addListener(() => heard.add(shown(listenable.value)));
+  fetchedOnDevice = {'fake_config_user_limit': '9'};
+  await initRemoteConfig();
+  result['heard'] = heard;
+  port.send(result);
+}
+''';
+
 /// An activation of the service of the first start that ends once the
 /// second start took its values: the controller takes nothing of it. The
 /// fetch of the second start waits, so that only the values of the two
@@ -1164,9 +1183,23 @@ void main() {
       }
     });
 
-    test('registers nothing in a DI container, and has no step by hand', () {
+    test(
+        'registers nothing in a DI container, and has no step by hand: its '
+        'only data is the values, which the state manager follows', () {
       final contributions = _contributions();
-      expect(contributions.whereType<RoleData<Object>>(), isEmpty);
+      expect(
+        [for (final data in contributions.whereType<RoleData<Object>>()) data],
+        [
+          isA<RoleData<Object>>()
+              .having((data) => data.role, 'role', stateManagementRole)
+              .having(
+                (data) => data.value,
+                'value',
+                RemoteConfigRole.valuesState,
+              )
+              .having((data) => data.when, 'when', isEmpty),
+        ],
+      );
       expect(contributions.whereType<ManualStep>(), isEmpty);
     });
 
@@ -1465,6 +1498,46 @@ void main() {
       for (final path in remoteConfigRole.interface.files) {
         expect(await app.isFormatted(path), isTrue, reason: path);
       }
+    });
+
+    test(
+        'gives the state manager its values through a function of the file '
+        'of the controller, which returns appRemoteConfig itself each time',
+        () async {
+      const state = RemoteConfigRole.valuesState;
+
+      expect(await app.run('$_notes$_withParameters$_listenable'), {
+        'the same listenable at each call': true,
+        'appRemoteConfig': true,
+        // The start takes the values that the device kept, and tells the
+        // listeners once.
+        'heard': [
+          {'greeting': 'Hello', 'enabled': true, 'limit': 9, 'ratio': 0.5},
+        ],
+      });
+      expect(remoteConfigRole.feeds, {stateManagementRole});
+      expect(state.name, 'remoteConfigValues');
+      expect(state.listenable.name, 'remoteConfigValuesListenable');
+      expect(state.listenable.import, _controllerImport);
+      expect(
+        'lib/${state.listenable.import.uri}',
+        RemoteConfigRole.controllerFile,
+      );
+      expect(state.type.name, 'RemoteValues');
+      expect(
+        state.type.import,
+        const ImportRef.app('core/remote_config/remote_values.dart'),
+      );
+      expect(
+        'lib/${state.type.import!.uri}',
+        RemoteConfigRole.valuesFile,
+      );
+      expect(state.nullable, isFalse);
+      expect(state.listenableType, 'ValueListenable<RemoteValues>');
+      // The doc of the bridge says what changes the values: the backend,
+      // not the code of the app.
+      expect(state.description, contains('backend'));
+      expect(state.problems(), isEmpty);
     });
 
     test(
