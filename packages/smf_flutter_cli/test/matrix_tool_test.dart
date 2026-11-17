@@ -187,6 +187,7 @@ void main() {
             ('onboarding', 'probeOnboarding'),
             ('shared_preferences', 'probeSharedPreferences'),
             ('local_notifications', 'probeLocalNotifications'),
+            ('email_feedback', 'probeEmailFeedback'),
             ('di_role', 'probeServices'),
             ('preferences_role', 'probePreferences'),
             ('notifications_role', 'probeNotifications'),
@@ -256,14 +257,16 @@ void main() {
         read(app, 'integration_test/shared_preferences/probe.dart'),
         contains("import 'package:start_app/$implementation';"),
       );
-      // The tests of shared_preferences, of Firebase Authentication and of
-      // Google sign-in, which come with their probes, each need a dev
-      // dependency, which the tool adds with flutter in the app.
+      // The tests of shared_preferences, of Firebase Authentication, of
+      // Google sign-in and of email_feedback, which come with their probes,
+      // each need a dev dependency, which the tool adds with flutter in the
+      // app.
       final pubAdd = [
         'flutter pub add',
         if (!withoutExternalSteps) 'dev:firebase_auth_platform_interface',
         if (!withoutExternalSteps) 'dev:google_sign_in_platform_interface',
-        'dev:shared_preferences_platform_interface in ',
+        'dev:shared_preferences_platform_interface',
+        'dev:url_launcher_platform_interface in ',
       ].join(' ');
       final call = calls().single;
       expect(call, startsWith(pubAdd), reason: reason);

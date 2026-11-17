@@ -222,9 +222,11 @@ void main() {
       );
       // The fixture setting that the screen leaves out on iOS, where the
       // tests of the role and of the module look at the screen once more,
-      // next to entries that always show; and the entry of the review role,
+      // next to entries that always show; the entry of the review role,
       // which the screen shows on iOS only with the App Store ID of the app,
-      // which the tests of the apps leave empty.
+      // which the tests of the apps leave empty; and the entry "Write to us"
+      // of the feedback role, which shows while the module has the address of
+      // .env, which the tests of the apps give it.
       expect(
         [
           for (final entry in entries)
@@ -234,6 +236,7 @@ void main() {
         [
           'FixtureHidingSetting if fixtureHidingSettingShows()',
           'ReviewSetting if reviewSettingShows()',
+          'FeedbackSetting if feedbackSettingShows()',
         ],
         reason: 'Without an entry that shows only at times, the tests of the '
             'settings screen role do not show that a screen leaves it out: '
