@@ -468,26 +468,23 @@ void main() {
         ],
         [id],
       );
-      // A fixture module that is not there is another provider of the
-      // role, or one that depends on a module that is not there or has a
-      // variant for it, which a registry without that module cannot have.
-      final left = {
-        for (final module in fixtureModules())
-          if (!ids.contains(module.descriptor.id)) module.descriptor.id,
-      };
-      for (final module in fixtureModules()) {
-        final descriptor = module.descriptor;
-        if (ids.contains(descriptor.id)) continue;
-        expect(
-          descriptor.provides.contains(provider.role) ||
-              {
-                ...descriptor.dependsOn,
-                ...?descriptor.variants?.byProvider.keys,
-              }.any(left.contains),
-          isTrue,
-          reason: '${descriptor.id} is not in the registry of $id',
-        );
-      }
+      // Of the fixture modules that are no other provider of the role, the
+      // registry leaves out only those that a registry without the other
+      // providers cannot have: for a state manager, the fixture feature,
+      // which has a variant for each fixture state manager, and the fixture
+      // gates, which depend on one.
+      expect(
+        {
+          for (final module in fixtureModules())
+            if (!module.descriptor.provides.contains(provider.role) &&
+                !ids.contains(module.descriptor.id))
+              '${module.descriptor.id}',
+        },
+        id == BrokenModule.stateReadOnce.id
+            ? {'fake_feature', 'fake_late_gate', 'fake_gate'}
+            : isEmpty,
+        reason: '$id',
+      );
       final modules = [
         for (final module in provider.modules) module.descriptor.id,
       ];
