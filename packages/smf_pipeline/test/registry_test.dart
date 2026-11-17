@@ -21,7 +21,7 @@ void main() {
 
     expect(registry.modules, hasLength(3));
     // The app entry uses the router, which brings the roles that it uses,
-    // and those bring theirs.
+    // and those bring theirs, also the roles that they feed.
     expect(registry.roles, [
       appEntryRole,
       routerRole,
@@ -30,6 +30,7 @@ void main() {
       preferencesRole,
       diRole,
       settingsScreenRole,
+      stateManagementRole,
       layout,
       router,
     ]);
@@ -43,18 +44,28 @@ void main() {
     expect(registry.openRoles, {appEntryRole});
   });
 
-  test('rolesOf follows kinds, variants and the roles of roles', () {
+  test(
+      'rolesOf follows kinds, variants, the roles that modules feed and the '
+      'roles of roles', () {
     final used = TestRole<NoDsl>('used');
     final state = TestRole<NoDsl>('state', uses: {used});
+    final bridges = TestRole<NoDsl>('bridges');
+    final follower = TestRole<NoDsl>('follower');
+    final theme = TestRole<NoDsl>('theme', feeds: {follower});
     final roles = ModuleRegistry.rolesOf([
       TestModule(
         'feature',
         kind: ModuleKinds.feature,
         variants: Variants(role: state, byProvider: const {}),
+        feeds: {bridges},
       ),
+      TestModule('material', providers: [RoleProvider.plain(theme)]),
     ]);
 
-    expect(roles, containsAll([routerRole, layoutRole, state, used]));
+    expect(
+      roles,
+      containsAll([routerRole, layoutRole, state, used, bridges, follower]),
+    );
   });
 
   test('an invalid registry throws with every problem', () {
@@ -200,6 +211,45 @@ void main() {
           ),
         ]),
         _hasProblem('must not also require or use it'),
+      );
+    });
+
+    test(
+        'do not feed a role they provide, require or use, to which they have '
+        'more than data already', () {
+      final role = TestRole<NoDsl>('thing');
+      final used = TestRole<NoDsl>('used');
+      final shell = TestRole<NoDsl>('shell', uses: {used});
+
+      expect(
+        _problems([
+          TestModule(
+            'maker',
+            feeds: {role},
+            providers: [RoleProvider.plain(role)],
+          ),
+          TestModule('needer', feeds: {role}, requires: {role}),
+          TestModule('user', feeds: {role}, uses: {role}),
+          // A provider uses what its role uses.
+          TestModule(
+            'tabs',
+            feeds: {used},
+            providers: [RoleProvider.plain(shell)],
+          ),
+          TestModule('feeder', feeds: {role}),
+        ]),
+        [
+          equals(
+            'The module maker provides the thing role, so it must not also '
+            'feed it.',
+          ),
+          equals(
+            'The module needer requires the thing role, so it must not also '
+            'feed it.',
+          ),
+          'The module user uses the thing role, so it must not also feed it.',
+          'The module tabs uses the used role, so it must not also feed it.',
+        ],
       );
     });
 
@@ -604,6 +654,39 @@ void main() {
         isEmpty,
       );
     });
+  });
+
+  test('a role feeds neither itself nor a role that it requires or uses', () {
+    final needed = TestRole<NoDsl>('needed');
+    final used = TestRole<NoDsl>('used');
+    final fed = TestRole<NoDsl>('fed');
+    final itself = <Role>{};
+    final loop = TestRole<NoDsl>('loop', feeds: itself);
+    itself.add(loop);
+    final theme = TestRole<NoDsl>(
+      'theme',
+      requires: {needed},
+      uses: {used},
+      feeds: {needed, used, fed},
+    );
+
+    expect(
+      _problems([
+        TestModule('a', providers: [RoleProvider.plain(loop)]),
+        TestModule('b', providers: [RoleProvider.plain(theme)]),
+      ]),
+      [
+        equals(
+          'The loop role feeds itself, but the template of a role gives its '
+          'own role data without feeding it.',
+        ),
+        equals(
+          'The theme role requires the needed role, so it must not also feed '
+          'it.',
+        ),
+        'The theme role uses the used role, so it must not also feed it.',
+      ],
+    );
   });
 
   test('two different kinds must not share an id', () {

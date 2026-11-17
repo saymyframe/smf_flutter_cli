@@ -4434,6 +4434,87 @@ void main() {
   });
 
   test(
+      'the test of the review role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given, '
+      'and gets the keys of the role and what the ids of the flavors add to '
+      'the id of the app', () async {
+    MatrixApp appWith(Role role, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'review',
+          const [ModuleId('review')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: {role, preferencesRole, envRole},
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await reviewRoleAppTest();
+
+    expect(p.basename(test.directory), 'review_role');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    expect(test.roles, {reviewRole});
+    expect(test.appliesTo(appWith(reviewRole)), isTrue);
+    expect(test.appliesTo(appWith(notificationsRole)), isFalse);
+    // The keys of the role and the suffixes of the flavors that have one, as
+    // the roles publish them, the same in every app; the matrix writes no
+    // file for the test, which has no mocks either.
+    expect(test.values!(appWith(reviewRole)), {
+      'launches_key': ReviewRole.launchesKey,
+      'first_launch_key': ReviewRole.firstLaunchKey,
+      'asked_at_key': ReviewRole.askedAtKey,
+      'asked_version_key': ReviewRole.askedVersionKey,
+      'flavor_suffixes': '.dev,.staging',
+    });
+    expect(
+      test.values!(appWith(reviewRole))['flavor_suffixes']!.split(','),
+      [
+        for (final flavor in AppEntryRole.flavors)
+          if (flavor != AppEntryRole.releaseFlavor) flavor.idSuffix,
+      ],
+    );
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    // The probe that the start check runs on a device, a file of the test,
+    // which asks the script of CI for nothing.
+    expect(test.startProbe!.path, 'integration_test/review_role/probe.dart');
+    expect(test.startProbe!.function, 'probeReview');
+    expect(test.startProbe!.answer, isNull);
+    expect(
+      File(p.join(test.directory, test.startProbe!.path)).existsSync(),
+      isTrue,
+    );
+    // Every value that its files read is filled in.
+    final read = <String>{};
+    for (final file in Directory(test.directory)
+        .listSync(recursive: true)
+        .whereType<File>()) {
+      read.addAll([
+        for (final use
+            in RegExp(r'\{\{(\w+)\}\}').allMatches(file.readAsStringSync()))
+          use[1]!,
+      ]);
+    }
+    expect(read, {'app_name', ...test.values!(appWith(reviewRole)).keys});
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await reviewRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith(reviewRole)), isFalse);
+    expect(
+      everyModule.appliesTo(appWith(reviewRole, everyModuleWith: const [])),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(
+        appWith(notificationsRole, everyModuleWith: const []),
+      ),
+      isFalse,
+    );
+  });
+
+  test(
       'the test of the notifications role applies to the apps with the role, '
       'whichever module provides it, or to those of them that it is given, '
       'gets the key of the role, and has a probe for the start check',
@@ -6184,6 +6265,80 @@ void main() {
       expect(p.posix.basename(remoteConfigKeysFile), 'keys.dart');
       expect(p.posix.dirname(remoteConfigKeysFile), 'test/remote_config_role');
     });
+  });
+
+  test(
+      'the test of the feedback role applies to the apps with the role, '
+      'whichever module provides it, or to those of them that it is given; no '
+      'app of the CLI has the role yet', () async {
+    MatrixApp appWith(Set<Role> roles, {List<ModuleId>? everyModuleWith}) =>
+        MatrixApp(
+          'feedback',
+          const [ModuleId('mail')],
+          everyModuleWith: everyModuleWith,
+          hook: RoleHookRequest(
+            data: const [],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+          ),
+        );
+    final test = await feedbackRoleAppTest();
+
+    expect(p.basename(test.directory), 'feedback_role');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    expect(test.roles, {feedbackRole});
+    expect(test.appliesTo(appWith({feedbackRole})), isTrue);
+    expect(
+      test.appliesTo(appWith({feedbackRole, settingsScreenRole})),
+      isTrue,
+    );
+    expect(test.appliesTo(appWith({settingsScreenRole})), isFalse);
+    // It gives no value, writes no file, and has no mocks and no probe: an
+    // open on a device would leave the app.
+    expect(test.envValues, isNull);
+    expect(test.values, isNull);
+    expect(test.generatedFiles, isNull);
+    expect(test.mocks, isNull);
+    expect(test.startProbe, isNull);
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      isEmpty,
+    );
+    expect(
+      appTests.tests.map((test) => p.basename(test.directory)),
+      isNot(contains('feedback_role')),
+    );
+    // Each of its two test files starts the app once, since the start-up of
+    // an app may not run twice: one for appFeedback over a service of the
+    // test, and one for the service of the provider.
+    expect(
+      {
+        for (final file
+            in Directory(p.join(test.directory, 'test', 'feedback_role'))
+                .listSync())
+          p.basename(file.path),
+      },
+      {'feedback_role.dart', 'controller_test.dart', 'feedback_role_test.dart'},
+    );
+
+    // As the fixtures take it, only in the apps with every module.
+    final everyModule = await feedbackRoleAppTest(
+      among: (app) => app.everyModuleWith != null,
+    );
+    expect(everyModule.appliesTo(appWith({feedbackRole})), isFalse);
+    expect(
+      everyModule.appliesTo(
+        appWith({feedbackRole}, everyModuleWith: const []),
+      ),
+      isTrue,
+    );
+    expect(
+      everyModule.appliesTo(appWith(const {}, everyModuleWith: const [])),
+      isFalse,
+    );
   });
 
   test(

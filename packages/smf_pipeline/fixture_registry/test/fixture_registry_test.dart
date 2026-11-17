@@ -380,6 +380,7 @@ on request staging
   variable FAKE_ENV_USER_FIRST
   variable FAKE_ENV_USER_SECOND
   variable FAKE_ENV_USER_THIRD
+  variable REVIEW_APP_STORE_ID
   variable REST_BASE_URL
   run Write .env from the variables of the environment = dart tool/write_env.dart
   run Get the packages = flutter pub get
@@ -2650,6 +2651,15 @@ const _cases = [
   'fake_purchases with auth',
   'fake_purchases with localization',
   'fake_purchases',
+  // The fixture reviews with each router and the texts of the app, which
+  // the role uses, and without them; the fixtures have no settings screen,
+  // which the role uses too.
+  'fake_review (fake_router) with router, localization',
+  'fake_review (go_router) with router, localization',
+  'fake_review (fake_router) with router',
+  'fake_review (go_router) with router',
+  'fake_review with localization',
+  'fake_review',
   'fake_env',
   'fake_env_user with env',
   'fake_env_user',
@@ -2663,6 +2673,10 @@ const _cases = [
   // so its provider has one case, and the module that requires the role.
   'fake_remote_config',
   'fake_config_user',
+  // The fixture feedback, whose role uses the settings screen, which no
+  // fixture provides, and the localization role.
+  'fake_feedback with localization',
+  'fake_feedback',
   'fake_ci with env',
   'fake_ci',
   'fake_registrations (fake_di)',

@@ -1,5 +1,6 @@
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_riverpod/src/agents.dart';
+import 'package:smf_riverpod/src/bridges.dart';
 
 /// The module that manages the state of screens with Riverpod, without code
 /// generation, and so provides the state management role.
@@ -28,12 +29,21 @@ import 'package:smf_riverpod/src/agents.dart';
 /// uses Riverpod go inside the `ProviderScope`. The wrappers of the other
 /// modules read no provider, and their place around it follows their ids.
 ///
+/// In an app whose controllers keep values that screens read, such as the
+/// theme mode, its render hook gives each value a `NotifierProvider` in
+/// `lib/core/state/shared_state_providers.dart`, which follows the
+/// `ValueListenable` of the value from its first read until the
+/// `ProviderScope` disposes of it, and which a widget reads with
+/// `ref.watch`. The providers are read-only: code changes a value through
+/// its controller.
+///
 /// The section of the state management in the guide for coding agents of
-/// the app is the note of the module: how a screen with state is written
+/// the app has the note of the module: how a screen with state is written
 /// with a provider, which provider holds the state that several screens
 /// read, what a notifier minds around a call that it awaits, that a widget
 /// talks only to providers, and that the scope stays above the widgets
-/// that read them.
+/// that read them. In an app with such values, a second note tells where
+/// their providers are.
 final class RiverpodModule extends SmfModule {
   /// Creates the module.
   const RiverpodModule();
@@ -47,7 +57,7 @@ final class RiverpodModule extends SmfModule {
         id: id,
         description: 'Riverpod with flutter_riverpod',
         kind: ModuleKinds.infrastructure,
-        providers: [RoleProvider.plain(stateManagementRole)],
+        providers: [RiverpodStateProvider()],
       );
 
   @override
@@ -70,5 +80,6 @@ final class RiverpodModule extends SmfModule {
           stateManagementRole.description,
           AgentNote(agentNote),
         ),
+        stateManagementRole.data(const RiverpodBridges()),
       ];
 }

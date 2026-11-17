@@ -161,6 +161,23 @@ final class LocalizationRole extends Role<TextsData> {
   /// so a test of an app takes it from here.
   static const localeKey = 'localization.locale';
 
+  /// The language that the user chose as an entry of the
+  /// [StateManagementRole], which the template gives the role: in an app
+  /// with a state manager, a bridge of the provider of that role follows
+  /// `appLocale`, through `localizationLocaleListenable()` of
+  /// [appLocaleFile].
+  static const localeState = SharedState(
+    'localizationLocale',
+    listenable: FunctionRef(
+      'localizationLocaleListenable',
+      import: _appLocale,
+    ),
+    type: TypeRef('Locale', import: ImportRef('package:flutter/widgets.dart')),
+    nullable: true,
+    description: 'The language that the user chose, `null` to follow the '
+        'device; `appLocale.choose()` changes it.',
+  );
+
   /// The title of the setting of the language, a text of the template of
   /// the role in an app with a settings screen.
   static const languageSettingTitle = LocalizedText(
@@ -257,6 +274,9 @@ final class LocalizationRole extends Role<TextsData> {
 
   @override
   Set<Role> get uses => const {settingsScreenRole};
+
+  @override
+  Set<Role> get feeds => const {stateManagementRole};
 
   @override
   RoleInterface get interface => const RoleInterface(

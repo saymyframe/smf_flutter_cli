@@ -1288,6 +1288,93 @@ final class BrokenModule extends SmfModule {
   static const _fixtureRemoteConfigFile =
       'lib/core/fixture_remote_config/fixture_remote_config.dart';
 
+  /// The fixture reviews whose service asks the user a question of its own
+  /// before the review dialog, "Do you like the app?" with No and Yes, on
+  /// the navigator at the root of the app, which it finds from the root
+  /// element of the app, and asks the store only after a yes: the question
+  /// that the stores forbid. A request then waits for the user, and an app
+  /// without a screen asks the store nothing.
+  static const reviewAskingFirst = BrokenModule._(
+    FakeReviewModule(),
+    ModuleId('broken_review_asks_first'),
+    'Store reviews with a question of their own before the dialog (fixture)',
+    'lib/core/fixture_review/fixture_review.dart',
+    [
+      (
+        "import '../review/review_service.dart';\n",
+        "import 'package:flutter/material.dart';\n"
+            '\n'
+            "import '../review/review_service.dart';\n",
+      ),
+      (
+        '  Future<void> requestReview() async {\n'
+            '    await _answer();\n'
+            '  }\n',
+        '  Future<void> requestReview() async {\n'
+            '    final navigator = _rootNavigator();\n'
+            '    if (navigator == null) return;\n'
+            '    final likes = await showDialog<bool>(\n'
+            '      context: navigator,\n'
+            '      builder: (context) => AlertDialog(\n'
+            "        title: const Text('Do you like the app?'),\n"
+            '        actions: [\n'
+            '          TextButton(\n'
+            '            onPressed: () => Navigator.of(context).pop(false),\n'
+            "            child: const Text('No'),\n"
+            '          ),\n'
+            '          TextButton(\n'
+            '            onPressed: () => Navigator.of(context).pop(true),\n'
+            "            child: const Text('Yes'),\n"
+            '          ),\n'
+            '        ],\n'
+            '      ),\n'
+            '    );\n'
+            '    if (likes != true) return;\n'
+            '    await _answer();\n'
+            '  }\n'
+            '\n'
+            '  /// The context of the navigator at the root of the app, the\n'
+            '  /// first that the root element of the app has below it, or\n'
+            '  /// `null` while the app shows nothing.\n'
+            '  static BuildContext? _rootNavigator() {\n'
+            '    BuildContext? found;\n'
+            '    void visit(Element element) {\n'
+            '      if (found != null) return;\n'
+            '      if (element is StatefulElement &&\n'
+            '          element.state is NavigatorState) {\n'
+            '        found = element;\n'
+            '        return;\n'
+            '      }\n'
+            '      element.visitChildren(visit);\n'
+            '    }\n'
+            '\n'
+            '    WidgetsBinding.instance.rootElement?.visitChildren(visit);\n'
+            '    return found;\n'
+            '  }\n',
+      ),
+    ],
+  );
+
+  /// The fixture feedback whose open first asks the device whether it has an
+  /// app that takes what the user writes, as `canLaunchUrl` of url_launcher
+  /// does, and completes with false on a no without opening. The device of
+  /// the tests has such an app and says no, as Android 11 and later say to an
+  /// app whose manifest names no other app: so the way to write never opens
+  /// there, though it would.
+  static const feedbackCheckingFirst = BrokenModule._(
+    FakeFeedbackModule(),
+    ModuleId('broken_feedback_checks_first'),
+    'Feedback that asks the device first whether it can open (fixture)',
+    'lib/core/fixture_feedback/fixture_feedback.dart',
+    [
+      (
+        '    return FixtureFeedbackDevice.open(message);\n',
+        '    if (!await FixtureFeedbackDevice.canOpen()) return false;\n'
+            '    return FixtureFeedbackDevice.open(message);\n',
+      ),
+    ],
+  );
+
   /// The module with the bug.
   final SmfModule of;
 

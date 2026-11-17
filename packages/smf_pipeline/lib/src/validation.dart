@@ -82,10 +82,10 @@ bool isReservedVar(String name) =>
 /// [Collection.decide]), so that the hooks get only the data whose
 /// conditions on what the roles chose hold.
 ///
-/// Data of the wrong type, or for a role its contributor has no access to,
-/// is reported with its contribution by [validate] and left out here: the
-/// hooks would only add confusing problems about it, and building their
-/// input cannot fail on the type.
+/// Data of the wrong type, or for a role its contributor neither has access
+/// to nor feeds, is reported with its contribution by [validate] and left
+/// out here: the hooks would only add confusing problems about it, and
+/// building their input cannot fail on the type.
 RoleHookRequest hookRequest({
   required ModuleRegistry registry,
   required Resolution resolution,
@@ -99,9 +99,10 @@ RoleHookRequest hookRequest({
       data: [
         for (final data in collection.roleData)
           if (data.role.accepts(data.value) &&
-              rolesOf(data.origin!, registry, resolution)
-                  .access
-                  .contains(data.role))
+              _mayGiveData(
+                rolesOf(data.origin!, registry, resolution),
+                data.role,
+              ))
             data,
       ],
       presentRoles: resolution.presentRoles,
@@ -527,7 +528,7 @@ Iterable<SmfIssue> contributionIssues(
 
   switch (contribution) {
     case final RoleData<Object> data:
-      yield* _roleDataIssues(data, origin, roles.access);
+      yield* _roleDataIssues(data, origin, roles);
     case final SocketContribution socket:
       yield* _socketIssues(socket, origin, roles.access, resolution);
     case final BrickContribution brick:
@@ -584,18 +585,25 @@ Iterable<SmfIssue> _whenChosenIssues(
   }
 }
 
-/// The problems of [data] of [origin], which has access to the roles
-/// [access]: it must have access to the role of the data, which must take
-/// it.
+/// Whether a contributor with the [roles] of [rolesOf] may give [role]
+/// data: a role it has access to, or a role it feeds.
+bool _mayGiveData(ContributorRoles roles, Role role) =>
+    roles.access.contains(role) || roles.feeds.contains(role);
+
+/// The problems of [data] of [origin], which has the [roles] of [rolesOf]:
+/// it must have access to the role of the data or feed it, and the role
+/// must take the data.
 Iterable<SmfIssue> _roleDataIssues(
   RoleData<Object> data,
   ContributionOrigin origin,
-  Set<Role> access,
+  ContributorRoles roles,
 ) sync* {
-  if (!access.contains(data.role)) {
+  if (!_mayGiveData(roles, data.role)) {
     yield SmfIssue(
       '$origin contributes data to the ${data.role}, but does not '
-      'provide, require or use it.',
+      'provide, require, use or feed it.',
+      hint: 'Add the role to the feeds of the contributor if it gives the '
+          'role data alone, and to its uses otherwise.',
       origin: origin,
     );
   } else if (!data.role.accepts(data.value)) {
@@ -1498,8 +1506,9 @@ String _and(List<String> names) => names.length == 1
     ? names.single
     : '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 
-/// Runs the `validate` hooks of the present roles' templates and providers
-/// and the module rules of the roles, with [request].
+/// Runs, with [request], the `validate` hooks of the present roles'
+/// templates and providers, and the module rules of each role for the
+/// modules that provide, require, use or feed it.
 Iterable<SmfIssue> _hookIssues(
   Resolution resolution,
   Collection collection,
@@ -1526,14 +1535,18 @@ Iterable<SmfIssue> _hookIssues(
       );
     }
     for (final module in resolution.modules) {
-      if (!module.descriptor.roles.contains(role)) continue;
+      final descriptor = module.descriptor;
+      if (!descriptor.roles.contains(role) &&
+          !descriptor.feeds.contains(role)) {
+        continue;
+      }
       yield* _guarded(
         role,
         module.origin,
         () => role.checkModule(
           ModuleRuleRequest(
             hook: request,
-            module: module.descriptor,
+            module: descriptor,
             contributions: [
               for (final collected in collection.ofModule(module.id))
                 collected.contribution,

@@ -1980,6 +1980,28 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.feedbackCheckingFirst,
+        role: feedbackRole,
+        bug: 'Its open first asks the device whether it has an app that takes '
+            'what the user writes, as canLaunchUrl of url_launcher does, and '
+            'completes with false on a no without opening. The device of the '
+            'tests has such an app and says no, as Android 11 and later say to '
+            'an app whose manifest names no other app, so the way to write '
+            'never opens there.',
+        // The role needs no other module: the fixture feedback alone, with
+        // the app entry of the fixtures.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/feedback_role/feedback_role_test.dart',
+            'open() of the provider opens its way on a device that has one, '
+                'and completes with true',
+            'the provider did not open its way to write, though the device of '
+                'the tests has one',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.purchasesKeptByService,
         role: purchasesRole,
         bug: 'Its service keeps the purchases in a field of its own, for '
@@ -2033,6 +2055,36 @@ List<BrokenProvider> brokenProviders() => const [
                 'after a sign-out of that account has none of them',
             'After the sign-out of an account, the next user of the device is '
                 'a new one, with nothing bought',
+          ),
+        ],
+      ),
+      BrokenProvider(
+        BrokenModule.reviewAskingFirst,
+        role: reviewRole,
+        bug: 'Its service asks the user "Do you like the app?" before the '
+            'review dialog, and asks the store only after a yes: the question '
+            'that the stores forbid, after which a request waits for the '
+            'user.',
+        // The fixture preferences and the fixture values of .env, which the
+        // role requires.
+        app: [FakePreferencesModule.id, FakeEnvModule.id],
+        failures: [
+          MatrixExpectedFailure(
+            'test/review_role/nothing_around_test.dart',
+            'the provider asks the store for its dialog and shows nothing of '
+                'its own around it',
+            'The provider asks the store for its dialog and shows nothing of '
+                'its own around it, as the stores ask: the app showed '
+                'something of its own around the review dialog.',
+          ),
+          MatrixExpectedFailure(
+            'test/review_role/request_test.dart',
+            'requestIfDue() on a launch on which a review is due asks the '
+                'store at once through the provider of the app, and the app '
+                'saves the request once the store took it',
+            'The provider asks the store for its dialog at once, and the '
+                'request completes once the store took it: the app then saves '
+                'the time and the version of the request.',
           ),
         ],
       ),

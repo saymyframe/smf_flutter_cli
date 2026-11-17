@@ -40,6 +40,12 @@ const String notificationOwnerKey = {{{owner_key}}};
 /// of the user on them.
 final appNotifications = NotificationsController._();
 
+/// Whether the app may show notifications, as a [ValueListenable] for the
+/// state manager of the app: [NotificationsController.permission] of
+/// [appNotifications], which [NotificationsController.request] changes.
+ValueListenable<NotificationPermission> notificationsPermissionListenable() =>
+    appNotifications.permission;
+
 /// Shows the notifications of the app through the service of the provider
 /// of notifications, keeps the permission to show them up to date, and
 /// tells of the taps on them. The app has one, [appNotifications].

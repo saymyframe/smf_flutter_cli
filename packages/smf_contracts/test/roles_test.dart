@@ -22,6 +22,8 @@ const List<Role> _roles = [
   purchasesRole,
   restRole,
   remoteConfigRole,
+  reviewRole,
+  feedbackRole,
   settingsScreenRole,
   onboardingScreenRole,
   themeRole,
@@ -67,6 +69,8 @@ void main() {
       'purchases role',
       'REST API role',
       'remote config role',
+      'store reviews role',
+      'feedback role',
       'settings screen role',
       'onboarding screen role',
       'theme role',
@@ -82,52 +86,62 @@ void main() {
           'cardinality': role.cardinality,
           'requires': {for (final other in role.requires) other.id},
           'uses': {for (final other in role.uses) other.id},
+          'feeds': {for (final other in role.feeds) other.id},
         };
 
     expect(shape(stateManagementRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
+      'feeds': <String>{},
     });
     expect(shape(routerRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'layout', 'localization'},
+      'feeds': <String>{},
     });
     expect(shape(layoutRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
       'uses': {'localization'},
+      'feeds': <String>{},
     });
     expect(shape(localizationRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'preferences'},
       'uses': {'settings_screen'},
+      'feeds': {'state_management'},
     });
     expect(shape(diRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
+      'feeds': <String>{},
     });
     expect(shape(eventsRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'di'},
+      'feeds': <String>{},
     });
     expect(shape(preferencesRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'di'},
+      'feeds': <String>{},
     });
     expect(shape(analyticsRole), {
       'cardinality': RoleCardinality.many,
       'requires': <String>{},
       'uses': {'di', 'router'},
+      'feeds': <String>{},
     });
     expect(shape(crashReportingRole), {
       'cardinality': RoleCardinality.many,
       'requires': <String>{},
       'uses': {'di'},
+      'feeds': <String>{},
     });
     // The auth role works with a router, whose routes ask for the account
     // that it publishes as a condition, and with the texts of the app, which
@@ -138,6 +152,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'router', 'localization'},
+      'feeds': {'state_management'},
     });
     // The notifications role remembers in the preferences that it asked
     // for the permission, and gives the settings screen and the onboarding
@@ -146,6 +161,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'preferences'},
       'uses': {'settings_screen', 'onboarding_screen', 'localization'},
+      'feeds': {'state_management'},
     });
     // The push role shows a message that arrives in the foreground through
     // the notifications, whose permission lets the app show messages.
@@ -153,6 +169,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'notifications'},
       'uses': <String>{},
+      'feeds': {'state_management'},
     });
     // The purchases belong to the user of the auth role, and the template
     // gives the settings screen an entry that restores them, with texts in
@@ -162,6 +179,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'auth', 'settings_screen', 'localization'},
+      'feeds': {'state_management'},
     });
     // The address of the API is a value of the app, and the token of the user
     // goes with the requests in an app with sign-in.
@@ -169,6 +187,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'env'},
       'uses': {'auth'},
+      'feeds': <String>{},
     });
     // The values of an app are the same whichever roles the app has: the
     // template renders the parameters that the modules give it, and the
@@ -177,11 +196,34 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
+      'feeds': <String>{},
+    });
+    // The app counts its launches and remembers its last request for a
+    // review in the preferences, and the App Store ID is a value of the
+    // app. The guards of the routes keep the request out of their flows,
+    // and the template gives the settings screen an entry that opens the
+    // page of the app in its store, with texts in the language of the app.
+    expect(shape(reviewRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': {'preferences', 'env'},
+      'uses': {'router', 'settings_screen', 'localization'},
+      'feeds': <String>{},
+    });
+    // The users write to the developer through the provider, and the template
+    // gives the settings screen an entry for it, with its title in the
+    // language of the app. The role needs no router: a provider shows its way
+    // over the screen of the context that it gets.
+    expect(shape(feedbackRole), {
+      'cardinality': RoleCardinality.atMostOne,
+      'requires': <String>{},
+      'uses': {'settings_screen', 'localization'},
+      'feeds': <String>{},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
       'uses': <String>{},
+      'feeds': <String>{},
     });
     // The onboarding shows its screen at a route of the app, and the
     // labels of its steps in the language of the app.
@@ -189,11 +231,13 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'router'},
       'uses': {'localization'},
+      'feeds': <String>{},
     });
     expect(shape(themeRole), {
       'cardinality': RoleCardinality.atMostOne,
       'requires': {'preferences'},
       'uses': {'settings_screen', 'localization'},
+      'feeds': {'state_management'},
     });
     // The values of an app are the same whichever roles the app has: the
     // template writes them into files of its own and the README, and code
@@ -202,6 +246,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': <String>{},
+      'feeds': <String>{},
     });
     // The icon and the splash screen are files of the native projects, which
     // no role and no code of the app reads.
@@ -210,6 +255,7 @@ void main() {
         'cardinality': RoleCardinality.atMostOne,
         'requires': <String>{},
         'uses': <String>{},
+        'feeds': <String>{},
       });
     }
     // A repository lives on one host, and a job of CI works with the values
@@ -218,6 +264,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'env'},
+      'feeds': <String>{},
     });
   });
 
@@ -317,6 +364,7 @@ void main() {
         [for (final role in withTemplates) role.id],
         [
           'app_entry',
+          'state_management',
           'router',
           'layout',
           'localization',
@@ -331,6 +379,8 @@ void main() {
           'purchases',
           'rest',
           'remote_config',
+          'review',
+          'feedback',
           'settings_screen',
           'onboarding_screen',
           'theme',
@@ -553,6 +603,12 @@ void main() {
         'analytics_collected_from_first_start',
         'remote_config_defaults',
         'remote_config_getters',
+        'launches_key',
+        'first_launch_key',
+        'asked_at_key',
+        'asked_version_key',
+        'google_play_id',
+        'guard_flows',
       };
       for (final role in withTemplates) {
         final ownTags = {for (final socket in role.sockets) ...socket.tags};

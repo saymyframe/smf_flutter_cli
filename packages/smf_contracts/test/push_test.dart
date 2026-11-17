@@ -381,6 +381,18 @@ final class FakePreferences implements AppPreferences {
 }
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the value, and sends back whether it returns the same listenable at each
+/// call, and whether that is `appPush.address`.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['the same listenable at each call'] =
+      identical(pushAddressListenable(), pushAddressListenable());
+  result['the address'] = identical(pushAddressListenable(), appPush.address);
+  port.send(result);
+}
+''';
+
 /// What the scripts for the test app share. `pump` lets what is on its way
 /// happen, `start` starts the app as `bootstrap()` does, `shown` tells a
 /// message, and `shownNotification` a notification that the app showed.
@@ -1119,7 +1131,15 @@ void main() {
         'entitlement of push messages, with the step by hand of the App ID '
         'that it needs, and their background mode in every app', () {
       final contributions = _contributions();
-      expect(contributions.whereType<RoleData<Object>>(), isEmpty);
+      // Its only data is the address, which the state manager follows.
+      expect(
+        [for (final data in contributions.whereType<RoleData<Object>>()) data],
+        [
+          isA<RoleData<Object>>()
+              .having((data) => data.role, 'role', stateManagementRole)
+              .having((data) => data.value, 'value', PushRole.addressState),
+        ],
+      );
       // Only a paid team signs the entitlement, so the app lists the step
       // of the role of the app entry with it, which a module that adds
       // another such entitlement lists too.
@@ -1335,6 +1355,40 @@ void main() {
       setUpAll(() async => app = await _app());
 
       tearDownAll(() => app.delete());
+
+      test(
+          'gives the state manager its value through a function of the file '
+          'of the controller, which returns the same listenable each time',
+          () async {
+        const state = PushRole.addressState;
+
+        expect(await app.run('$_notes$_listenable'), {
+          'the same listenable at each call': true,
+          'the address': true,
+        });
+        expect(pushRole.feeds, {stateManagementRole});
+        expect(
+          [
+            for (final data in _contributions().whereType<RoleData<Object>>())
+              if (data.role == stateManagementRole) data.value,
+          ],
+          [state],
+        );
+        expect(state.name, 'pushAddress');
+        expect(state.listenable.name, 'pushAddressListenable');
+        expect(
+          state.listenable.import,
+          const ImportRef.app('core/push/app_push.dart'),
+        );
+        expect(state.type.name, 'String');
+        expect(state.type.import, isNull);
+        expect(state.nullable, isTrue);
+        expect(state.listenableType, 'ValueListenable<String?>');
+        // The doc of the bridge names the controller of the value, which
+        // the platform changes.
+        expect(state.description, contains('`appPush.address`'));
+        expect(state.problems(), isEmpty);
+      });
 
       test(
           'asks again on each resume while the platform gives no address, and '

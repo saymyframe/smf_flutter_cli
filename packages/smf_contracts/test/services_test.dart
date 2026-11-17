@@ -217,6 +217,8 @@ void main() {
       pushRole,
       purchasesRole,
       restRole,
+      reviewRole,
+      feedbackRole,
     ]) {
       test('lets each provider of the ${role.id} contribute one implementation',
           () {
@@ -317,10 +319,12 @@ void main() {
     test(
         'register the service in the DI container, but for the auth role, '
         'the notifications role, the push role, the purchases role, the REST '
-        'role and the remote config role, whose services are not for the '
-        'code of the app', () {
+        'role, the remote config role, the review role and the feedback role, '
+        'whose services are not for the code of the app', () {
       expect(
-        authRole.template.contribute(testContext).whereType<RoleData<Object>>(),
+        authRole.template
+            .contribute(testContext)
+            .whereType<RoleData<DiRegistration>>(),
         isEmpty,
       );
       for (final role in <Role>[
@@ -329,6 +333,8 @@ void main() {
         purchasesRole,
         restRole,
         remoteConfigRole,
+        reviewRole,
+        feedbackRole,
       ]) {
         expect(
           role.template!
