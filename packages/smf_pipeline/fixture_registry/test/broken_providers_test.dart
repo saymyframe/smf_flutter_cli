@@ -468,9 +468,25 @@ void main() {
         ],
         [id],
       );
+      // A fixture module that is not there is another provider of the
+      // role, or one that depends on a module that is not there or has a
+      // variant for it, which a registry without that module cannot have.
+      final left = {
+        for (final module in fixtureModules())
+          if (!ids.contains(module.descriptor.id)) module.descriptor.id,
+      };
       for (final module in fixtureModules()) {
-        if (module.descriptor.provides.contains(provider.role)) continue;
-        expect(ids, contains(module.descriptor.id));
+        final descriptor = module.descriptor;
+        if (ids.contains(descriptor.id)) continue;
+        expect(
+          descriptor.provides.contains(provider.role) ||
+              {
+                ...descriptor.dependsOn,
+                ...?descriptor.variants?.byProvider.keys,
+              }.any(left.contains),
+          isTrue,
+          reason: '${descriptor.id} is not in the registry of $id',
+        );
       }
       final modules = [
         for (final module in provider.modules) module.descriptor.id,
