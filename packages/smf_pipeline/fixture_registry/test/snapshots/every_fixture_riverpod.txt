@@ -248,6 +248,13 @@ Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes
 - The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
 - Use events between parts of the app that do not import each other.
 
+## Feedback
+
+- `appFeedback` in `lib/core/feedback/app_feedback.dart` lets a user write to the developer: call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app. It opens the way of the provider, such as the mail app with a new mail, a form or a survey. It completes with `true` once that opened, without waiting for the user, or with `false`. It never throws, and a call while another is on its way does nothing.
+- `appFeedback.available` tells whether the provider has what it needs, and does not change while the app runs: hide your own button while it is `false`.
+- Never ask anything before or around the review dialog of a store, and never make a way to write depend on whether the user rated the app.
+- A new provider implements `FeedbackService` of `lib/core/feedback/feedback_service.dart`, and only the files of its implementation import it. The code of the app calls neither `createFeedbackService()` nor `appFeedback.use()`, which is for tests.
+
 ## Fixture
 
 The modules of the fixture fill the sockets of the app entry, and the tests read what the sockets got.
@@ -511,6 +518,31 @@ Each flavor has a run configuration, which passes the flavor and the arguments t
 
 - In VS Code, they are in `.vscode/launch.json`. Run and Debug (F5) starts the one that you select in the Run and Debug view. The Run and Debug links above `main()` and above a test, and the Testing view, always use the configuration of `dev`, the only one that is a template of those launches (`templateFor`).
 - In Android Studio, each is a file of its own, `.run/<flavor>.run.xml`. A test that you run there gets none of these arguments.
+
+## Feedback
+
+`appFeedback` in `lib/core/feedback/app_feedback.dart` lets the users of the app write to you. Call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app:
+
+```dart
+TextButton(
+  onPressed: () => appFeedback.open(context),
+  child: const Text('Write to us'),
+)
+```
+
+It opens the way to write of the provider of feedback, such as a new mail in the mail app, a form or a survey, and completes with `true` once that way opened, without waiting for the user to send anything. It completes with `false` when the way could not open, after the provider showed the user another way to reach you if it has one, such as the address to copy. It never throws: an error of the provider goes to the handler of the errors of Flutter, such as that of a crash reporter, and counts as `false`. A call while another is on its way does nothing and completes with `false`.
+
+`appFeedback.available` tells whether the provider has what it needs, such as your address, and does not change while the app runs. While it is `false`, `open` does nothing, so hide a button of your own then.
+
+This app has no settings screen, so call it from a button of your own, such as on a screen of help.
+
+Each provider adds to what reaches you the name, the version, the build number and the flavor of the app and its platform, so that you know what the user ran. The section of the provider tells what it sends and how.
+
+The way to write is there whatever the user did with the review dialog of a store. Google Play forbids any question before or around that dialog, so never send the happy users to the store and the unhappy ones here.
+
+A way to write inside the app does not replace the Support URL that App Store Connect asks of every app, a page where its users reach you (App Store Review Guideline 1.5).
+
+What a user writes leaves the device through the provider. A provider that sends it through a service of its own, such as a form, collects data: declare it in App Privacy and in Data safety, as the section of the provider says what it sends. Both stores also require a link to a privacy policy in the listing of the app and inside the app.
 
 ## Languages
 
@@ -3029,6 +3061,137 @@ late final CommunicationService _communicationService;
 Future<void> initEvents() async {
   _communicationService = await impl0.openFixtureEvents();
 }
+=== lib/core/feedback/app_feedback.dart (role:feedback) ===
+import 'package:fixture_app/core/fixture_feedback/fixture_feedback.dart'
+    as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'feedback_service.dart';
+
+/// How the users of the app write to its developer: a button calls
+/// [AppFeedbackController.open] with its context, and hides while
+/// [AppFeedbackController.available] is false.
+final AppFeedbackController appFeedback = AppFeedbackController._(
+  createFeedbackService(),
+);
+
+/// The way the users of the app write to its developer, the same with every
+/// provider of the feedback role: the service of the provider does the
+/// writing, and the controller keeps to what the role guarantees.
+///
+/// The app has one controller, [appFeedback].
+final class AppFeedbackController {
+  AppFeedbackController._(this._service);
+
+  FeedbackService _service;
+
+  /// Whether a call of [open] is on its way.
+  bool _opening = false;
+
+  /// Whether the app printed that the service failed to tell whether a user
+  /// can write.
+  bool _printedAvailable = false;
+
+  /// Whether a user can write now: the provider has what it needs, such as
+  /// an address. It does not change while the app runs.
+  ///
+  /// A service whose answer throws counts as one without what it needs, and
+  /// a debug build prints its error once.
+  bool get available {
+    try {
+      return _service.available;
+    } on Object catch (error) {
+      if (kDebugMode && !_printedAvailable) {
+        _printedAvailable = true;
+        debugPrint(
+          'The provider of feedback failed to tell whether a user can '
+          'write, so the app takes it as no: $error',
+        );
+      }
+      return false;
+    }
+  }
+
+  /// Opens the way of the provider for the user to write to the developer
+  /// of the app, such as the mail app with a new mail, a form or a survey,
+  /// over the screen of [context], a context below the root of the app.
+  ///
+  /// Completes with true once that way opened, without waiting for the user
+  /// to send anything, and with false when it could not open, after the
+  /// provider showed a way of its own to reach the developer if it has one.
+  /// It completes with false at once, without asking the provider, while
+  /// [available] is false, while [context] is no longer mounted, and while
+  /// another call is on its way.
+  ///
+  /// It never throws: an error of the provider goes to
+  /// `FlutterError.reportError` once and counts as false.
+  Future<bool> open(BuildContext context) async {
+    if (_opening || !context.mounted || !available) return false;
+    _opening = true;
+    try {
+      return await _service.open(context);
+    } on Object catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'feedback',
+          context: ErrorDescription(
+            'while opening the way to write to the developer of the app',
+          ),
+        ),
+      );
+      return false;
+    } finally {
+      _opening = false;
+    }
+  }
+
+  /// For a test: the service that [available] and [open] use from now on.
+  /// The code of the app never calls it.
+  void use(FeedbackService service) => _service = service;
+}
+
+/// The service of the provider of the feedback role. Only [appFeedback] and
+/// a test of the provider call this.
+FeedbackService createFeedbackService() => _feedbackService;
+
+final FeedbackService _feedbackService = impl0.createFixtureFeedback();
+=== lib/core/feedback/feedback_service.dart (role:feedback) ===
+import 'package:flutter/widgets.dart';
+
+/// The way the users of the app write to its developer: what the provider
+/// of the feedback role implements. The code of the app uses appFeedback of
+/// app_feedback.dart.
+///
+/// A provider keeps to what the members say. Only a running app shows
+/// whether it does: the tests of the feedback role check what the app sees,
+/// and the tests of the module of the provider what reaches the developer.
+abstract interface class FeedbackService {
+  /// Whether a user can write now: the provider has what it needs, such as
+  /// an address. Reads at once, never throws, and does not change while the
+  /// app runs.
+  bool get available;
+
+  /// Opens the way of the provider for the user to write to the developer,
+  /// such as the mail app with a new mail, a form or a survey, over the
+  /// screen of [context], a context below the root of the app.
+  ///
+  /// Completes with true once that way opened, without waiting for the user
+  /// to send anything. Completes with false when it could not open, after
+  /// the provider showed a way of its own to reach the developer when it has
+  /// one, such as the address to copy, and at once while [available] is
+  /// false.
+  ///
+  /// It asks the platform nothing before it opens and learns from the answer
+  /// of the open itself: a platform may answer no while the way is there, as
+  /// Android 11 and later answer an app whose manifest names no other app.
+  /// What reaches the developer has the name, the version, the build number
+  /// and the flavor of the app, and its platform: that is the duty of each
+  /// provider, which the test of its module checks. Never throws.
+  Future<bool> open(BuildContext context);
+}
 === lib/core/fixture_analytics/fixture_analytics.dart (fake_analytics) ===
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -3624,6 +3787,54 @@ final class FixtureEvents implements CommunicationService {
   @override
   Stream<T> on<T extends AppEvent>() =>
       _events.stream.where((event) => event is T).cast<T>();
+}
+=== lib/core/fixture_feedback/fixture_feedback.dart (fake_feedback) ===
+import 'package:flutter/widgets.dart';
+
+import '../feedback/feedback_service.dart';
+
+/// The device of the tests, with an app that takes what the user writes to
+/// the developer, as the mocks of every provider of the feedback role have
+/// one. Asked whether it has such an app, it says no, as Android 11 and
+/// later say to an app whose manifest names no other app.
+abstract final class FixtureFeedbackDevice {
+  /// What the app of the device took, in order.
+  static final List<String> opened = [];
+
+  /// Opens the app with [message], and answers a turn of the event loop
+  /// later, as the system does, that it opened.
+  static Future<bool> open(String message) async {
+    await Future<void>.delayed(Duration.zero);
+    opened.add(message);
+    return true;
+  }
+
+  /// Whether the device has such an app, which it answers a turn of the
+  /// event loop later: no, though it has one.
+  static Future<bool> canOpen() async {
+    await Future<void>.delayed(Duration.zero);
+    return false;
+  }
+}
+
+/// Creates the feedback of the fixture, as a start of the app does.
+FeedbackService createFixtureFeedback() => FixtureFeedback._();
+
+/// Feedback on the device of the tests: it has what it needs, and opens the
+/// app of the device with a message in the language of the app.
+final class FixtureFeedback implements FeedbackService {
+  FixtureFeedback._();
+
+  @override
+  bool get available => true;
+
+  @override
+  Future<bool> open(BuildContext context) async {
+    // Read before the first await, while the context is surely mounted.
+    final language = Localizations.localeOf(context).languageCode;
+    final message = 'Feedback in $language';
+    return FixtureFeedbackDevice.open(message);
+  }
 }
 === lib/core/fixture_notes/fixture_notes.dart (fake_rest_user) ===
 import 'package:flutter/foundation.dart';

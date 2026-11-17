@@ -2678,6 +2678,10 @@ const _cases = [
   // so its provider has one case, and the module that requires the role.
   'fake_remote_config',
   'fake_config_user',
+  // The fixture feedback, whose role uses the settings screen, which no
+  // fixture provides, and the localization role.
+  'fake_feedback with localization',
+  'fake_feedback',
   'fake_ci with env',
   'fake_ci',
   'fake_registrations (fake_di)',

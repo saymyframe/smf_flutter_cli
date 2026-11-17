@@ -1980,6 +1980,28 @@ List<BrokenProvider> brokenProviders() => const [
         ],
       ),
       BrokenProvider(
+        BrokenModule.feedbackCheckingFirst,
+        role: feedbackRole,
+        bug: 'Its open first asks the device whether it has an app that takes '
+            'what the user writes, as canLaunchUrl of url_launcher does, and '
+            'completes with false on a no without opening. The device of the '
+            'tests has such an app and says no, as Android 11 and later say to '
+            'an app whose manifest names no other app, so the way to write '
+            'never opens there.',
+        // The role needs no other module: the fixture feedback alone, with
+        // the app entry of the fixtures.
+        app: [],
+        failures: [
+          MatrixExpectedFailure(
+            'test/feedback_role/feedback_role_test.dart',
+            'open() of the provider opens its way on a device that has one, '
+                'and completes with true',
+            'the provider did not open its way to write, though the device of '
+                'the tests has one',
+          ),
+        ],
+      ),
+      BrokenProvider(
         BrokenModule.purchasesKeptByService,
         role: purchasesRole,
         bug: 'Its service keeps the purchases in a field of its own, for '
