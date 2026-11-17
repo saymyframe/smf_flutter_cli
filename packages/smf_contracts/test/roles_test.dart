@@ -217,6 +217,7 @@ void main() {
       'cardinality': RoleCardinality.atMostOne,
       'requires': <String>{},
       'uses': {'settings_screen', 'localization'},
+      'feeds': <String>{},
     });
     expect(shape(settingsScreenRole), {
       'cardinality': RoleCardinality.atMostOne,
