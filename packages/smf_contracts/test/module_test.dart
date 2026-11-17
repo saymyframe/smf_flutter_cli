@@ -43,6 +43,7 @@ void main() {
       expect(descriptor.dependsOn, isEmpty);
       expect(descriptor.requires, isEmpty);
       expect(descriptor.uses, isEmpty);
+      expect(descriptor.feeds, isEmpty);
       expect(descriptor.providers, isEmpty);
       expect(descriptor.variants, isNull);
       expect(descriptor.sockets, isEmpty);
@@ -117,6 +118,19 @@ void main() {
       expect(descriptor.effectiveRequires, {router, stateManagement});
       expect(descriptor.effectiveUses, {di}, reason: 'required wins over used');
       expect(descriptor.roles, {router, stateManagement, di});
+    });
+
+    test('a role it only feeds is none of its roles', () {
+      final descriptor = ModuleDescriptor(
+        id: const ModuleId('home'),
+        description: 'Home',
+        kind: plainKind,
+        uses: {di},
+        feeds: {stateManagement},
+      );
+
+      expect(descriptor.feeds, {stateManagement});
+      expect(descriptor.roles, {di});
     });
 
     test('a role it provides is neither required nor used', () {

@@ -34,6 +34,7 @@ final class TestRole<D extends Object> extends Role<D> {
     this.cardinality = RoleCardinality.atMostOne,
     Set<Role> requires = const {},
     Set<Role> uses = const {},
+    Set<Role> feeds = const {},
     this.sockets = const [],
     this.socketFamilies = const [],
     this.options = const [],
@@ -43,7 +44,8 @@ final class TestRole<D extends Object> extends Role<D> {
     this.openToAllModules = false,
     this.interface = const RoleInterface(),
   })  : _requires = requires,
-        _uses = uses;
+        _uses = uses,
+        _feeds = feeds;
 
   @override
   final String id;
@@ -59,12 +61,16 @@ final class TestRole<D extends Object> extends Role<D> {
 
   final Set<Role> _requires;
   final Set<Role> _uses;
+  final Set<Role> _feeds;
 
   @override
   Set<Role> get requires => _requires;
 
   @override
   Set<Role> get uses => _uses;
+
+  @override
+  Set<Role> get feeds => _feeds;
 
   @override
   final List<SocketRef> sockets;
@@ -175,6 +181,7 @@ final class TestModule extends SmfModule {
     Set<String> dependsOn = const {},
     Set<Role> requires = const {},
     Set<Role> uses = const {},
+    Set<Role> feeds = const {},
     List<RoleProvider> providers = const [],
     Variants? variants,
     List<SocketRef> sockets = const [],
@@ -189,6 +196,7 @@ final class TestModule extends SmfModule {
           dependsOn: {for (final id in dependsOn) ModuleId(id)},
           requires: requires,
           uses: uses,
+          feeds: feeds,
           providers: providers,
           variants: variants,
           sockets: sockets,

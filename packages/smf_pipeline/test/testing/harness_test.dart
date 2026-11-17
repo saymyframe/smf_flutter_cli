@@ -934,6 +934,61 @@ void main() {
     ]);
   });
 
+  test(
+      'builds no case of a module or the template of a role for a role that '
+      'it only feeds, whose data the apps with every module take', () async {
+    final bridges = TestRole<String>('bridges');
+    final riverpod = TestProvider<String>(bridges);
+    final theme = TestRole<NoDsl>(
+      'theme',
+      feeds: {bridges},
+      template: TestTemplate<NoDsl>(
+        contributions: [bridges.data('from theme')],
+      ),
+    );
+    final harness = ContractHarness(
+      ModuleRegistry([
+        scaffold(),
+        TestModule(
+          'home',
+          feeds: {bridges},
+          contributions: [bridges.data('from home')],
+        ),
+        TestModule('material', providers: [RoleProvider.plain(theme)]),
+        TestModule('riverpod', providers: [riverpod]),
+        TestModule('bloc', providers: [RoleProvider.plain(bridges)]),
+      ]),
+    );
+
+    expect(
+      harness.casesOfModule(const ModuleId('home')).map((c) => '$c'),
+      ['home'],
+    );
+    expect(harness.casesOfRole(theme).map((c) => '$c'), ['theme by material']);
+    expect(harness.casesOfRole(bridges).map((c) => '$c'), [
+      'bridges by riverpod',
+      'bridges by bloc',
+    ]);
+    expect(await harness.uncheckedProviders(), isEmpty);
+    expect(errorsOf(await harness.checkAll()), isEmpty);
+
+    // The apps with every module have each feeder with each provider of
+    // the role, and there the data reaches the hooks of the provider.
+    final every = harness.casesOfAll();
+    expect(every.map((c) => '$c'), [
+      'every module (riverpod)',
+      'every module (bloc)',
+    ]);
+    expect(errorsOf([await harness.check(every.first)]), isEmpty);
+    expect(
+      [
+        for (final data in riverpod.validated.last.data)
+          '${data.origin}: ${data.value}',
+      ],
+      ['home: from home', 'role:theme: from theme'],
+    );
+  });
+
   test('checks rendered code with the structural rules of the roles', () async {
     final result = await harness.check(
       const ContractCase('scaffold', requested: [ModuleId('scaffold')]),
@@ -2694,6 +2749,53 @@ void main() {
       });
 
       test(
+          'reports an import of a file of a role that its user only feeds, '
+          'which gives it no symbol of the role', () async {
+        final bridges = TestRole<String>(
+          'bridges',
+          template: TestTemplate<String>(
+            contributions: [
+              dart('lib/core/bridges.dart', 'class Bridges {}\n'),
+            ],
+          ),
+        );
+        String importer(String id) =>
+            "import '../core/bridges.dart';\n\nfinal $id = Bridges();\n";
+        final harness = ContractHarness(
+          ModuleRegistry([
+            scaffold(),
+            TestModule(
+              'home',
+              feeds: {bridges},
+              contributions: [
+                bridges.data('from home'),
+                dart('lib/home/home.dart', importer('home')),
+              ],
+            ),
+            TestModule(
+              'user',
+              uses: {bridges},
+              contributions: [dart('lib/user/user.dart', importer('user'))],
+            ),
+            TestModule('riverpod', providers: [RoleProvider.plain(bridges)]),
+          ]),
+        );
+
+        final result = await harness.check(harness.casesOfAll().single);
+
+        expect(
+          [for (final issue in result.errors) issue.message],
+          [
+            equals(
+              'lib/home/home.dart imports lib/core/bridges.dart in the '
+              'template of home, but that file is of role:bridges, which home '
+              'neither depends on nor knows through a role.',
+            ),
+          ],
+        );
+      });
+
+      test(
           'reports an import that the app cannot resolve on the module whose '
           'fragment needs it', () async {
         final harness = ContractHarness(
@@ -2808,8 +2910,8 @@ void main() {
       test(
           'what a render hook of the template or of a provider of a role '
           'gives may import the files of the modules that give data to the '
-          'role, or to a role that it requires or uses, and the template of '
-          'a brick may not', () async {
+          'role, also of those that only feed it, or to a role that it '
+          'requires or uses, and the template of a brick may not', () async {
         // As the layout role shows the destinations of the router role,
         // with the icons that the features give them.
         final shelf = TestRole<String>('shelf');
@@ -2821,11 +2923,13 @@ void main() {
             'final a = a0.A();\n'
             'final item = i0.Item();\n'
             'final tag = t0.Tag();\n'
+            'final pin = p0.Pin();\n'
             'final crate = c0.Crate();',
             imports: [
               ImportRef.app('a/a.dart', prefix: 'a0'),
               ImportRef.app('item/item.dart', prefix: 'i0'),
               ImportRef.app('tag/tag.dart', prefix: 't0'),
+              ImportRef.app('pin/pin.dart', prefix: 'p0'),
               ImportRef.app('crate/crate.dart', prefix: 'c0'),
             ],
           ),
@@ -2835,6 +2939,7 @@ void main() {
         const byHand = "import '../a/a.dart';\n"
             "import '../item/item.dart';\n"
             "import '../tag/tag.dart';\n"
+            "import '../pin/pin.dart';\n"
             "import '../crate/crate.dart';\n";
         final display = TestRole<String>(
           'display',
@@ -2885,6 +2990,15 @@ void main() {
                 dart('lib/tag/tag.dart', 'class Tag {}\n'),
               ],
             ),
+            // A module that gives the role data alone.
+            TestModule(
+              'pin',
+              feeds: {shelf},
+              contributions: [
+                shelf.data('pin'),
+                dart('lib/pin/pin.dart', 'class Pin {}\n'),
+              ],
+            ),
             TestModule(
               'crate',
               requires: {stock},
@@ -2907,6 +3021,7 @@ void main() {
               ModuleId('lib_a'),
               ModuleId('item'),
               ModuleId('tag'),
+              ModuleId('pin'),
               ModuleId('crate'),
             ],
           ),
@@ -2959,7 +3074,7 @@ void main() {
                   who,
                 ),
               ],
-              for (final target in ['item', 'tag'])
+              for (final target in ['item', 'tag', 'pin'])
                 refused(
                   'lib/$directory/written.dart',
                   target,
