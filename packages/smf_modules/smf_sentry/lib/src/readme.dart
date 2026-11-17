@@ -39,7 +39,7 @@ sentry {
 /// crashes next to another crash reporter, the quota, the three cases of
 /// symbols, and what the app sends for its privacy policy.
 final String readmeSection = '''
-The app reports its errors to [Sentry](https://sentry.io) with [sentry_flutter](https://pub.dev/packages/sentry_flutter). `$reporterFile` starts Sentry in `bootstrap()` with the DSN of `$_dsn` in `$_env`, and implements the crash reporter of the app on it. While `$_dsn` has no value in a build, the app starts without Sentry and reports nothing to it, and a debug build prints why.
+The app reports its errors to [Sentry](https://sentry.io) with [sentry_flutter](https://pub.dev/packages/sentry_flutter). `$reporterFile` starts Sentry in `bootstrap()` with the DSN of `$_dsn` in `$_env`, and implements the crash reporter of the app on it. While `$_dsn` has no value in a build, or one that is no DSN of Sentry, the app starts without Sentry and reports nothing to it, and a debug build prints why without the value.
 
 Create a Flutter project in Sentry and copy its DSN into `$_dsn`. The section ${AppEntryRole.setupHeading} lists this among the steps that you do by hand. A DSN only lets an app send events to its project, and it goes into the app, where anyone can read it, so it is no secret. In the settings of the project, give the key of the DSN a rate limit, so that one app that fails in a loop does not use up the quota of the organization. Keep a second project for development: its DSN goes into your local `$_env`, and the DSN of the project of the release goes into the values that a build for a store gets, such as those of the environment `${AppEntryRole.releaseFlavor.name}` of your CI.
 

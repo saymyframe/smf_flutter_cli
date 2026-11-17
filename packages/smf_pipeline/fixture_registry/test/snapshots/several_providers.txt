@@ -1066,7 +1066,7 @@ All flavors share the screen. The section of the module that provides the screen
 
 ## Sentry
 
-The app reports its errors to [Sentry](https://sentry.io) with [sentry_flutter](https://pub.dev/packages/sentry_flutter). `lib/core/crash_reporting/sentry_crash_reporter.dart` starts Sentry in `bootstrap()` with the DSN of `SENTRY_DSN` in `.env`, and implements the crash reporter of the app on it. While `SENTRY_DSN` has no value in a build, the app starts without Sentry and reports nothing to it, and a debug build prints why.
+The app reports its errors to [Sentry](https://sentry.io) with [sentry_flutter](https://pub.dev/packages/sentry_flutter). `lib/core/crash_reporting/sentry_crash_reporter.dart` starts Sentry in `bootstrap()` with the DSN of `SENTRY_DSN` in `.env`, and implements the crash reporter of the app on it. While `SENTRY_DSN` has no value in a build, or one that is no DSN of Sentry, the app starts without Sentry and reports nothing to it, and a debug build prints why without the value.
 
 Create a Flutter project in Sentry and copy its DSN into `SENTRY_DSN`. The section Finish the setup lists this among the steps that you do by hand. A DSN only lets an app send events to its project, and it goes into the app, where anyone can read it, so it is no secret. In the settings of the project, give the key of the DSN a rate limit, so that one app that fails in a loop does not use up the quota of the organization. Keep a second project for development: its DSN goes into your local `.env`, and the DSN of the project of the release goes into the values that a build for a store gets, such as those of the environment `prod` of your CI.
 
@@ -4266,9 +4266,9 @@ void Function(SentryFlutterOptions options)? configureSentryForTests;
 /// The environment of the events is the flavor of the build. A debug build
 /// sends its events too.
 ///
-/// Throws a [StateError] when the build has no DSN, or when Sentry does not
-/// start with it: the app then reports nothing to Sentry, and a debug build
-/// prints why.
+/// Throws a [StateError] when the build has no DSN, has a value that is no
+/// DSN of Sentry, or when Sentry does not start with it: the app then reports
+/// nothing to Sentry, and a debug build prints why, without the value.
 Future<CrashReporter> initSentryCrashReporter() async {
   final dsn = AppEnv.sentryDsn;
   if (dsn == null) {
@@ -4301,6 +4301,12 @@ Future<CrashReporter> initSentryCrashReporter() async {
       }
       configureSentryForTests?.call(options);
     });
+  } on ArgumentError {
+    // The errors of Sentry about a DSN that it does not take quote the DSN,
+    // which a debug build would print.
+    throw StateError(_noDsnOfSentry);
+  } on FormatException {
+    throw StateError(_noDsnOfSentry);
   } finally {
     FlutterError.onError = flutterErrors;
   }
@@ -4313,6 +4319,13 @@ Future<CrashReporter> initSentryCrashReporter() async {
   }
   return const SentryCrashReporter();
 }
+
+/// Why the app reports nothing to Sentry when Sentry does not take the
+/// value of SENTRY_DSN, which it does not quote.
+const _noDsnOfSentry =
+    'SENTRY_DSN of this build is no DSN of Sentry, so the '
+    'app reports nothing to Sentry: copy the DSN of your Sentry project into '
+    '.env again, as the section "Sentry" of its README tells.';
 
 /// Reports the errors of the app to Sentry.
 ///
