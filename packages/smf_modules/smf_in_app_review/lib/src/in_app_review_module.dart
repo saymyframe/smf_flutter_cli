@@ -48,7 +48,7 @@ final class InAppReviewModule extends SmfModule {
         BrickContribution(inAppReviewBundle),
         const PubspecContribution.hosted('in_app_review', '^2.0.12'),
         // The version of each is the one that the other modules of the app
-        // take, such as the paywall, which opens its links with url_launcher.
+        // take, such as those that open links with url_launcher.
         const PubspecContribution.hosted('url_launcher', 'any'),
         const PubspecContribution.hosted('package_info_plus', 'any'),
         reviewRole.data(

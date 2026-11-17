@@ -206,8 +206,8 @@ void main() {
         ],
         [
           ('in_app_review', '^2.0.12', false),
-          // The versions that the other modules of the app take, such as the
-          // paywall, which opens its links with url_launcher.
+          // The versions that the other modules of the app take, such as
+          // those that open links with url_launcher.
           ('url_launcher', 'any', false),
           ('package_info_plus', 'any', false),
         ],
