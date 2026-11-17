@@ -34,9 +34,16 @@ def mirror = 'https://maven-central.storage-download.googleapis.com/maven2/'
 def behindMirror = 'mavenCentralBehindMirror'
 
 def addBehindMirror = { RepositoryHandler repositories ->
-    repositories.maven {
+    repositories.maven { repository ->
         name = behindMirror
         url = 'https://repo.maven.apache.org/maven2/'
+        // Gradle goes on without this repository once it has disabled it
+        // for the build. Only Gradle 9.3 and later have the setting, and CI
+        // also builds the apps of published releases of SMF, whose Gradle
+        // may be older.
+        if (repository.hasProperty('allowInsecureContinueWhenDisabled')) {
+            repository.allowInsecureContinueWhenDisabled.set(true)
+        }
     }
 }
 
