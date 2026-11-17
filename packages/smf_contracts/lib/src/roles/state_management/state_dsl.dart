@@ -161,9 +161,6 @@ abstract base class StateBridges extends StateData {
   /// The code imports the file of the bridges with the prefix `bridges`,
   /// and a widget below the root of the app builds it.
   Fragment watch(SharedState entry, String child);
-
-  @override
-  String toString() => 'bridges';
 }
 
 /// An entry of the app: a [SharedState] with its owner.
@@ -194,11 +191,11 @@ ContributionOrigin _ownerOf(ContributionOrigin origin) => switch (origin) {
       _ => origin,
     };
 
-/// How a message names [owner], who gave the app an entry.
+/// How a message names [owner], who gave the app an entry: only modules
+/// and the templates of roles give the role entries.
 String _named(ContributionOrigin owner) => switch (owner) {
       ModuleOrigin(:final module) => 'the module $module',
-      RoleTemplateOrigin(:final role) => 'the template of the $role',
-      PipelineOrigin() => 'the $owner',
+      _ => 'the template of the ${(owner as RoleTemplateOrigin).role}',
     };
 
 /// The problems of [entries], the entries of the module or of the template

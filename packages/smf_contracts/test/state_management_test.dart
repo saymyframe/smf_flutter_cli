@@ -196,7 +196,14 @@ void main() {
             description: description,
           );
 
-      for (final name in ['CounterCount', 'counter_count', '1count', '']) {
+      for (final name in [
+        'CounterCount',
+        'counter_count',
+        '1count',
+        '',
+        // A word of Dart is no name.
+        'class',
+      ]) {
         expect(
           entry(name: name).problems(),
           [
@@ -734,6 +741,28 @@ void main() {
       expect(issues.single.hint, contains('sharedStateIn()'));
       // A provider that renders nothing renders no entry.
       expect(check(), hasLength(2));
+    });
+
+    test(
+        'leave the function of an entry outside the app to the module rule, '
+        'and report a provider that does not follow it', () {
+      const outside = SharedState(
+        'counterTotal',
+        listenable: FunctionRef(
+          'totalListenable',
+          import: ImportRef('package:counter/counter.dart'),
+        ),
+        type: TypeRef('int'),
+        description: 'The total.',
+      );
+
+      expect(_messages(check(entries: [outside], bridges: rendered)), [
+        equals(
+          'The provider of the state management role does not render the '
+          'entry counterTotal of the module counter: none of its files calls '
+          'or tears off totalListenable() of package:counter/counter.dart.',
+        ),
+      ]);
     });
   });
 }

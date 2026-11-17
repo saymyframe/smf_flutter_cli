@@ -223,4 +223,41 @@ void main() {
       );
     });
   });
+
+  test(
+      'writes a value of a type of Dart without a prefix, and imports a '
+      'library of its own once more, with a prefix, for the type of a value',
+      () {
+    const key = SharedState(
+      'formKey',
+      listenable: FunctionRef(
+        'formKeyListenable',
+        import: ImportRef.app('core/form/form.dart'),
+      ),
+      type: TypeRef(
+        'Key',
+        import: ImportRef('package:flutter/foundation.dart'),
+      ),
+      description: 'The key of the form.',
+    );
+    final text = providersFileOf(const [PushRole.addressState, key], 'my_app');
+    final (:index, :errors) = DartFileIndexer.parse('file.dart', text);
+
+    expect(errors, isEmpty);
+    expect(
+      text,
+      contains(
+        'final NotifierProvider<ListenableNotifier<String?>, String?>\n'
+        'pushAddressProvider = NotifierProvider(',
+      ),
+    );
+    expect(
+      [
+        for (final import in index.imports)
+          if (import.uri == 'package:flutter/foundation.dart')
+            import.prefix ?? import.show.join(','),
+      ],
+      ['state1', 'ValueListenable'],
+    );
+  });
 }
