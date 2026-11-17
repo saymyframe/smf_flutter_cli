@@ -296,11 +296,12 @@ void main() {
         expect(read(app, path), text, reason: '$path of ${matrixApp.name}');
       }
     }
-    // The modules whose steps need an external service register services
-    // of their own, so the files of the two apps tell them apart.
+    // Without the modules whose steps need an external service, the app has
+    // no sign-in, whose routes and guards the walk of the other app has, so
+    // the files of the two apps tell them apart.
     expect(
-      generated[true]![registeredServicesFile],
-      isNot(generated[false]![registeredServicesFile]),
+      generated[true]![routerWalkFile],
+      isNot(generated[false]![routerWalkFile]),
     );
   });
 
