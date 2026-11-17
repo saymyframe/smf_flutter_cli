@@ -6124,7 +6124,7 @@ void main() {
         'gets the entries of the app, each with its function and the watcher '
         'that the provider of the role gives, in the order of the role, and '
         'the changes of the values of the roles of the app through their '
-        'controllers', () async {
+        'controllers, and what puts them back', () async {
       final test = await stateManagementRoleAppTest();
 
       final files = test.generatedFiles!(withEntries, 'my_app');
@@ -6162,6 +6162,7 @@ void main() {
           'bridgeEntries',
           'BridgeChange',
           'bridgeChanges',
+          'bridgeRestores',
           '_shown',
         ],
       );
@@ -6232,6 +6233,17 @@ void main() {
           '];\n',
         ),
       );
+      // When the test ends, it puts back the theme mode of the device and
+      // the languages of the device; nothing takes the new account away.
+      expect(
+        text,
+        contains(
+          'final List<Future<void> Function()> bridgeRestores = [\n'
+          '  () => entry1.appThemeMode.choose(ThemeMode.system),\n'
+          '  () => entry2.appLocale.choose(null),\n'
+          '];\n',
+        ),
+      );
       // The changes call the controllers in the files of the roles, the
       // same files as the functions of their entries.
       expect(
@@ -6266,6 +6278,12 @@ void main() {
       expect(
         without,
         contains('const List<BridgeChange> bridgeChanges = [];\n'),
+      );
+      expect(
+        without,
+        contains(
+          'const List<Future<void> Function()> bridgeRestores = [];\n',
+        ),
       );
       expect(without, isNot(contains('material.dart')));
 

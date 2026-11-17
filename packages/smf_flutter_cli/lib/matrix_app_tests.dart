@@ -2363,10 +2363,11 @@ List<SharedState> _sharedStateOf(MatrixApp app) {
 /// management role: `bridgeEntries`, the entries of the app in the order of
 /// the role ([StateManagementRole.sharedStateIn]), each a `BridgeEntry` with
 /// its name, its function and its watcher, the code that the provider of
-/// the role gives for it ([StateBridges.watch]), and `bridgeChanges`, the
+/// the role gives for it ([StateBridges.watch]), `bridgeChanges`, the
 /// changes of the values of entries of the app through the controllers of
 /// their roles, in the order that the test makes them, each a
-/// `BridgeChange` with the name of its entry, what it is and the call.
+/// `BridgeChange` with the name of its entry, what it is and the call, and
+/// `bridgeRestores`, the calls that put the values back when the test ends.
 const stateBridgesFile = 'test/state_management_role/of_app.dart';
 
 /// A change of the value of `entry`, an entry that the template of a role
@@ -2377,6 +2378,16 @@ const stateBridgesFile = 'test/state_management_role/of_app.dart';
 typedef _BridgeChange = ({
   SharedState entry,
   String what,
+  String file,
+  String Function(String prefix) call,
+  List<ImportRef> imports,
+});
+
+/// What puts the value of `entry` back as the app had it at the start,
+/// through the controller of its role in `file`: the call, `call`, which
+/// takes the prefix of that file, and the `imports` that it needs besides.
+typedef _BridgeRestore = ({
+  SharedState entry,
   String file,
   String Function(String prefix) call,
   List<ImportRef> imports,
@@ -2427,6 +2438,28 @@ final List<_BridgeChange> _bridgeChanges = [
         "      email: 'state-bridges@state-management-tests.example.com',\n"
         "      password: 'State-bridges-2468',\n"
         '    )',
+    imports: const [],
+  ),
+];
+
+/// What the test of the state management role puts back when it ends, so
+/// that the app is as the test found it where a controller can take a value
+/// back: the theme mode of the device, which the theme role saves, and the
+/// languages of the device, which the last change of the language chose
+/// already. No call takes the account that the test signed up away, which
+/// stays signed in; the file of the test has that one test, so no other
+/// test sees it.
+final List<_BridgeRestore> _bridgeRestores = [
+  (
+    entry: ThemeRole.modeState,
+    file: ThemeRole.themeModeFile,
+    call: (prefix) => '$prefix.appThemeMode.choose(ThemeMode.system)',
+    imports: const [_themeMode],
+  ),
+  (
+    entry: LocalizationRole.localeState,
+    file: LocalizationRole.appLocaleFile,
+    call: (prefix) => '$prefix.appLocale.choose(null)',
     imports: const [],
   ),
 ];
@@ -2491,6 +2524,13 @@ Map<String, String> _stateBridgesOf(MatrixApp app, String packageName) {
       ..writeln('    change: () => ${change.call(prefixOf(file))},')
       ..writeln('  ),');
   }
+  final restoresCode = StringBuffer();
+  for (final restore in _bridgeRestores) {
+    if (!names.contains(restore.entry.name)) continue;
+    final file = ImportRef.app(restore.file.substring('lib/'.length));
+    imports.addAll(restore.imports);
+    restoresCode.writeln('  () => ${restore.call(prefixOf(file))},');
+  }
   final directives = [
     for (final import in ImportRef.merge(
       [
@@ -2506,6 +2546,10 @@ Map<String, String> _stateBridgesOf(MatrixApp app, String packageName) {
   final changes = changesCode.isEmpty
       ? 'const List<BridgeChange> bridgeChanges = [];'
       : 'final List<BridgeChange> bridgeChanges = [\n$changesCode];';
+  final restores = restoresCode.isEmpty
+      ? 'const List<Future<void> Function()> bridgeRestores = [];'
+      : 'final List<Future<void> Function()> bridgeRestores = [\n'
+          '$restoresCode];';
   return {
     stateBridgesFile: '''
 // The bridges of the state manager of the app and the changes of their
@@ -2538,6 +2582,11 @@ typedef BridgeChange = ({
 
 /// The changes that the test makes, in their order.
 $changes
+
+/// What the test puts back when it ends, through the controllers of the
+/// roles of the app: the values that they had at the start, where a
+/// controller can take a value back. No call takes a new account away.
+$restores
 
 /// Calls [seen] with [value], and shows nothing.
 Widget _shown(void Function(Object? value) seen, Object? value) {

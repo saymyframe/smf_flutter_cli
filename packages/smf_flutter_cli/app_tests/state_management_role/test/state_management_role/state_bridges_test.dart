@@ -16,6 +16,11 @@
 // (flutter_test_config.dart). Each expectation gives its reason, which a
 // provider of the role with a known bug fails the test with
 // (brokenProviders of the fixture registry).
+//
+// When it ends, the test puts back the values that a controller can take
+// back, such as the theme mode of the device. The account that it signs up
+// stays signed in, since no call takes it away, so this file keeps this one
+// test, and no other test sees the account.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,9 +33,10 @@ const String _follows = 'The bridge of an entry gives the value that the '
     'controller of the entry has, also once that value changed.';
 
 /// How long the test shows frames at most for the watchers to follow a
-/// change, rather than waiting for the screens to settle: a screen of a
-/// module may animate without end, and a bridge that does not follow fails
-/// with the reason of the expectation rather than a timeout.
+/// change, rather than waiting for the screens to settle once more, which a
+/// change of the language or of the session may keep busy for a while: a
+/// bridge that does not follow fails with the reason of the expectation
+/// within that time.
 const Duration _followWait = Duration(seconds: 2);
 
 /// The time between two frames that the test shows while it waits.
@@ -107,6 +113,11 @@ void main() {
     'the value',
     (tester) async {
       await _startApp(tester);
+      addTearDown(() async {
+        for (final restore in bridgeRestores) {
+          await restore();
+        }
+      });
 
       // The value that the watcher of each entry built with last, by the
       // name of the entry.
