@@ -104,13 +104,30 @@ const modulePaths = {
       'of Google that the configuration of the iOS apps wrote, before CI '
       'starts the app.',
   (
-    'Start the app with every module on the Android emulator, and send it a '
-        'push message',
+    'Start the app with every module on the Android emulator, send it a '
+        'push message and publish a value of remote config',
     'smf_firebase_messaging',
   ): 'The test of firebase_messaging that answers the request of the probe '
       'of the module in the start check, through start_app.sh: it sends a '
       'push message to the address of the device with the key of the '
       'service account, and the app tells the script whether it came.',
+  (
+    'Start the app with every module on the Android emulator, send it a '
+        'push message and publish a value of remote config',
+    'smf_firebase_remote_config',
+  ): 'The test of firebase_remote_config that answers the request of the '
+      'probe of the module in the start check, through start_app.sh: it '
+      'publishes a parameter of the check in Remote Config of the Firebase '
+      'project of CI with the key of the service account, and the app tells '
+      'the script whether its value became active there.',
+  (
+    'Remove the values of this run from Remote Config of the Firebase '
+        'project of CI',
+    'smf_firebase_remote_config',
+  ): 'The test of firebase_remote_config that removes from Remote Config of '
+      'the Firebase project of CI the parameters that the answer to the probe '
+      'of the module published in the run, with the key of the service '
+      'account, once the app ran.',
   (
     'Start the app without external services on the Android emulator, and '
         'grant it premium access in RevenueCat',
