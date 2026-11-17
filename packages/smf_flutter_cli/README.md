@@ -90,6 +90,7 @@ Every app has the native flavors `dev`, `staging` and `prod`, which install next
 | [`dio`](https://doc.saymyframe.com/modules/dio) | A REST client with dio: a path joins the address in `.env`, a call fails only with a reason of a closed set, the token of the user goes only to that address, and `GET` and `HEAD` repeat by themselves. |
 | [`revenuecat`](https://doc.saymyframe.com/modules/revenuecat) | Purchases with RevenueCat: premium access that the user buys with a plan of the default offering, and restores. |
 | [`paywall`](https://doc.saymyframe.com/modules/paywall) | A paywall that sells premium access with the plans of the purchases of the app, the screen of the subscription with its row on the settings screen, and a step of the onboarding, with BLoC or with Riverpod. |
+| [`in_app_review`](https://doc.saymyframe.com/modules/in-app-review) | The review dialog of the App Store and Google Play where the code of the app asks for it, when a review is due, and the entry "Rate the app" on the settings screen, which opens the page of the app in its store. |
 | [`email_feedback`](https://doc.saymyframe.com/modules/email-feedback) | "Write to us" on the settings screen: a new mail to you in the mail app of the device, with the version of the app and the device, and a sheet with the address to copy where no mail app opens it. |
 | [`github_actions`](https://doc.saymyframe.com/modules/github-actions) | CI on GitHub Actions: the format check, `flutter analyze` and `flutter test` on each push, and a release APK for an environment on request. |
 

@@ -48,6 +48,7 @@ dependencies:
   smf_go_router: ^0.6.2
   smf_google_sign_in: ^0.7.0
   smf_home_flutter: ^0.5.2
+  smf_in_app_review: ^0.8.0
   smf_launcher_icons: ^0.8.0
   smf_local_notifications: ^0.6.2
   smf_material_theme: ^0.4.4

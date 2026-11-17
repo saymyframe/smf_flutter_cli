@@ -342,6 +342,18 @@ final class FakePreferences implements AppPreferences {
 }
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the value, and sends back whether it returns the same listenable at each
+/// call, and whether that is `appNotifications.permission`.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['the same listenable at each call'] =
+      identical(notificationsPermissionListenable(), notificationsPermissionListenable());
+  result['the permission'] = identical(notificationsPermissionListenable(), appNotifications.permission);
+  port.send(result);
+}
+''';
+
 /// What the scripts for the test app share. `pump` lets what is on its way
 /// happen, `failureOf` tells what a call fails with, and `shown` a tap.
 const _notes = r'''
@@ -1494,6 +1506,36 @@ void main() {
       setUpAll(() async => app = await _app());
 
       tearDownAll(() => app.delete());
+
+      test(
+          'gives the state manager its value through a function of the file '
+          'of the controller, which returns the same listenable each time',
+          () async {
+        const state = NotificationsRole.permissionState;
+
+        expect(await app.run('$_notes$_listenable'), {
+          'the same listenable at each call': true,
+          'the permission': true,
+        });
+        expect(notificationsRole.feeds, {stateManagementRole});
+        expect(
+          [
+            for (final data in _dataFor(stateManagementRole)) data.value,
+          ],
+          [state],
+        );
+        expect(state.name, 'notificationsPermission');
+        expect(state.listenable.name, 'notificationsPermissionListenable');
+        expect(
+          state.listenable.import,
+          const ImportRef.app('core/notifications/app_notifications.dart'),
+        );
+        expect(state.type.name, 'NotificationPermission');
+        expect(state.type.import, state.listenable.import);
+        expect(state.nullable, isFalse);
+        expect(state.listenableType, 'ValueListenable<NotificationPermission>');
+        expect(state.problems(), isEmpty);
+      });
 
       test(
           'asks once while the question of the system is shown, and every '

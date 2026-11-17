@@ -26,6 +26,9 @@ EMAIL_FEEDBACK_ADDRESS=
 
 # The address of the REST API of the app, such as https://api.example.com/v1
 REST_BASE_URL=
+
+# The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
+REVIEW_APP_STORE_ID=
 === .env.example (role:env) ===
 # This file lists the keys of the values that the app reads, each under a
 # comment that says what goes there. After a clone, copy it to .env and fill
@@ -55,6 +58,9 @@ EMAIL_FEEDBACK_ADDRESS=
 
 # The address of the REST API of the app, such as https://api.example.com/v1
 REST_BASE_URL=
+
+# The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
+REVIEW_APP_STORE_ID=
 === .github/workflows/ci.yml (github_actions) ===
 # The CI of this app. The section "GitHub Actions" of README.md tells what it
 # runs and where its values come from.
@@ -133,6 +139,7 @@ jobs:
           PAYWALL_PRIVACY_URL: ${{ vars.PAYWALL_PRIVACY_URL }}
           EMAIL_FEEDBACK_ADDRESS: ${{ vars.EMAIL_FEEDBACK_ADDRESS }}
           REST_BASE_URL: ${{ vars.REST_BASE_URL }}
+          REVIEW_APP_STORE_ID: ${{ vars.REVIEW_APP_STORE_ID }}
         run: dart tool/write_env.dart
       - name: Get the packages
         run: flutter pub get
@@ -656,6 +663,8 @@ With `flutter_native_splash`:
 
 ## State management
 
+- A value that a controller of a role or of a module keeps and screens read, such as the theme mode, reaches the state manager through a bridge of its own once the app has that controller, and the note of the provider names the file of the bridges then. A widget reads such a value through its bridge. Code changes the value only through its controller, which the doc of the bridge names, and never in a build.
+
 With `flutter_bloc`:
 
 - The state of a screen is a `Cubit` in the directory of its feature. The screen provides it with a `BlocProvider` around its content. In a `BlocBuilder` there, it passes the state on to its view as plain values, and the methods of the `Cubit` as callbacks.
@@ -663,6 +672,24 @@ With `flutter_bloc`:
 - When a screen is gone, its `BlocProvider` closes the `Cubit` that it created. For state that several screens read, put a `BlocProvider` around the root widget in `runApp()`, in `lib/main.dart`. A widget reads that `Cubit` with `context.watch`.
 - After an `await`, a `Cubit` checks `isClosed` before it calls `emit()`. The user may have left the screen while the call was on its way, and `emit()` throws in a `Cubit` that is closed.
 - A widget talks only to a `Cubit`, never to a service or a DI container. A `Cubit` takes what it needs through its constructor.
+
+- The values that controllers of the app keep have cubits in `lib/core/state/shared_state_cubits.dart`, one for each value, such as `ThemeModeCubit`, which `SharedStateCubits` provides around the root widget in `lib/main.dart`. A widget reads one with `context.watch`, and code changes the value only through its controller, which the doc of the cubit names.
+
+## Store reviews
+
+- `appReview` in `lib/core/review/app_review.dart` asks for the review dialog of the App Store or Google Play only where the code of the app calls `appReview.requestIfDue()`. Call it at a natural break, such as after the user has finished a task: `unawaited(appReview.requestIfDue());`. It asks only when `ReviewPolicy` says that a review is due: never on the first launch, in the flow of a guard of the routes, twice in a version or twice in 14 days. It returns nothing, since the store tells nothing.
+- Never call it from a button or after a question of your own, and show nothing around the dialog. Nothing in the app may depend on whether the app asked.
+- `appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page for a review. `appReview.hasStorePage` tells whether there is one: on iOS only once `REVIEW_APP_STORE_ID` in `.env` has the App Store ID. The Google Play page is that of `googlePlayId`, the id of the flavor for a release, also from a build of another flavor.
+- A new provider implements `ReviewService` of `lib/core/review/review_service.dart`, and only the files of that implementation import it. The code of the app calls neither `initReview()`, `createReviewService()` nor `appReview.start()`, and writes nothing under the keys `review.*`.
+
+- `ReviewSetting` in `lib/core/review/review_setting.dart`, an entry of the settings screen, opens the page of the app in its store for a review. It shows only where the app has a store page, and it never asks for the review dialog.
+
+With `in_app_review`:
+
+- `InAppReviewService` in `lib/core/review/in_app_review_service.dart` implements `ReviewService` of `lib/core/review/review_service.dart`: it asks for the review dialog with `InAppReview.instance.requestReview()`, opens the page of the app in its store with `launchUrl` of url_launcher, and reads the version of the app with `PackageInfo.fromPlatform()` of package_info_plus. In `lib/`, only that file imports in_app_review.
+- Keep `openStoreListing()` of in_app_review out of the app: on Android it opens the page of the id of the build that runs, such as that of the flavor `dev`, which has no page in Google Play. `appReview.openStorePage()` opens the right page.
+- The app asks for the dialog only where its code calls `appReview.requestIfDue()`. Google Play shows the dialog only in an app that it installed, such as from an internal test track, and the README of the app tells how to see it there. Never send a review while testing: Google Play shows no dialog to an account that has reviewed the app.
+- Through the dialog, Google Play collects the rating and the text of a review. Both stores require a link to a privacy policy in the listing of the app and inside the app.
 
 ## Theme
 
@@ -701,22 +728,23 @@ Generated with [Say My Frame](https://doc.saymyframe.com).
 
 ## Finish the setup
 
-Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,email_feedback.address,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account,paywall.legal_pages) shows each one click by click:
+Once any commands of the sections below have run, the setup still needs these steps, which no command can do. [The guide](https://doc.saymyframe.com/setup?steps=app_entry.ios_app_id,purchases.store_agreements,purchases.store_products,review.app_store_id,email_feedback.address,firebase_analytics.google_analytics,firebase_auth.apple_provider,firebase_auth.apple_revocation,firebase_auth.google_release_sha,firebase_messaging.apns_key,revenuecat.entitlement_and_offering,revenuecat.api_keys,revenuecat.app_store_key,revenuecat.play_service_account,paywall.legal_pages) shows each one click by click:
 
 1. In Xcode, sign the iOS app with your paid Apple Developer team
 2. Set up payments in App Store Connect and Google Play Console
 3. Create the products of your plans in App Store Connect and Google Play Console
-4. Put the email address for "Write to us" into .env
-5. Turn on Google Analytics in the Firebase project, unless it is on already
-6. Turn on Sign in with Apple in Firebase Authentication
-7. Give Firebase your Sign in with Apple key, so that deleting an account works
-8. Before releasing on Google Play, give Firebase the SHA of your release keys
-9. Give Firebase your Apple push key (APNs key)
-10. Set up the entitlement premium and the default offering in RevenueCat
-11. Copy the API keys of your RevenueCat apps into .env
-12. Give RevenueCat your In-App Purchase key from App Store Connect
-13. Give RevenueCat access to Google Play with a service account
-14. Publish your terms of use and privacy policy and put their links into .env
+4. Copy the App Store ID of the app from App Store Connect into .env
+5. Put the email address for "Write to us" into .env
+6. Turn on Google Analytics in the Firebase project, unless it is on already
+7. Turn on Sign in with Apple in Firebase Authentication
+8. Give Firebase your Sign in with Apple key, so that deleting an account works
+9. Before releasing on Google Play, give Firebase the SHA of your release keys
+10. Give Firebase your Apple push key (APNs key)
+11. Set up the entitlement premium and the default offering in RevenueCat
+12. Copy the API keys of your RevenueCat apps into .env
+13. Give RevenueCat your In-App Purchase key from App Store Connect
+14. Give RevenueCat access to Google Play with a service account
+15. Publish your terms of use and privacy policy and put their links into .env
 
 Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
 
@@ -926,6 +954,7 @@ A build takes the values of `.env` from the variables of the GitHub environment 
 - `PAYWALL_PRIVACY_URL`
 - `EMAIL_FEEDBACK_ADDRESS`
 - `REST_BASE_URL`
+- `REVIEW_APP_STORE_ID`
 
 With the GitHub CLI:
 
@@ -1111,6 +1140,7 @@ The keys of the app:
 - `PAYWALL_PRIVACY_URL`, read as `AppEnv.paywallPrivacyUrl`, from the module `paywall`: The address of the privacy policy that the paywall links to
 - `EMAIL_FEEDBACK_ADDRESS`, read as `AppEnv.emailFeedbackAddress`, from the module `email_feedback`: The email address that "Write to us" mails go to, such as support@example.com
 - `REST_BASE_URL`, read as `AppEnv.restBaseUrl`, from the REST API role: The address of the REST API of the app, such as https://api.example.com/v1
+- `REVIEW_APP_STORE_ID`, read as `AppEnv.reviewAppStoreId`, from the store reviews role: The App Store ID of the app, its Apple ID in App Store Connect, such as 1234567890
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
 
@@ -1148,6 +1178,25 @@ The texts of the mail and of the sheet are texts of the module. In an app with l
 To see the mail, run the app on an iPhone, or on an Android device or emulator with a mail app and an account in it, such as Gmail. In an app with a settings screen, tap "Write to us" there. In an app without one, tap your own button that calls `appFeedback.open(context)`.
 
 What the mail tells about the app and the device is read on the device, and leaves it only in a mail that the user sends from their own mail app: the app itself sends nothing.
+
+## in_app_review
+
+The app asks for the review dialog of its store with [in_app_review](https://pub.dev/packages/in_app_review): `lib/core/review/in_app_review_service.dart` implements the reviews of the app on it, as the section "Store reviews" tells. On iOS the dialog is that of StoreKit, and on Android that of the In-App Review API of Google Play. The page of the app in its store opens with [url_launcher](https://pub.dev/packages/url_launcher), and the version of the app, in which the app asks at most once, comes from [package_info_plus](https://pub.dev/packages/package_info_plus).
+
+The app asks only where its code calls `appReview.requestIfDue()`, and nothing asks on its own.
+
+Google Play shows the dialog only in an app that it installed. To see it before the app is published ([Test in-app reviews](https://developer.android.com/guide/playcore/in-app-review/test)):
+
+1. Upload a build of the flavor `prod` to the internal test track in Play Console.
+2. Add a Gmail account to the testers of that track. It is the primary account of the Play Store on the device: an account of Google Workspace does not work.
+3. Install the app once from the internal test track with that account. From then on, local builds of the flavor `prod` may show the dialog on that device: uninstall the copy from Google Play first, since a local build has another signature. Google Play does not limit how often it shows the dialog to an app from the internal test track.
+4. Never send the review of a test, or delete it in the Play Store: Google Play shows no dialog to an account that has reviewed the app.
+
+An app from internal app sharing shows the dialog too, but its review cannot be sent. On a device without the review service of Google Play, such as an emulator without the Play Store, the store cannot take the request, the app records nothing, and the next call of `appReview.requestIfDue()` asks again. On a device with the Play Store, for a build that Google Play did not install, such as a local build of the flavor `dev`, the request completes and shows nothing, and the app counts it as a request, so it does not ask again in that version of the app.
+
+Through the dialog, Google Play collects the rating and the text of the review, which become a public review on Google Play, or which only you see for an app on a closed test track: see the section "Data Safety" of [the In-App Review API](https://developer.android.com/guide/playcore/in-app-review). The privacy manifest of in_app_review on iOS declares no data that it collects.
+
+Both stores require a link to a privacy policy in the listing of the app and inside the app.
 
 ## RevenueCat
 
@@ -1311,6 +1360,25 @@ In this app, each request to the origin of `REST_BASE_URL` carries the token of 
 `response.decoded(Note.fromJson)` turns the JSON of the body into your type, and a body that it does not take fails with `invalidResponse`. A list of JSON is a `List<dynamic>`, so a function of a list takes that and casts its items inside, as above. For generated models, run `flutter pub add json_annotation dev:json_serializable dev:build_runner` and pass the `fromJson` of the model.
 
 In a test, `RestTestServer` of `test/core/rest/rest_test_server.dart` is a local server, and `appRest.use(transport: …)` scripts the answers. `flutter test` otherwise answers 400 to every request, and inside `testWidgets` a real request runs in `tester.runAsync`. A request that is still running when a `testWidgets` body ends fails the test with a pending timer. `test/core/rest/app_rest_test.dart` shows the first.
+
+## Store reviews
+
+The app asks for a review only where its code calls `appReview.requestIfDue()` of `lib/core/review/app_review.dart`. Call it at a natural break, such as when the user has finished a task:
+
+```dart
+await saveNote(note);
+unawaited(appReview.requestIfDue());
+```
+
+When a review is due, the call asks the App Store or Google Play for its own review dialog, and the app shows nothing around it. It returns nothing: the store tells no app whether the dialog showed or what the user did, so nothing in the app may depend on it. Never call it from a button, and never after a question of your own, such as "Do you like the app?": Google Play forbids both, and the App Store allows no prompt but its own.
+
+A review is due as `ReviewPolicy` in that file says: from the third launch of the app (`ReviewPolicy.launches`), three days after its first launch (`ReviewPolicy.sinceFirstLaunch`), and at most once a version of the app and once in 14 days (`ReviewPolicy.between`). Change the numbers there. It is never due in the flow of a guard of the routes, such as the onboarding or a sign-in. The app counts its launches and remembers its last request in the preferences, under the keys `review.*`, so write nothing there.
+
+The store decides whether the dialog shows. iOS shows it in a debug build each time, never in TestFlight, and at most three times in 365 days. Google Play shows it only in an app that it installed, such as from an internal test track. On a device without the review service of Google Play, such as an emulator without the Play Store, the store cannot take the request and the app records nothing, so the next call of `appReview.requestIfDue()` asks again, also in the same launch. On a device with the Play Store, for an app that Google Play did not install, such as a local build, the request completes and shows nothing, and the app counts it as a request, so it does not ask again in that version of the app.
+
+`appReview.openStorePage()` opens the page of the app in its store, and `appReview.openStorePage(review: true)` the page where the user writes a review. On Android that is the Google Play page of `com.example.my_app` (`googlePlayId`), the id of the flavor for a release, also from a build of another flavor. On iOS it is the App Store page of `REVIEW_APP_STORE_ID` in `.env`, the Apple ID of the app in App Store Connect. While that key is empty, the app has no App Store page, and `appReview.hasStorePage` is `false` on iOS.
+
+The entry `ReviewSetting` of the settings screen, in `lib/core/review/review_setting.dart`, opens the page for a review, and shows only where the app has a store page. It never asks for the review dialog.
 
 ## Splash screen
 
@@ -1850,6 +1918,7 @@ import 'package:my_app/core/notifications/app_notifications.dart';
 import 'package:my_app/core/preferences/app_preferences.dart';
 import 'package:my_app/core/purchases/app_purchases.dart';
 import 'package:my_app/core/push/app_push.dart';
+import 'package:my_app/core/review/app_review.dart';
 import 'package:my_app/firebase_options_of_flavor.dart';
 
 /// Runs the start-up code of the app before its first frame: first what
@@ -1865,6 +1934,7 @@ Future<void> bootstrap() async {
   await initPurchases();
   await initPush();
   await registerDependencies();
+  await initReview();
 }
 === lib/core/analytics/analytics_service.dart (role:analytics) ===
 import 'package:flutter/foundation.dart';
@@ -2479,6 +2549,10 @@ final appSession = AppSessionController(
   mode: authMode,
   takeGuestData: takeGuestData,
 );
+
+/// The session of the app, as a [ValueListenable] for the state manager of
+/// the app: [appSession], which changes it only through its calls.
+ValueListenable<AppSession> authSessionListenable() => appSession;
 
 /// Keeps the session of the app up to date with the service of the provider
 /// of sign-in, and signs in, up and out through that service. The app has
@@ -4466,7 +4540,8 @@ abstract final class AppEnv {
       bool.hasEnvironment('PAYWALL_TERMS_URL') ||
       bool.hasEnvironment('PAYWALL_PRIVACY_URL') ||
       bool.hasEnvironment('EMAIL_FEEDBACK_ADDRESS') ||
-      bool.hasEnvironment('REST_BASE_URL');
+      bool.hasEnvironment('REST_BASE_URL') ||
+      bool.hasEnvironment('REVIEW_APP_STORE_ID');
 
   /// The public API key of the App Store app in RevenueCat, which starts with
   /// appl_.
@@ -4512,6 +4587,13 @@ abstract final class AppEnv {
   /// https://api.example.com/v1.
   static String? get restBaseUrl {
     const value = String.fromEnvironment('REST_BASE_URL');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The App Store ID of the app, its Apple ID in App Store Connect, such as
+  /// 1234567890.
+  static String? get reviewAppStoreId {
+    const value = String.fromEnvironment('REVIEW_APP_STORE_ID');
     return value.isEmpty ? null : value;
   }
 }
@@ -5655,6 +5737,7 @@ class GoogleSignInIcon extends StatelessWidget {
   }
 }
 === lib/core/l10n/app_locale.dart (role:localization) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import '../preferences/app_preferences.dart';
@@ -5684,7 +5767,8 @@ final appLocale = AppLocaleController._();
 
 /// Keeps the language that the user chose for the app, and saves each
 /// choice in the preferences of the app.
-final class AppLocaleController extends ChangeNotifier {
+final class AppLocaleController extends ChangeNotifier
+    implements ValueListenable<Locale?> {
   AppLocaleController._();
 
   Locale? _locale;
@@ -5694,6 +5778,7 @@ final class AppLocaleController extends ChangeNotifier {
 
   /// The language that the user chose, one of [appLocales], or `null` while
   /// the app follows the languages of the device.
+  @override
   Locale? get value => _locale;
 
   /// Chooses the language of [locale] as the language of the app, or with
@@ -5743,6 +5828,11 @@ Locale? _ofApp(String? code) {
   }
   return null;
 }
+
+/// The language that the user chose, as a [ValueListenable] for the state
+/// manager of the app: [appLocale], which changes it only through
+/// [AppLocaleController.choose].
+ValueListenable<Locale?> localizationLocaleListenable() => appLocale;
 
 /// Restores the language that the user chose from [preferences], which the
 /// app opened, and keeps them for the choices to come: a restorer of the
@@ -6225,6 +6315,12 @@ const String notificationOwnerKey = 'notifications.owner';
 /// notifications that the app shows now or at a time to come, and the taps
 /// of the user on them.
 final appNotifications = NotificationsController._();
+
+/// Whether the app may show notifications, as a [ValueListenable] for the
+/// state manager of the app: [NotificationsController.permission] of
+/// [appNotifications], which [NotificationsController.request] changes.
+ValueListenable<NotificationPermission> notificationsPermissionListenable() =>
+    appNotifications.permission;
 
 /// Shows the notifications of the app through the service of the provider
 /// of notifications, keeps the permission to show them up to date, and
@@ -7103,6 +7199,7 @@ import 'package:flutter/foundation.dart';
 import 'package:my_app/core/l10n/app_locale.dart';
 import 'package:my_app/core/notifications/app_notifications.dart';
 import 'package:my_app/core/preferences/shared_app_preferences.dart' as impl0;
+import 'package:my_app/core/review/app_review.dart';
 import 'package:my_app/core/theme/theme_mode.dart';
 import 'package:my_app/features/onboarding/onboarding_status.dart';
 
@@ -7194,6 +7291,7 @@ final List<void Function(AppPreferences preferences)> _restorers = [
   restoreOnboarding,
   restoreAppLocale,
   restoreNotifications,
+  restoreReview,
   restoreAppThemeMode,
 ];
 
@@ -7336,6 +7434,11 @@ export 'purchases_service.dart' hide PurchasesService;
 /// Its `value` is the [AppAccess] of the user, and it tells its listeners
 /// when that changes. A widget follows it with a `ValueListenableBuilder`.
 final appPurchases = AppPurchasesController();
+
+/// The premium access of the user, as a [ValueListenable] for the state
+/// manager of the app: [appPurchases], which changes it only through its
+/// calls.
+ValueListenable<AppAccess> purchasesAccessListenable() => appPurchases;
 
 /// Keeps the access of the user up to date with the service of the provider
 /// of purchases, and buys and restores through that service. The app has
@@ -8781,6 +8884,11 @@ export 'push_service.dart' show PushMessage;
 /// that arrive while the app is in the foreground, and the taps of the user
 /// on them.
 final appPush = AppPushController._();
+
+/// The address of the device for push messages, as a [ValueListenable] for
+/// the state manager of the app: [AppPushController.address] of [appPush],
+/// `null` while the platform gives none.
+ValueListenable<String?> pushAddressListenable() => appPush.address;
 
 /// Receives the push messages of the app through the service of the
 /// provider of push messages. The app has one, [appPush].
@@ -10647,6 +10755,558 @@ final class SessionRestTokens implements RestTokens {
         _ => RestFailureReason.unknown,
       };
 }
+=== lib/core/review/app_review.dart (role:review) ===
+import 'package:flutter/foundation.dart';
+import 'package:my_app/core/review/in_app_review_service.dart' as impl0;
+import 'package:my_app/core/router/app_router.dart';
+
+import '../env/app_env.dart';
+import '../preferences/app_preferences.dart';
+import 'review_service.dart';
+
+/// When a review is due. The stores ask an app not to ask on its first
+/// launch, nor too often, and to ask once the user has used it. Change the
+/// numbers here.
+abstract final class ReviewPolicy {
+  /// How many launches of the app, this one included, there are at least
+  /// once a review is due. At least 2, so that the app never asks on its
+  /// first launch.
+  static const int launches = 3;
+
+  /// How long after the first launch of the app a review is due.
+  static const Duration sinceFirstLaunch = Duration(days: 3);
+
+  /// How long after a request the next review is due, also in a new
+  /// version of the app. The app asks at most once a version.
+  static const Duration between = Duration(days: 14);
+}
+
+/// The application id of the app in Google Play: that of the flavor for a
+/// release, also in a build of another flavor, whose own id has no page
+/// there. Change it here if you change the application id of the app.
+const String googlePlayId = 'com.example.my_app';
+
+/// The reviews of the app in its store: the review dialog, which the app
+/// asks for when a review is due, and the page of the app in its store.
+final AppReviewController appReview = AppReviewController();
+
+/// Asks the store of the platform for its review dialog when a review is
+/// due, and opens the page of the app in its store. The app has one,
+/// [appReview].
+///
+/// It counts the launches of the app and remembers its last request in the
+/// preferences of the app. It asks for nothing on its own: only a call of
+/// [requestIfDue] asks.
+final class AppReviewController {
+  /// Creates the controller, which reads the time from [now] and the App
+  /// Store ID of the app from [appStoreId], by default the value of
+  /// `REVIEW_APP_STORE_ID` in `.env`. A test creates one with a clock and
+  /// an ID of its own, gives it the preferences with [restore], and starts
+  /// it with a service of its own.
+  AppReviewController({
+    this._now = DateTime.now,
+    this._appStoreId = _appStoreIdOfEnv,
+  });
+
+  /// The keys under which the preferences keep what the controller
+  /// remembers: the launches of the app, the time of its first launch, and
+  /// the time and the version of its last request.
+  static const _launchesKey = 'review.launches';
+  static const _firstLaunchKey = 'review.first_launch';
+  static const _askedAtKey = 'review.asked_at';
+  static const _askedVersionKey = 'review.asked_version';
+
+  /// An App Store ID: digits, and nothing else.
+  static final RegExp _appStoreIdPattern = RegExp(r'^[0-9]+$');
+
+  final DateTime Function() _now;
+  final String? Function() _appStoreId;
+
+  /// The service of the provider, once the controller has started.
+  ReviewService? _service;
+
+  /// The preferences that keep what the controller remembers, once the app
+  /// opened them.
+  AppPreferences? _preferences;
+
+  /// The launches of the app, this one included.
+  int _launches = 0;
+
+  /// The time of the first launch of the app.
+  DateTime? _firstLaunch;
+
+  /// The time of the last request, if the app asked.
+  DateTime? _askedAt;
+
+  /// The version of the app in which it last asked, if it asked.
+  String? _askedVersion;
+
+  /// The request that is on its way, if any.
+  Future<void>? _request;
+
+  /// Whether the controller told in debug mode that the app has no App
+  /// Store ID, or that its version is unknown.
+  bool _toldOfStoreId = false;
+  bool _toldOfVersion = false;
+
+  /// Whether the app has a page in the store of the platform: on Android
+  /// always, and on iOS once `REVIEW_APP_STORE_ID` in `.env` has the App
+  /// Store ID of the app.
+  bool get hasStorePage => storePage() != null;
+
+  /// The page of the app in the store of the platform, or `null` where it
+  /// has none: on Android the Google Play page of [googlePlayId], on iOS
+  /// the App Store page of the App Store ID, which is all digits, and none
+  /// on any other platform. With [review], the page on which the user
+  /// writes a review, which only the App Store has apart.
+  Uri? storePage({bool review = false}) => switch (defaultTargetPlatform) {
+    TargetPlatform.android => Uri.https(
+      'play.google.com',
+      '/store/apps/details',
+      {'id': googlePlayId},
+    ),
+    TargetPlatform.iOS => switch (_appStoreId()) {
+      final id? when _appStoreIdPattern.hasMatch(id) => Uri.https(
+        'apps.apple.com',
+        '/app/id$id',
+        review ? {'action': 'write-review'} : null,
+      ),
+      _ => null,
+    },
+    _ => null,
+  };
+
+  /// Opens the page of the app in its store, outside the app, or with
+  /// [review] the page on which the user writes a review (see
+  /// [storePage]), and returns whether an app of the device opened it:
+  /// `false` where the app has no store page, and before the app started.
+  /// Never throws.
+  Future<bool> openStorePage({bool review = false}) async {
+    final page = storePage(review: review);
+    final service = _service;
+    if (page == null || service == null) return false;
+    try {
+      return await service.openStorePage(page);
+    } on Object catch (error) {
+      _tell('The page of the app in its store did not open: $error');
+      return false;
+    }
+  }
+
+  /// Asks the store for its review dialog when a review is due, and does
+  /// nothing otherwise. Call it at a natural break of the app, such as when
+  /// the user has finished a task:
+  ///
+  /// ```dart
+  /// await saveNote(note);
+  /// unawaited(appReview.requestIfDue());
+  /// ```
+  ///
+  /// Never call it from a button, nor after a question of your own, such
+  /// as whether the user likes the app: the stores forbid both. The app
+  /// shows nothing around the dialog.
+  ///
+  /// A review is due once the app has had [ReviewPolicy.launches] launches,
+  /// this one included, [ReviewPolicy.sinceFirstLaunch] has passed since
+  /// its first launch and [ReviewPolicy.between] since its last request, and
+  /// it did not ask in this version of the app, while the store of the
+  /// device can show the dialog and the user is in no flow of a guard of the
+  /// routes, such as the onboarding or a sign-in.
+  ///
+  /// It completes once the store took the request, and the app then
+  /// remembers it. It returns nothing, since the store tells no app whether
+  /// the dialog showed, so nothing may depend on it. It never throws: an
+  /// error of the store counts as no dialog, and a later call asks again. A
+  /// call while a request is on its way gets that request.
+  Future<void> requestIfDue() =>
+      _request ??= _askIfDue().whenComplete(() => _request = null);
+
+  /// Takes what the controller remembers from [preferences], and keeps it
+  /// as it is for a key that has nothing saved. It keeps [preferences] for
+  /// the writes of the controller.
+  void restore(AppPreferences preferences) {
+    _preferences = preferences;
+    _launches = preferences.getInt(_launchesKey) ?? _launches;
+    _firstLaunch = _timeOf(preferences.getInt(_firstLaunchKey)) ?? _firstLaunch;
+    _askedAt = _timeOf(preferences.getInt(_askedAtKey)) ?? _askedAt;
+    _askedVersion = preferences.getString(_askedVersionKey) ?? _askedVersion;
+  }
+
+  /// Starts with [service]: counts this launch of the app, and the time of
+  /// its first launch if it has none, and saves them.
+  ///
+  /// `initReview()` calls it in `bootstrap()`. It may be called again, with
+  /// the service that the app has from then on: `initReview()` does so in a
+  /// test of the next launch of the app, and a test gives it a service of
+  /// its own. A failed save is told in debug mode and stops nothing.
+  Future<void> start(ReviewService service) async {
+    _service = service;
+    _launches++;
+    final saved = _firstLaunch;
+    final firstLaunch = _firstLaunch ??= _now().toUtc();
+    try {
+      await _preferences?.setInt(_launchesKey, _launches);
+      if (saved == null) {
+        await _preferences?.setInt(
+          _firstLaunchKey,
+          firstLaunch.millisecondsSinceEpoch,
+        );
+      }
+    } on Object catch (error) {
+      _tell('The launch of the app was not saved for the reviews: $error');
+    }
+    if (!_toldOfStoreId &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        !hasStorePage) {
+      _toldOfStoreId = true;
+      _tell(
+        'REVIEW_APP_STORE_ID in .env has no App Store ID, so the app has no '
+        'App Store page: appReview.hasStorePage is false on iOS, and '
+        'appReview.openStorePage() opens nothing there. Put the Apple ID of '
+        'the app in App Store Connect there.',
+      );
+    }
+  }
+
+  /// Asks the store for its dialog if a review is due, and remembers the
+  /// request once the store took it. Never throws.
+  Future<void> _askIfDue() async {
+    try {
+      final service = _service;
+      if (service == null || !_dueByTime() || _inAGuardFlow()) return;
+      final version = await _versionOf(service);
+      if (version == null || version == _askedVersion) return;
+      if (!await _isAvailable(service) || _inAGuardFlow()) return;
+      try {
+        await service.requestReview();
+      } on Object catch (error) {
+        _tell('The store did not take the request for a review: $error');
+        return;
+      }
+      final askedAt = _askedAt = _now().toUtc();
+      _askedVersion = version;
+      try {
+        await _preferences?.setInt(_askedAtKey, askedAt.millisecondsSinceEpoch);
+        await _preferences?.setString(_askedVersionKey, version);
+      } on Object catch (error) {
+        _tell('The request for a review was not saved: $error');
+      }
+    } on Object catch (error) {
+      _tell('The request for a review failed: $error');
+    }
+  }
+
+  /// Whether a review is due by the launches and the times that the
+  /// controller remembers. A request whose time is to come, as after the
+  /// clock of the device went back, counts as recent.
+  bool _dueByTime() {
+    final firstLaunch = _firstLaunch;
+    if (_launches < ReviewPolicy.launches || firstLaunch == null) return false;
+    final now = _now();
+    if (now.difference(firstLaunch) < ReviewPolicy.sinceFirstLaunch) {
+      return false;
+    }
+    final askedAt = _askedAt;
+    if (askedAt == null) return true;
+    final since = now.difference(askedAt);
+    return !since.isNegative && since >= ReviewPolicy.between;
+  }
+
+  /// The version of the app that [service] gives, or `null` if it is
+  /// unknown, which makes no review due.
+  Future<String?> _versionOf(ReviewService service) async {
+    String? version;
+    try {
+      version = (await service.appVersion())?.trim();
+    } on Object catch (error) {
+      _tell('The version of the app is unknown: $error');
+    }
+    if (version != null && version.isNotEmpty) return version;
+    if (!_toldOfVersion) {
+      _toldOfVersion = true;
+      _tell(
+        'The version of the app is unknown, so the app asks for no review.',
+      );
+    }
+    return null;
+  }
+
+  /// Whether the store of the device can show the review dialog, as
+  /// [service] tells: `false` if it fails to tell.
+  Future<bool> _isAvailable(ReviewService service) async {
+    try {
+      return await service.isAvailable();
+    } on Object {
+      return false;
+    }
+  }
+
+  /// Prints [message] in debug mode, for the developer of the app.
+  static void _tell(String message) {
+    if (kDebugMode) debugPrint(message);
+  }
+
+  /// The time of [milliseconds] since the epoch, in UTC, or `null`.
+  static DateTime? _timeOf(int? milliseconds) => milliseconds == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(milliseconds, isUtc: true);
+}
+
+/// The App Store ID of the app, as `REVIEW_APP_STORE_ID` in `.env` has it,
+/// or `null` while it is empty.
+String? _appStoreIdOfEnv() => AppEnv.reviewAppStoreId;
+
+/// Restores from [preferences] what [appReview] remembers, and keeps them
+/// for its writes: a restorer of the preferences, which the app calls
+/// before its first frame.
+void restoreReview(AppPreferences preferences) =>
+    appReview.restore(preferences);
+
+/// Returns the service of the provider of the reviews, which [initReview]
+/// created: `bootstrap()` awaits it before the first frame, and there is
+/// none to return before that.
+///
+/// The code of the app does not call it: it uses [appReview].
+ReviewService createReviewService() => _reviewService;
+
+/// The full name of the route of the screen that the user sees, as the
+/// router last told [noteScreenForReview], or `null` before the first screen
+/// and for a screen that is no route of a module.
+String? _screen;
+
+/// A listener of the screen that the user sees, which the router calls:
+/// it notes the route of the screen, so that the app asks for no review in
+/// the flow of a guard of the routes.
+void noteScreenForReview(String? route, String location) => _screen = route;
+
+/// Whether the user is in the flow of a guard of the routes, such as the
+/// onboarding or a sign-in: a gate that does not allow keeps the user in
+/// its flow, and the screen on top may be a route of the flow of a guard,
+/// such as one that a guard of a condition opened over a page.
+bool _inAGuardFlow() => routeGuards.any(
+  (guard) =>
+      (guard.routes == null && !guard.allows.value) ||
+      guard.flow.contains(_screen),
+);
+
+late ReviewService _reviewService;
+
+/// Creates the service of the provider of the reviews and starts
+/// [appReview] with it, which counts this launch of the app; `bootstrap()`
+/// awaits it in its last phase, and nothing else in the app calls it.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew and starts [appReview] with it.
+Future<void> initReview() async {
+  _reviewService = impl0.createInAppReviewService();
+  await appReview.start(_reviewService);
+}
+=== lib/core/review/in_app_review_service.dart (in_app_review) ===
+import 'package:in_app_review/in_app_review.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'review_service.dart';
+
+/// Creates the reviews of the app on in_app_review, with the app. It asks
+/// the user nothing.
+ReviewService createInAppReviewService() => const InAppReviewService._();
+
+/// The reviews of the app on in_app_review: the review dialog of StoreKit
+/// on iOS and of the In-App Review API of Google Play on Android.
+///
+/// The page of the app in its store opens with url_launcher, exactly as
+/// `appReview` gives it, and never through `openStoreListing()` of
+/// in_app_review, which on Android opens the page of the id of the build
+/// that runs, such as that of a flavor that has no page in Google Play.
+/// The version of the app comes from package_info_plus.
+///
+/// Google Play shows the dialog only in an app that it installed, such as
+/// from an internal test track. On a device without the review service of
+/// Google Play, such as an emulator without the Play Store, [isAvailable]
+/// is `false` and [requestReview] fails, so the app records no request and
+/// asks again later. On a device with the Play Store, for an app that
+/// Google Play did not install, such as a local build, [requestReview]
+/// completes and shows nothing, and the app counts the request, so it does
+/// not ask again in that version of the app.
+final class InAppReviewService implements ReviewService {
+  const InAppReviewService._();
+
+  @override
+  Future<bool> isAvailable() async {
+    try {
+      return await InAppReview.instance.isAvailable();
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> requestReview() => InAppReview.instance.requestReview();
+
+  @override
+  Future<bool> openStorePage(Uri page) async {
+    try {
+      return await launchUrl(page, mode: LaunchMode.externalApplication);
+    } on Object {
+      return false;
+    }
+  }
+
+  @override
+  Future<String?> appVersion() async {
+    try {
+      final version = (await PackageInfo.fromPlatform()).version.trim();
+      return version.isEmpty ? null : version;
+    } on Object {
+      return null;
+    }
+  }
+}
+=== lib/core/review/review_service.dart (role:review) ===
+/// The store of the platform for the reviews of the app: what the provider
+/// of the review role implements. The code of the app uses `appReview` of
+/// app_review.dart, which decides when a review is due.
+abstract interface class ReviewService {
+  /// Whether the store of this device can show its review dialog, such as
+  /// `false` on Android without Google Play. Never throws: `false` when it
+  /// cannot tell.
+  Future<bool> isAvailable();
+
+  /// Asks the store for its review dialog, and shows nothing of its own
+  /// around it: no question, no text and no screen. Completes once the
+  /// store took the request. Whether the dialog showed, and what the user
+  /// did, the store tells nobody. Throws when the platform refused the
+  /// request.
+  Future<void> requestReview();
+
+  /// Opens [page], a page of the app in its store, outside the app, and
+  /// returns whether an app of the device opened it. Never throws.
+  Future<bool> openStorePage(Uri page);
+
+  /// The version of the app, such as `1.2.0`, without its build number, or
+  /// `null` when the provider cannot tell. The app asks for a review at most
+  /// once a version. Never throws.
+  Future<String?> appVersion();
+}
+=== lib/core/review/review_setting.dart (role:review) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/l10n/l10n.dart';
+
+import 'app_review.dart';
+
+/// The entry of the settings screen that opens the page of the app in its
+/// store, on which the user writes a review: on Android its Google Play
+/// page, on iOS its App Store page, which takes the App Store ID in `.env`.
+///
+/// It never asks for the review dialog of the store: Google Play forbids
+/// the dialog from a button and points a button to the page. When no app of
+/// the device opens the page, a snack bar says so.
+class ReviewSetting extends StatelessWidget {
+  /// Creates the setting.
+  const ReviewSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return ListTile(
+      leading: const Icon(Icons.star_outline_rounded),
+      // At a large text size the title wraps in the row between its words.
+      title: _WholeWords(context.l10n.reviewSettingTitle),
+      // The page opens outside the app. The icon is a little smaller than
+      // the arrow of the other entries, in a box of the same size, so that
+      // the two have one centre.
+      trailing: SizedBox.square(
+        dimension: 24,
+        child: Icon(Icons.open_in_new_rounded, size: 20, color: muted),
+      ),
+      onTap: () async {
+        // Read before the await, while the entry is surely on the screen.
+        final failed = context.l10n.reviewSettingFailed;
+        final messenger = ScaffoldMessenger.of(context);
+        if (await appReview.openStorePage(review: true)) return;
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(failed)));
+      },
+    );
+  }
+}
+
+/// Whether the settings screen shows [ReviewSetting]: only where the app has
+/// a page in its store, which on iOS takes the App Store ID in `.env`.
+bool reviewSettingShows() => appReview.hasStorePage;
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
 === lib/core/router/app_router.dart (role:router) ===
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -11205,6 +11865,7 @@ import 'package:my_app/core/analytics/firebase_analytics_service.dart'
     show logFirebaseScreenView;
 import 'package:my_app/core/layout/app_shell.dart' show AppShell;
 import 'package:my_app/core/layout/destination.dart' show appDestinations;
+import 'package:my_app/core/review/app_review.dart';
 import 'package:my_app/features/home/home_screen.dart' as screen0;
 import 'package:my_app/features/onboarding/onboarding_screen.dart' as screen2;
 import 'package:my_app/features/paywall/paywall_screen.dart' as screen7;
@@ -11912,6 +12573,7 @@ List<NavigatorObserver> _observers() => [
 /// module, and its location.
 final List<void Function(String? route, String location)> _screenListeners = [
   logFirebaseScreenView,
+  noteScreenForReview,
 ];
 
 /// Calls [listener] of the screen with [route] and [location] on its own:
@@ -12532,6 +13194,111 @@ class _DashedEdge extends CustomPainter {
   @override
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
 }
+=== lib/core/state/shared_state_cubits.dart (bloc) ===
+// The cubits that follow the values that controllers of the app keep,
+// one for each value, which the bloc module generates for the state
+// management role, and the widget that provides them around the root
+// of the app. A widget reads one with context.watch, and code changes
+// the value only through the controller that the doc of its cubit
+// names.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/material.dart' as state0;
+import 'package:flutter/widgets.dart'
+    show BuildContext, StatelessWidget, Widget;
+import 'package:flutter/widgets.dart' as state2;
+import 'package:flutter_bloc/flutter_bloc.dart'
+    show BlocProvider, Cubit, MultiBlocProvider;
+import 'package:my_app/core/auth/app_session.dart' as state6;
+import 'package:my_app/core/l10n/app_locale.dart' as state3;
+import 'package:my_app/core/notifications/app_notifications.dart' as state4;
+import 'package:my_app/core/purchases/app_purchases.dart' as state7;
+import 'package:my_app/core/push/app_push.dart' as state5;
+import 'package:my_app/core/theme/theme_mode.dart' as state1;
+
+/// The theme mode that the user selected; `appThemeMode.choose()` changes it.
+final class ThemeModeCubit extends ListenableCubit<state0.ThemeMode> {
+  /// Creates the cubit, with the value that the controller has.
+  ThemeModeCubit() : super(state1.themeModeListenable());
+}
+
+/// The language that the user chose, `null` to follow the device;
+/// `appLocale.choose()` changes it.
+final class LocalizationLocaleCubit extends ListenableCubit<state2.Locale?> {
+  /// Creates the cubit, with the value that the controller has.
+  LocalizationLocaleCubit() : super(state3.localizationLocaleListenable());
+}
+
+/// Whether the app may show notifications; `appNotifications.request()` changes
+/// it.
+final class NotificationsPermissionCubit
+    extends ListenableCubit<state4.NotificationPermission> {
+  /// Creates the cubit, with the value that the controller has.
+  NotificationsPermissionCubit()
+    : super(state4.notificationsPermissionListenable());
+}
+
+/// The address of the device that `appPush.address` keeps, `null` while the
+/// platform gives none.
+final class PushAddressCubit extends ListenableCubit<String?> {
+  /// Creates the cubit, with the value that the controller has.
+  PushAddressCubit() : super(state5.pushAddressListenable());
+}
+
+/// Who uses the app; the calls of `appSession` change it.
+final class AuthSessionCubit extends ListenableCubit<state6.AppSession> {
+  /// Creates the cubit, with the value that the controller has.
+  AuthSessionCubit() : super(state6.authSessionListenable());
+}
+
+/// The premium access of the user; the calls of `appPurchases` change it.
+final class PurchasesAccessCubit extends ListenableCubit<state7.AppAccess> {
+  /// Creates the cubit, with the value that the controller has.
+  PurchasesAccessCubit() : super(state7.purchasesAccessListenable());
+}
+
+/// Provides the cubits of the values that controllers of the app keep to
+/// [child], the root of the app. Each cubit is created at its first read,
+/// and follows its value until the app ends.
+final class SharedStateCubits extends StatelessWidget {
+  /// Creates the widget around [child].
+  const SharedStateCubits({required this.child, super.key});
+
+  /// The root of the app.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MultiBlocProvider(
+    providers: [
+      BlocProvider(create: (_) => ThemeModeCubit()),
+      BlocProvider(create: (_) => LocalizationLocaleCubit()),
+      BlocProvider(create: (_) => NotificationsPermissionCubit()),
+      BlocProvider(create: (_) => PushAddressCubit()),
+      BlocProvider(create: (_) => AuthSessionCubit()),
+      BlocProvider(create: (_) => PurchasesAccessCubit()),
+    ],
+    child: child,
+  );
+}
+
+/// A cubit whose state is the value of a [ValueListenable], from its creation
+/// until it is closed. It only follows the value: code changes it through
+/// the controller of the listenable.
+abstract base class ListenableCubit<T> extends Cubit<T> {
+  /// Creates the cubit of [listenable], with its value.
+  ListenableCubit(this._listenable) : super(_listenable.value) {
+    _listenable.addListener(_follow);
+  }
+
+  final ValueListenable<T> _listenable;
+
+  void _follow() => emit(_listenable.value);
+
+  @override
+  Future<void> close() {
+    _listenable.removeListener(_follow);
+    return super.close();
+  }
+}
 === lib/core/theme/app_theme.dart (material_theme) ===
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
@@ -12843,6 +13610,7 @@ ThemeData _themeOf(Brightness brightness) {
   );
 }
 === lib/core/theme/theme_mode.dart (role:theme) ===
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -12858,7 +13626,8 @@ final appThemeMode = AppThemeModeController._();
 /// Keeps the theme mode that the user selected for the app, tells its
 /// listeners when the mode changes, and saves each choice in the
 /// preferences of the app. The app has one, [appThemeMode].
-final class AppThemeModeController extends ChangeNotifier {
+final class AppThemeModeController extends ChangeNotifier
+    implements ValueListenable<ThemeMode> {
   AppThemeModeController._();
 
   /// The key of the mode in the preferences, which keep it by its name.
@@ -12871,6 +13640,7 @@ final class AppThemeModeController extends ChangeNotifier {
 
   /// The mode of the app: [ThemeMode.system], which follows the device,
   /// unless the user selected another.
+  @override
   ThemeMode get value => _mode;
 
   /// Chooses [mode] as the mode of the app, at once, and saves the choice:
@@ -12901,6 +13671,11 @@ final class AppThemeModeController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// The theme mode that the user selected, as a [ValueListenable] for the
+/// state manager of the app: [appThemeMode], which changes it only through
+/// [AppThemeModeController.choose].
+ValueListenable<ThemeMode> themeModeListenable() => appThemeMode;
 
 /// Restores the theme mode that the user selected from [preferences], which
 /// the app opened, and keeps them for the choices to come: a restorer of
@@ -17479,11 +18254,12 @@ class _Row extends StatelessWidget {
 }
 === lib/features/settings/settings_screen.dart (settings) ===
 import 'package:flutter/material.dart';
-import 'package:my_app/core/feedback/feedback_setting.dart' as entry6;
+import 'package:my_app/core/feedback/feedback_setting.dart' as entry7;
 import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry3;
 import 'package:my_app/core/notifications/notifications_setting.dart' as entry4;
 import 'package:my_app/core/purchases/restore_purchases_setting.dart' as entry5;
+import 'package:my_app/core/review/review_setting.dart' as entry6;
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry2;
 import 'package:my_app/features/paywall/subscription_setting.dart' as entry1;
 import 'package:my_app/features/sign_in/account_setting.dart' as entry0;
@@ -17536,8 +18312,9 @@ class SettingsScreen extends StatelessWidget {
                 const entry3.LanguageSetting(),
                 const entry4.NotificationsSetting(),
                 const entry5.RestorePurchasesSetting(),
-                if (entry6.feedbackSettingShows())
-                  const entry6.FeedbackSetting(),
+                if (entry6.reviewSettingShows()) const entry6.ReviewSetting(),
+                if (entry7.feedbackSettingShows())
+                  const entry7.FeedbackSetting(),
               ],
             ),
           ],
@@ -20454,6 +21231,8 @@ class DefaultFirebaseOptions {
   "purchasesRestoreActive": "Your premium access is back.",
   "purchasesRestoreNone": "No purchases to restore.",
   "purchasesRestoreFailed": "Couldn't restore purchases. Try again.",
+  "reviewSettingTitle": "Rate the app",
+  "reviewSettingFailed": "Couldn't open the store.",
   "feedbackSettingTitle": "Write to us"
 }
 === lib/l10n/app_uk.arb (gen_l10n) ===
@@ -20629,12 +21408,16 @@ class DefaultFirebaseOptions {
   "purchasesRestoreActive": "Преміум-доступ відновлено.",
   "purchasesRestoreNone": "Немає покупок для відновлення.",
   "purchasesRestoreFailed": "Не вдалося відновити покупки. Спробуйте ще раз.",
+  "reviewSettingTitle": "Оцінити застосунок",
+  "reviewSettingFailed": "Не вдалося відкрити магазин.",
   "feedbackSettingTitle": "Написати нам"
 }
 === lib/main.dart (flutter_core) ===
 import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart' show BlocProvider;
 import 'package:my_app/core/l10n/app_locale.dart';
+import 'package:my_app/core/state/shared_state_cubits.dart'
+    show SharedStateCubits;
 import 'package:my_app/core/theme/theme_mode.dart';
 import 'package:my_app/features/paywall/paywall_composition.dart'
     show createPremiumCubit;
@@ -20656,15 +21439,17 @@ Future<void> main() async {
     return;
   }
   runApp(
-    BlocProvider(
-      create: (_) => createPremiumCubit(),
-      child: AppLocaleScope(
-        notifier: appLocale,
-        child: AppThemeModeScope(
-          notifier: appThemeMode,
-          child: BlocProvider(
-            create: (_) => createSessionCubit(),
-            child: const App(),
+    SharedStateCubits(
+      child: BlocProvider(
+        create: (_) => createPremiumCubit(),
+        child: AppLocaleScope(
+          notifier: appLocale,
+          child: AppThemeModeScope(
+            notifier: appThemeMode,
+            child: BlocProvider(
+              create: (_) => createSessionCubit(),
+              child: const App(),
+            ),
           ),
         ),
       ),
@@ -20700,6 +21485,7 @@ dependencies:
   get_it: "^9.3.0"
   go_router: "^17.5.0"
   google_sign_in: "^7.2.0"
+  in_app_review: "^2.0.12"
   intl: "any"
   package_info_plus: "any"
   purchases_flutter: "^10.18.0"

@@ -32,6 +32,16 @@
       ]
     },
     {
+      "id": "review.app_store_id",
+      "title": "Copy the App Store ID of the app from App Store Connect into .env",
+      "owner": "review",
+      "ownerKind": "role",
+      "ownerName": "Store reviews",
+      "neededBy": [
+        "in_app_review"
+      ]
+    },
+    {
       "id": "email_feedback.address",
       "title": "Put the email address for \"Write to us\" into .env",
       "owner": "email_feedback",

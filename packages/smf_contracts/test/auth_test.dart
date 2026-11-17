@@ -609,6 +609,18 @@ const credential = IdTokenCredential(
 );
 ''';
 
+/// Reads the function through which the state manager of the app follows
+/// the value, and sends back whether it returns the same listenable at each
+/// call, and whether that is appSession.
+const _listenable = '''
+Future<void> main(List<String> arguments, SendPort port) async {
+  result['the same listenable at each call'] =
+      identical(authSessionListenable(), authSessionListenable());
+  result['the session'] = identical(authSessionListenable(), appSession);
+  port.send(result);
+}
+''';
+
 /// Goes through the life of the session of the app, with the session and
 /// the functions that the role generates: a first launch, sign-up,
 /// sign-out, sign-in, the next launch, a password reset and the deletion
@@ -3327,14 +3339,18 @@ void main() {
         'role, and registers nothing in a DI container', () {
       final contributions = authRole.template.contribute(testContext);
 
-      expect(contributions, hasLength(2));
+      expect(contributions, hasLength(3));
       final brick = contributions.whereType<BrickContribution>().single;
       expect(
         templatesOf(brick.bundle).keys,
         unorderedEquals(authRole.interface.files),
       );
       expect(brick.when, isEmpty);
-      expect(contributions.whereType<RoleData<Object>>(), isEmpty);
+      // Its only data is the session, which the state manager follows.
+      final data = contributions.whereType<RoleData<Object>>().single;
+      expect(data.role, stateManagementRole);
+      expect(data.value, AuthRole.sessionState);
+      expect(data.when, isEmpty);
     });
 
     test(
@@ -3557,6 +3573,30 @@ void main() {
 
       expect(await app.analysisProblems(), isEmpty);
       expect(await app.run('$_notes$_life'), _lifeIn(AuthMode.required));
+    });
+
+    test(
+        'gives the state manager the session itself, through a function of '
+        'the file of the session', () async {
+      final app = await _app();
+      addTearDown(app.delete);
+      const state = AuthRole.sessionState;
+
+      expect(await app.run('$_notes$_listenable'), {
+        'the same listenable at each call': true,
+        'the session': true,
+      });
+      expect(authRole.feeds, {stateManagementRole});
+      expect(state.name, 'authSession');
+      expect(state.listenable.name, 'authSessionListenable');
+      expect(
+        state.listenable.import,
+        const ImportRef.app('core/auth/app_session.dart'),
+      );
+      expect(state.type.name, 'AppSession');
+      expect(state.type.import, state.listenable.import);
+      expect(state.listenableType, 'ValueListenable<AppSession>');
+      expect(state.problems(), isEmpty);
     });
 
     group('with a provider that a test scripts', () {
