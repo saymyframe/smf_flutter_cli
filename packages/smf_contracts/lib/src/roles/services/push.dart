@@ -154,8 +154,8 @@ final class PushRole extends Role<RoleImplementation> {
     ),
     type: TypeRef('String'),
     nullable: true,
-    description: 'The address of the device for push messages, `null` while '
-        'the platform gives none.',
+    description: 'The address of the device that `appPush.address` keeps, '
+        '`null` while the platform gives none.',
   );
 
   /// The heading of the section of the README of the app in which the

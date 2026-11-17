@@ -1384,6 +1384,9 @@ void main() {
         expect(state.type.import, isNull);
         expect(state.nullable, isTrue);
         expect(state.listenableType, 'ValueListenable<String?>');
+        // The doc of the bridge names the controller of the value, which
+        // the platform changes.
+        expect(state.description, contains('`appPush.address`'));
         expect(state.problems(), isEmpty);
       });
 
