@@ -98,7 +98,9 @@ final class SentryCrashReporter implements CrashReporter {
       stackTrace: stackTrace,
       withScope: (scope) async {
         scope.level = fatal ? SentryLevel.fatal : SentryLevel.error;
-        if (reason != null) await scope.setContexts('reason', {'reason': reason});
+        if (reason != null) {
+          await scope.setContexts('reason', {'reason': reason});
+        }
       },
     );
   }
@@ -125,7 +127,7 @@ final class SentryCrashReporter implements CrashReporter {
         await scope.setContexts('flutter_error_details', {
           if (context != null) 'context': 'thrown $context',
           if (information.isNotEmpty) 'information': information.join('\n'),
-          if (library != null) 'library': library,
+          'library': ?library,
         });
       },
     );

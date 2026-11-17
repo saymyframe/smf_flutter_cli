@@ -578,6 +578,7 @@ void main() {
             'appFlavor',
             'configureSentryForTests',
             'beforeSend',
+            'transport',
           ]),
         );
         for (final name in [
