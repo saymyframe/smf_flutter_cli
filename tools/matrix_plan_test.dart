@@ -64,6 +64,13 @@ final Matcher _apps = allOf(
   ),
 );
 
+/// How long a plan may take. Each test runs a matrix tool, which builds the
+/// cases of every module of its registry before it plans, and that grows with
+/// each module and each value of a mode option. In CI the tests of tools/ run
+/// next to each other, so the plan of the fixtures, which takes about 1.5
+/// minutes alone on a laptop, took more than 3 there.
+const _planTimeout = Timeout(Duration(minutes: 8));
+
 void main() {
   const cli = 'packages/smf_flutter_cli/tool/matrix.dart';
   const fixtures = 'packages/smf_pipeline/fixture_registry/tool/matrix.dart';
@@ -83,7 +90,7 @@ void main() {
       expect(plan['start'], _apps);
       expect(plan['entries'], _apps);
     },
-    timeout: const Timeout(Duration(minutes: 3)),
+    timeout: _planTimeout,
   );
 
   test(
@@ -98,7 +105,7 @@ void main() {
       expect(plan['start'], _apps);
       expect(plan['entries'], _apps);
     },
-    timeout: const Timeout(Duration(minutes: 3)),
+    timeout: _planTimeout,
   );
 
   test(
@@ -111,6 +118,6 @@ void main() {
       expect(plan['combinations'], 'pairwise');
       expect(plan['shards'], _shards);
     },
-    timeout: const Timeout(Duration(minutes: 3)),
+    timeout: _planTimeout,
   );
 }
