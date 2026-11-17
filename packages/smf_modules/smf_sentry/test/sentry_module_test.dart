@@ -409,7 +409,8 @@ void main() {
         'removes the integration of Sentry that takes '
         'PlatformDispatcher.instance.onError by its type, which a build with '
         '--obfuscate keeps, and puts back the FlutterError.onError that it '
-        'found, whatever the start does', () {
+        'found, whatever the start does, and turns the error of a DSN that '
+        'Sentry does not take into one that does not quote it', () {
       final start = _functionOf(unit, 'initSentryCrashReporter');
       final source = '$start';
 
@@ -430,7 +431,31 @@ void main() {
         '${attempt.finallyBlock}',
         '{FlutterError.onError = flutterErrors;}',
       );
-      expect(attempt.catchClauses, isEmpty);
+      // A DSN that Sentry does not take fails with an error of Sentry that
+      // quotes it, which the start replaces with one that does not.
+      expect(
+        [
+          for (final clause in attempt.catchClauses)
+            '${clause.exceptionType} ${clause.body}',
+        ],
+        [
+          'ArgumentError {throw StateError(_noDsnOfSentry);}',
+          'FormatException {throw StateError(_noDsnOfSentry);}',
+        ],
+      );
+      final noDsn = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .expand((declaration) => declaration.variables.variables)
+          .singleWhere((variable) => variable.name.lexeme == '_noDsnOfSentry');
+      final text = noDsn.initializer! as StringLiteral;
+      expect(text, isNot(isA<StringInterpolation>()));
+      expect(
+        text.stringValue,
+        allOf(
+          startsWith('SENTRY_DSN of this build is no DSN of Sentry'),
+          contains('the section "$readmeHeading" of its README'),
+        ),
+      );
       // The variable is read before the try, so the handler is the one that
       // the start found.
       expect(kept.offset, lessThan(attempt.offset));

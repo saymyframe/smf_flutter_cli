@@ -25,9 +25,9 @@ void Function(SentryFlutterOptions options)? configureSentryForTests;
 /// The environment of the events is the flavor of the build. A debug build
 /// sends its events too.
 ///
-/// Throws a [StateError] when the build has no DSN, or when Sentry does not
-/// start with it: the app then reports nothing to Sentry, and a debug build
-/// prints why.
+/// Throws a [StateError] when the build has no DSN, has a value that is no
+/// DSN of Sentry, or when Sentry does not start with it: the app then reports
+/// nothing to Sentry, and a debug build prints why, without the value.
 Future<CrashReporter> initSentryCrashReporter() async {
   final dsn = {{{env_sentry_dsn}}};
   if (dsn == null) {
@@ -60,6 +60,12 @@ Future<CrashReporter> initSentryCrashReporter() async {
       }
       configureSentryForTests?.call(options);
     });
+  } on ArgumentError {
+    // The errors of Sentry about a DSN that it does not take quote the DSN,
+    // which a debug build would print.
+    throw StateError(_noDsnOfSentry);
+  } on FormatException {
+    throw StateError(_noDsnOfSentry);
   } finally {
     FlutterError.onError = flutterErrors;
   }
@@ -72,6 +78,12 @@ Future<CrashReporter> initSentryCrashReporter() async {
   }
   return const SentryCrashReporter();
 }
+
+/// Why the app reports nothing to Sentry when Sentry does not take the
+/// value of SENTRY_DSN, which it does not quote.
+const _noDsnOfSentry = 'SENTRY_DSN of this build is no DSN of Sentry, so the '
+    'app reports nothing to Sentry: copy the DSN of your Sentry project into '
+    '.env again, as the section "{{readme_heading}}" of its README tells.';
 
 /// Reports the errors of the app to Sentry.
 ///
