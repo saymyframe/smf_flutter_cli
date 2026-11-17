@@ -21,6 +21,17 @@ bool _collecting = analyticsCollectedFromFirstStart;
 /// user without an id.
 String? _userId;
 
+/// The user whom PostHog has identified, as far as this run of the app
+/// knows: the id that the service identified last, or `null` once it reset
+/// PostHog. Only while [_identityKnown] is true.
+String? _identifiedId;
+
+/// Whether this run knows whom PostHog has identified: once the service
+/// identified a user or reset PostHog. Until then, PostHog may keep a user
+/// of an earlier start, and its distinct id does not tell whether that is a
+/// user or an anonymous id.
+bool _identityKnown = false;
+
 /// Whether the code set or cleared the id of the user while collection was
 /// off. PostHog gets nothing then, so it gets that call once collection is on
 /// again in this run.
@@ -71,6 +82,8 @@ Future<AnalyticsService> initPostHogAnalytics() async {
   if (host != null) config.host = host;
   _started = false;
   _userId = null;
+  _identifiedId = null;
+  _identityKnown = false;
   _userHeld = false;
   _pendingProperties.clear();
   await Posthog().setup(config);
@@ -125,7 +138,10 @@ Future<void> _registerFlavor() =>
 /// method in their property `method`, as Firebase Analytics names them.
 ///
 /// `setUserId(null)` starts a new anonymous user, so the app calls it when
-/// the user signs out, not at each start. A property of a user without an
+/// the user signs out, not at each start. `setUserId(id)` of another user
+/// than the one that PostHog has identified resets PostHog first, since
+/// PostHog would ignore it and the events of that user would join the user
+/// before. A property of a user without an
 /// id waits for the next id, since PostHog would make a person profile for
 /// it. PostHog keeps the user on the device from one start to the next, but
 /// the service does not know that user, so after each start the app calls
@@ -227,20 +243,48 @@ final class PostHogAnalyticsService implements AnalyticsService {
 /// Gives PostHog the user that the code set last: identifies a user with an
 /// id, with the properties that wait, and starts a new anonymous user
 /// without one.
+///
+/// The SDKs of PostHog for Android and iOS ignore an identify of an id while
+/// they have identified another one, and tell nobody, so that the events of
+/// the next user would join the user before. So the service resets PostHog
+/// before it identifies an id other than the one that PostHog has: first
+/// when this run identified another user, as after a direct change of the
+/// user or a sign-out while collection was off, whose reset waited; and once
+/// the identify changed nothing, when PostHog kept a user of an earlier
+/// start. A reset before every first identify of a run would cut the events
+/// of an anonymous user, which PostHog links to the user whom it identifies,
+/// from that user.
 Future<void> _sendUser() async {
   final userId = _userId;
-  if (userId != null) {
-    final (set, cleared) = _takePendingProperties();
-    await Posthog().identify(
-      userId: userId,
-      userProperties: set.isEmpty ? null : set,
-    );
-    if (cleared.isNotEmpty) await _unset(cleared);
+  if (userId == null) {
+    await _reset();
     return;
   }
+  if (_identityKnown && _identifiedId != null && _identifiedId != userId) {
+    await _reset();
+  }
+  final (set, cleared) = _takePendingProperties();
+  final userProperties = set.isEmpty ? null : set;
+  await Posthog().identify(userId: userId, userProperties: userProperties);
+  if (!_identityKnown && await Posthog().getDistinctId() != userId) {
+    // PostHog kept the user of an earlier start, and ignored the identify.
+    await _reset();
+    await Posthog().identify(userId: userId, userProperties: userProperties);
+  }
+  _identifiedId = userId;
+  _identityKnown = true;
+  if (cleared.isNotEmpty) await _unset(cleared);
+}
+
+/// Resets PostHog to a new anonymous user, with the flavor, and in an app
+/// that collects nothing before its code chose, the setting of collection
+/// kept again.
+Future<void> _reset() async {
   // reset() forgets the registered properties, and the setting of collection
   // that PostHog kept on the device.
   await Posthog().reset();
+  _identifiedId = null;
+  _identityKnown = true;
   await _registerFlavor();
   if (!analyticsCollectedFromFirstStart && _collecting) {
     // The next start of an app that collects nothing before its code chose

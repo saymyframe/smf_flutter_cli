@@ -24,8 +24,13 @@
 // - while it is opted out, it records no event and no property. identify()
 //   still makes the user its distinct id then, as the SDKs for Android and
 //   iOS do, and only its event is dropped.
-// It also ignores a second setup in the same start, as both SDKs do: only
-// the next start reads the config again.
+// It keeps to both SDKs in two more ways:
+// - once it identified a user, it ignores an identify of another id until a
+//   reset, and keeps that user across starts: PostHog for Android and iOS
+//   log "already identified" and change nothing then, so that the events of
+//   the next user would join the user before;
+// - it ignores a second setup in the same start: only the next start reads
+//   the config again.
 //
 // ignore_for_file: implementation_imports
 import 'package:posthog_flutter/posthog_flutter.dart';
@@ -77,6 +82,10 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   /// The distinct id of the user of the device: an anonymous id until the
   /// app identifies the user.
   String distinctId = 'anonymous-1';
+
+  /// Whether [distinctId] is a user that the app identified, which the device
+  /// keeps across starts until a reset.
+  bool identified = false;
 
   /// The properties of the person of each distinct id, which the device
   /// sent.
@@ -153,6 +162,7 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
   Future<void> reset() async {
     calls.add(['reset']);
     storedOptOut = null;
+    identified = false;
     registered.clear();
     distinctId = 'anonymous-${++_anonymous}';
   }
@@ -202,11 +212,26 @@ final class MockPostHog extends PosthogFlutterPlatformInterface {
     Map<String, Object>? userPropertiesSetOnce,
   }) async {
     calls.add(['identify', userId, userProperties]);
-    distinctId = userId;
-    // The event of the identification carries the properties.
-    if (optedOut) return;
+    if (userId != distinctId) {
+      // Already identified with another id: the SDKs change nothing.
+      if (identified) return;
+      distinctId = userId;
+      identified = true;
+      // The event of the identification carries the properties.
+      if (optedOut) return;
+      (people[userId] ??= {}).addAll({...?userProperties});
+      _record(r'$identify', null);
+      return;
+    }
+    // The same id: the SDKs set the properties, and mark an anonymous id
+    // that the app gave identified.
+    final transition = !identified;
+    identified = true;
+    if (optedOut || (!transition && (userProperties?.isEmpty ?? true))) {
+      return;
+    }
     (people[userId] ??= {}).addAll({...?userProperties});
-    _record(r'$identify', null);
+    _record(r'$set', null);
   }
 
   @override

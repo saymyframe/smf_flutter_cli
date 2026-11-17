@@ -661,13 +661,27 @@ void main() {
         '${methods['setUserId']}',
         contains('if (!_collecting) {_userHeld = true; return;}'),
       );
+      // PostHog ignores an identify of another id while it has identified a
+      // user: the service resets it first, or once the identify of a user
+      // of an earlier start changed nothing.
       final sendUser = _functionOf(unit, '_sendUser');
       expect(
         _postHogCallsIn(sendUser),
-        ['identify', 'reset', 'optOut', 'optIn'],
+        ['identify', 'getDistinctId', 'identify'],
       );
       expect(
         '$sendUser',
+        allOf(
+          contains('if (_identityKnown && _identifiedId != null && '
+              '_identifiedId != userId) {await _reset();}'),
+          contains('if (!_identityKnown && await Posthog().getDistinctId() != '
+              'userId) {'),
+        ),
+      );
+      final reset = _functionOf(unit, '_reset');
+      expect(_postHogCallsIn(reset), ['reset', 'optOut', 'optIn']);
+      expect(
+        '$reset',
         contains('if (!analyticsCollectedFromFirstStart && _collecting) {'),
       );
       expect(
@@ -737,6 +751,9 @@ void main() {
             contains('`setUserId(null)` starts a new anonymous user in '
                 'PostHog, so call it when the user signs out, not at each '
                 'start'),
+            contains('so `setUserId(id)` of another user resets PostHog '
+                'first: the events of the next user never join the user '
+                'before'),
             contains('after each start, call `setUserId(id)` for a user who '
                 'is signed in. Until then, the properties that '
                 '`setUserProperty()` sets wait in memory, and they are lost if '

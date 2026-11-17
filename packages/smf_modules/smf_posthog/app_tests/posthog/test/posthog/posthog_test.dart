@@ -13,8 +13,10 @@
 // collects: a reset forgets the setting of collection that PostHog keeps, so
 // after one, an app that collects nothing before its code chose has PostHog
 // keep that collection is on again, and while collection is off the service
-// gives PostHog the user once collection is on again. What the code chose
-// holds at the next start.
+// gives PostHog the user once collection is on again. PostHog ignores an
+// identify of another id while it has identified a user, so the service
+// resets it before it identifies the next user. What the code chose holds at
+// the next start.
 //
 // The app may have other analytics services, which only the tests of their
 // own modules know, so the test uses the service of the module rather than
@@ -194,6 +196,7 @@ void main() {
           {'method': 'email'},
         ],
         ['identify', 'user-1', null],
+        ['getDistinctId'],
         [
           'setPersonProperties',
           {'plan': 'free'},
@@ -247,6 +250,7 @@ void main() {
           'user-2',
           {'plan': 'free'},
         ],
+        ['getDistinctId'],
       ]);
       expect(postHogDevice.people['user-2'], {'plan': 'free'});
     });
@@ -304,10 +308,14 @@ void main() {
       expect(postHogDevice.calls, isEmpty);
 
       await service.setAnalyticsCollectionEnabled(true);
-      expect(postHogDevice.calls, [
-        ['enable'],
+      expect(
+        postHogDevice.methods,
+        ['enable', 'reset', 'register', ..._onAgain, 'identify'],
+        reason: 'PostHog has identified user-4, so the sign-out that waited '
+            'resets it before it identifies user-5.',
+      );
+      expect(postHogDevice.callsOf('identify'), [
         [
-          'identify',
           'user-5',
           {'plan': 'pro'},
         ],
@@ -329,6 +337,106 @@ void main() {
         reason: 'A collection that the code turned off stays off at the next '
             'start, also after the user signed out.',
       );
+    });
+
+    test(
+        'a direct change of the user resets PostHog before it identifies the '
+        'next user, so that the events of that user do not join the user '
+        'before', () async {
+      final service = await _start();
+      await service.setUserId('user-a');
+      postHogDevice.calls.clear();
+
+      await service.setUserId('user-b');
+      await service.logEvent('of_user_b');
+
+      expect(
+        postHogDevice.events.last.distinctId,
+        'user-b',
+        reason: 'PostHog ignores an identify of another id while it has '
+            'identified a user, so the events of user-b would join user-a.',
+      );
+      expect(
+        postHogDevice.methods,
+        ['reset', 'register', ..._onAgain, 'identify', 'capture'],
+      );
+    });
+
+    test(
+        'a sign-out and a sign-in of the next user while collection is off '
+        'reset PostHog before it identifies that user, once collection is on '
+        'again', () async {
+      final service = await _start();
+      await service.setUserId('user-a');
+      await service.setAnalyticsCollectionEnabled(false);
+      await service.setUserId(null);
+      await service.setUserId('user-b');
+      postHogDevice.calls.clear();
+
+      await service.setAnalyticsCollectionEnabled(true);
+      await service.logEvent('of_user_b');
+
+      expect(
+        postHogDevice.events.last.distinctId,
+        'user-b',
+        reason: 'The sign-out of user-a waited while collection was off, and '
+            'PostHog ignores an identify of another id while it has '
+            'identified a user, so the events of user-b would join user-a.',
+      );
+      expect(
+        postHogDevice.methods,
+        ['enable', 'reset', 'register', ..._onAgain, 'identify', 'capture'],
+      );
+    });
+
+    test(
+        'at a later start, a user other than the one that PostHog kept on the '
+        'device gets PostHog reset, while an anonymous user and the same user '
+        'keep their events', () async {
+      var service = await _start();
+      await service.setUserId('user-a');
+
+      service = await _startAgain();
+      postHogDevice.calls.clear();
+      await service.setUserId('user-b');
+      await service.logEvent('of_user_b');
+
+      expect(
+        postHogDevice.events.last.distinctId,
+        'user-b',
+        reason: 'PostHog keeps user-a on the device across starts and ignores '
+            'an identify of another id, so the events of user-b would join '
+            'user-a.',
+      );
+      expect(
+        postHogDevice.methods,
+        [
+          'identify',
+          'getDistinctId',
+          'reset',
+          'register',
+          ..._onAgain,
+          'identify',
+          'capture',
+        ],
+      );
+
+      service = await _start();
+      await service.logEvent('before_sign_in');
+      await service.setUserId('user-c');
+      expect(
+        postHogDevice.methods,
+        ['capture', 'identify', 'getDistinctId'],
+        reason: 'PostHog links the events of an anonymous user to the user '
+            'whom it identifies, which a reset would cut.',
+      );
+      expect(postHogDevice.distinctId, 'user-c');
+
+      service = await _startAgain();
+      postHogDevice.calls.clear();
+      await service.setUserId('user-c');
+      expect(postHogDevice.methods, ['identify', 'getDistinctId']);
+      expect(postHogDevice.distinctId, 'user-c');
     });
 
     test('a sign-out that comes while collection turns off resets nothing',
