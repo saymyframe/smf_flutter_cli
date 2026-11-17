@@ -222,14 +222,19 @@ void main() {
       );
       // The fixture setting that the screen leaves out on iOS, where the
       // tests of the role and of the module look at the screen once more,
-      // next to entries that always show.
+      // next to entries that always show; and the entry "Write to us" of the
+      // feedback role, which shows while the module has the address of .env,
+      // which the tests of the apps give it.
       expect(
         [
           for (final entry in entries)
             if (entry.showIf case final showIf?)
               '${entry.widget.name} if ${showIf.name}()',
         ],
-        ['FixtureHidingSetting if fixtureHidingSettingShows()'],
+        [
+          'FixtureHidingSetting if fixtureHidingSettingShows()',
+          'FeedbackSetting if feedbackSettingShows()',
+        ],
         reason: 'Without an entry that shows only at times, the tests of the '
             'settings screen role do not show that a screen leaves it out: '
             'add a module with such an entry to severalProvidersModules().',

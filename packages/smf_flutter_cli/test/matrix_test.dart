@@ -228,8 +228,9 @@ final Future<({List<MatrixApp> apps, List<ContractResult> failed})> _cliMatrix =
 /// needs: such an app has no route to start on, since only home has one,
 /// and the destination of its feature has no main navigation to lead to it,
 /// since the app has no layout. The apps of a module with the settings
-/// screen, such as those of the theme, of RevenueCat, of the paywall and of
-/// the notifications, get the settings feature for it, and the apps of the
+/// screen, such as those of the theme, of RevenueCat, of the paywall, of
+/// the notifications and of email_feedback, get the settings feature for
+/// it, and the apps of the
 /// notifications and of the paywall with the onboarding screen get the
 /// onboarding feature, which has no route to start on either, and neither
 /// has the paywall. An
@@ -340,6 +341,14 @@ const _warningApps = <String, List<String>>{
   ],
   'sign_in (bloc)': ['router.no_main_navigation', 'router.no_start'],
   'sign_in (riverpod)': ['router.no_main_navigation', 'router.no_start'],
+  'email_feedback with settings_screen, localization': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
+  'email_feedback with settings_screen': [
+    'router.no_main_navigation',
+    'router.no_start',
+  ],
 };
 
 void main() {
@@ -393,7 +402,8 @@ void main() {
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
-        'revenuecat, paywall, dart_define, firebase_crashlytics, '
+        'revenuecat, paywall, email_feedback, dart_define, '
+        'firebase_crashlytics, '
         'firebase_analytics, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
@@ -640,6 +650,24 @@ void main() {
             'paywall ($stateManager)$uses (paywall,',
             '${others.replaceFirst('%', stateManager)})',
           ].join(' '),
+      // email_feedback with each subset of the roles that the feedback role
+      // uses, the settings screen with the router that it requires and the
+      // localization with the preferences that it requires, and the
+      // provider of the values of .env, which the module requires.
+      equals(
+        'email_feedback with settings_screen, localization (email_feedback, '
+        'settings, gen_l10n, flutter_core, dart_define, go_router, '
+        'shared_preferences)',
+      ),
+      equals(
+        'email_feedback with settings_screen (email_feedback, settings, '
+        'flutter_core, dart_define, go_router)',
+      ),
+      equals(
+        'email_feedback with localization (email_feedback, gen_l10n, '
+        'flutter_core, dart_define, shared_preferences)',
+      ),
+      'email_feedback (email_feedback, flutter_core, dart_define)',
       'dart_define (dart_define, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '
@@ -909,8 +937,9 @@ void main() {
     String without(String stateManager) => 'every module ($stateManager) '
         '(flutter_core, go_router, bottom_tabs, home, settings, onboarding, '
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
-        'event_bus, shared_preferences, dio, revenuecat, paywall, dart_define, '
-        'launcher_icons, native_splash, github_actions, local)';
+        'event_bus, shared_preferences, dio, revenuecat, paywall, '
+        'email_feedback, dart_define, launcher_icons, native_splash, '
+        'github_actions, local)';
     expect(apps.map((app) => '$app'), [
       without('bloc'),
       without('riverpod'),
@@ -2935,6 +2964,7 @@ Type type() => Types;
               'dio',
               'revenuecat',
               'paywall',
+              'email_feedback',
               'dart_define',
               'launcher_icons',
               'native_splash',

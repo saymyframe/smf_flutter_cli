@@ -21,6 +21,9 @@ PAYWALL_TERMS_URL=
 # The address of the privacy policy that the paywall links to
 PAYWALL_PRIVACY_URL=
 
+# The email address that "Write to us" mails go to, such as support@example.com
+EMAIL_FEEDBACK_ADDRESS=
+
 # The address of the REST API of the app, such as https://api.example.com/v1
 REST_BASE_URL=
 === .env.example (role:env) ===
@@ -46,6 +49,9 @@ PAYWALL_TERMS_URL=
 
 # The address of the privacy policy that the paywall links to
 PAYWALL_PRIVACY_URL=
+
+# The email address that "Write to us" mails go to, such as support@example.com
+EMAIL_FEEDBACK_ADDRESS=
 
 # The address of the REST API of the app, such as https://api.example.com/v1
 REST_BASE_URL=
@@ -273,6 +279,22 @@ With `get_it`:
 - The app has one `CommunicationService`, which `createCommunicationService()` returns. Call it where the state of a screen is created, or, with a DI container in the app, take the service from the container instead. Create no other from its implementation: its listeners would get none of these events.
 - Use events between parts of the app that do not import each other.
 
+## Feedback
+
+- `appFeedback` in `lib/core/feedback/app_feedback.dart` lets a user write to the developer: call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app. It opens the way of the provider, such as the mail app with a new mail, a form or a survey. It completes with `true` once that opened, without waiting for the user, or with `false`. It never throws, and a call while another is on its way does nothing.
+- `appFeedback.available` tells whether the provider has what it needs, and does not change while the app runs: hide your own button while it is `false`.
+- Never ask anything before or around the review dialog of a store, and never make a way to write depend on whether the user rated the app.
+- A new provider implements `FeedbackService` of `lib/core/feedback/feedback_service.dart`, and only the files of its implementation import it. The code of the app calls neither `createFeedbackService()` nor `appFeedback.use()`, which is for tests.
+
+- `FeedbackSetting` in `lib/core/feedback/feedback_setting.dart` is the row "Write to us" of the settings screen. It shows only while `appFeedback.available` holds, through `feedbackSettingShows()`, and reads nothing else.
+
+With `url_launcher`:
+
+- `EmailFeedbackService` in `lib/core/feedback/email_feedback_service.dart` implements `FeedbackService` of `lib/core/feedback/feedback_service.dart`: it opens a new mail to `EMAIL_FEEDBACK_ADDRESS` of `.env` with `launchUrl` and a `mailto:` link from `emailFeedbackLink()` of `lib/core/feedback/email_feedback_mail.dart`, with the version of the app from `PackageInfo.fromPlatform()` and the device from `DeviceInfoPlugin()`.
+- Build such a link with `Uri.encodeComponent`, never with `Uri(queryParameters: ...)`, which writes a space as `+`.
+- Never call `canLaunchUrl` first: Android 11 and later answer false without `<queries>` in the manifest, which the app does not have.
+- Where no mail app opens the mail, `showEmailFeedbackSheet()` of `lib/core/feedback/email_feedback_sheet.dart` shows the address to copy.
+
 ## Firebase
 
 - `bootstrap()` initializes Firebase with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, by the flavor of the build. `lib/firebase_options_dev.dart`, `lib/firebase_options_staging.dart` and `lib/firebase_options_prod.dart` are placeholders until `tool/configure_firebase.dart` writes them, and a build of such a flavor stops at start-up with an `UnsupportedError`. Do not write them by hand.
@@ -459,7 +481,7 @@ With `go_router`:
 - To add a setting, write such a widget with a `const` constructor that requires no arguments. Create it in the list of the screen, and import its file there with a prefix that no other import there has, because two entries may have the same class name.
 - The screen puts each entry on a `Material`, sets its width and puts no limit on its height, so an entry can be a `ListTile` or a `Column` of them. Pass an entry no arguments: it gets its state from its owner.
 
-- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. While no module of the app has a setting, it shows a note for the developer of the app in place of the group: the first entry replaces that note.
+- `SettingsScreen` in `lib/features/settings/settings_screen.dart`, the route `settings.settings` at `/settings`, is the settings screen. Below its title it shows the entries in one group, and the file imports the files of the entries as `entry0`, `entry1` and so on. An entry may show only at times, such as one that hides on a platform: the screen asks it each time it builds. While no module of the app has a setting, or while none of its entries shows, the screen shows a note for the developer of the app in place of the group: the first entry that shows replaces that note.
 - With a main navigation in the app, the screen is one of its destinations.
 - Without a main navigation, no screen leads to the settings screen: open it with `context.nav.settings.settings().push<void>()`, which shows it on top of the current screen, so that its back button leads back. `go()` would replace the stack with the screen alone, and nothing would lead back.
 
@@ -551,16 +573,17 @@ Once any commands of the sections below have run, the setup still needs these st
 1. In Xcode, sign the iOS app with your paid Apple Developer team
 2. Set up payments in App Store Connect and Google Play Console
 3. Create the products of your plans in App Store Connect and Google Play Console
-4. Turn on Google Analytics in the Firebase project, unless it is on already
-5. Turn on Sign in with Apple in Firebase Authentication
-6. Give Firebase your Sign in with Apple key, so that deleting an account works
-7. Before releasing on Google Play, give Firebase the SHA of your release keys
-8. Give Firebase your Apple push key (APNs key)
-9. Set up the entitlement premium and the default offering in RevenueCat
-10. Copy the API keys of your RevenueCat apps into .env
-11. Give RevenueCat your In-App Purchase key from App Store Connect
-12. Give RevenueCat access to Google Play with a service account
-13. Publish your terms of use and privacy policy and put their links into .env
+4. Put the email address for "Write to us" into .env
+5. Turn on Google Analytics in the Firebase project, unless it is on already
+6. Turn on Sign in with Apple in Firebase Authentication
+7. Give Firebase your Sign in with Apple key, so that deleting an account works
+8. Before releasing on Google Play, give Firebase the SHA of your release keys
+9. Give Firebase your Apple push key (APNs key)
+10. Set up the entitlement premium and the default offering in RevenueCat
+11. Copy the API keys of your RevenueCat apps into .env
+12. Give RevenueCat your In-App Purchase key from App Store Connect
+13. Give RevenueCat access to Google Play with a service account
+14. Publish your terms of use and privacy policy and put their links into .env
 
 Repeat a step for each flavor that needs it: a service knows each id as an app of its own.
 
@@ -880,6 +903,7 @@ The keys of the app:
 - `REVENUECAT_TEST_KEY`, read as `AppEnv.revenuecatTestKey`, from the module `revenuecat`: The public API key of the Test Store in RevenueCat, which starts with test_, for debug builds only
 - `PAYWALL_TERMS_URL`, read as `AppEnv.paywallTermsUrl`, from the module `paywall`: The address of the terms of use that the paywall links to
 - `PAYWALL_PRIVACY_URL`, read as `AppEnv.paywallPrivacyUrl`, from the module `paywall`: The address of the privacy policy that the paywall links to
+- `EMAIL_FEEDBACK_ADDRESS`, read as `AppEnv.emailFeedbackAddress`, from the module `email_feedback`: The email address that "Write to us" mails go to, such as support@example.com
 - `REST_BASE_URL`, read as `AppEnv.restBaseUrl`, from the REST API role: The address of the REST API of the app, such as https://api.example.com/v1
 
 To add a key of your own, put it into `.env.example` and `.env` and give `AppEnv` a getter for it. The section of the module that provides the values tells how they get into the app.
@@ -905,6 +929,18 @@ Several `set-cookie` values cannot be told apart in the `headers` of a response,
 
 Dio sends over `dart:io`, which reaches an `http://` address with no key in the Android manifest or in `Info.plist`. Another adapter, such as one of [native_dio_adapter](https://pub.dev/packages/native_dio_adapter) for the stack of the platform, goes into `httpClientAdapter` in `createDio()`. It then needs those keys for an `http://` address.
 
+## Feedback by email
+
+"Write to us" opens a new mail to you in the mail app of the device, with [url_launcher](https://pub.dev/packages/url_launcher): `lib/core/feedback/email_feedback_service.dart` implements the feedback of the app on it, as the section "Feedback" tells. The mail goes to the address in `EMAIL_FEEDBACK_ADDRESS` of `.env`, such as `EMAIL_FEEDBACK_ADDRESS=support@example.com`. Until it has one, the app does not offer the way to write: the row "Write to us" hides, and a debug build prints which key to fill in. Then run the app again, as the section "Values in .env" says. The address goes into the app, where anyone can read it, so use an address for support with a filter of spam rather than your own.
+
+The subject of the mail is "Feedback: " and `emailFeedbackAppName`, the name of the app in `lib/core/feedback/email_feedback_mail.dart`, the same in every flavor, so a filter of your mail finds it. The body leaves room for the message, then tells the name, the version and the build number of the app from [package_info_plus](https://pub.dev/packages/package_info_plus), the flavor of the build, which the flavor for a release leaves out, and the system and the model of the device from [device_info_plus](https://pub.dev/packages/device_info_plus). The user sees all of it and may change it before sending. `emailFeedbackLink()` in that file encodes each part as RFC 6068 asks, so a space is `%20` and never `+`.
+
+The app asks the device nothing before it opens the mail, so it needs no `<queries>` in the manifest of Android and no `LSApplicationQueriesSchemes` in `Info.plist`. Where no mail app opens the mail, such as on the iOS simulator, which has no Mail, or on an Android emulator without a mail app, a sheet shows the address with a button that copies it (`lib/core/feedback/email_feedback_sheet.dart`). The texts of the mail and of the sheet are texts of the module, in the files of the languages of the app.
+
+To see the mail, run the app on an iPhone, or on an Android device or emulator with a mail app and an account in it, such as Gmail, and tap "Write to us".
+
+What the mail tells about the app and the device is read on the device, and leaves it only in a mail that the user sends from their own mail app: the app itself sends nothing.
+
 ## RevenueCat
 
 The app sells its premium access with [RevenueCat](https://www.revenuecat.com) and [purchases_flutter](https://pub.dev/packages/purchases_flutter): `lib/core/purchases/revenuecat_purchases_service.dart` implements the purchases service of the app on it (see the section Purchases). The premium access is the entitlement `premium` in RevenueCat, and the plans of the app are the packages of the default offering, which the SDK calls the current offering. Every package of that offering unlocks the same access, so attach each of its products to `premium`.
@@ -922,6 +958,31 @@ For a release, add the App Store app and the Play Store app to the project in Re
 A debug build takes `REVENUECAT_TEST_KEY` when it is filled in, and the key of the store of the platform otherwise. A profile or release build never takes it: RevenueCat stops such a build that is configured with a key of the Test Store, on purpose. So to try the sandbox of a store in a debug build, leave `REVENUECAT_TEST_KEY` empty.
 
 These keys are the public API keys of RevenueCat, which go into the app, where anyone can read them. A secret API key of RevenueCat, which starts with `sk_`, never goes into `.env`, and the app refuses one. While the key that a build takes has no value, the app runs without purchases: it never calls RevenueCat, every call of `appPurchases` fails with the reason `notConfigured`, and a debug build prints which key to fill in.
+
+## Feedback
+
+`appFeedback` in `lib/core/feedback/app_feedback.dart` lets the users of the app write to you. Call `appFeedback.open(context)` from a button, with a `BuildContext` below the root of the app:
+
+```dart
+TextButton(
+  onPressed: () => appFeedback.open(context),
+  child: const Text('Write to us'),
+)
+```
+
+It opens the way to write of the provider of feedback, such as a new mail in the mail app, a form or a survey, and completes with `true` once that way opened, without waiting for the user to send anything. It completes with `false` when the way could not open, after the provider showed the user another way to reach you if it has one, such as the address to copy. It never throws: an error of the provider goes to the handler of the errors of Flutter, such as that of a crash reporter, and counts as `false`. A call while another is on its way does nothing and completes with `false`.
+
+`appFeedback.available` tells whether the provider has what it needs, such as your address, and does not change while the app runs. While it is `false`, `open` does nothing, so hide a button of your own then.
+
+The row "Write to us" of the settings screen, `FeedbackSetting` in `lib/core/feedback/feedback_setting.dart`, calls it, and the screen shows the row only while `appFeedback.available` holds.
+
+Each provider adds to what reaches you the name, the version, the build number and the flavor of the app and its platform, so that you know what the user ran. The section of the provider tells what it sends and how.
+
+The way to write is there whatever the user did with the review dialog of a store. Google Play forbids any question before or around that dialog, so never send the happy users to the store and the unhappy ones here.
+
+A way to write inside the app does not replace the Support URL that App Store Connect asks of every app, a page where its users reach you (App Store Review Guideline 1.5).
+
+What a user writes leaves the device through the provider. A provider that sends it through a service of its own, such as a form, collects data: declare it in App Privacy and in Data safety, as the section of the provider says what it sends. Both stores also require a link to a privacy policy in the listing of the app and inside the app.
 
 ## Languages
 
@@ -4257,6 +4318,7 @@ abstract final class AppEnv {
       bool.hasEnvironment('REVENUECAT_TEST_KEY') ||
       bool.hasEnvironment('PAYWALL_TERMS_URL') ||
       bool.hasEnvironment('PAYWALL_PRIVACY_URL') ||
+      bool.hasEnvironment('EMAIL_FEEDBACK_ADDRESS') ||
       bool.hasEnvironment('REST_BASE_URL');
 
   /// The public API key of the App Store app in RevenueCat, which starts with
@@ -4289,6 +4351,13 @@ abstract final class AppEnv {
   /// The address of the privacy policy that the paywall links to.
   static String? get paywallPrivacyUrl {
     const value = String.fromEnvironment('PAYWALL_PRIVACY_URL');
+    return value.isEmpty ? null : value;
+  }
+
+  /// The email address that "Write to us" mails go to, such as
+  /// support@example.com.
+  static String? get emailFeedbackAddress {
+    const value = String.fromEnvironment('EMAIL_FEEDBACK_ADDRESS');
     return value.isEmpty ? null : value;
   }
 
@@ -4367,6 +4436,753 @@ late final CommunicationService _communicationService;
 /// `bootstrap()` awaits it.
 Future<void> initEvents() async {
   _communicationService = await impl0.openFixtureEvents();
+}
+=== lib/core/feedback/app_feedback.dart (role:feedback) ===
+import 'package:fixture_app/core/feedback/email_feedback_service.dart' as impl0;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+
+import 'feedback_service.dart';
+
+/// How the users of the app write to its developer: a button calls
+/// [AppFeedbackController.open] with its context, and hides while
+/// [AppFeedbackController.available] is false.
+final AppFeedbackController appFeedback = AppFeedbackController._(
+  createFeedbackService(),
+);
+
+/// The way the users of the app write to its developer, the same with every
+/// provider of the feedback role: the service of the provider does the
+/// writing, and the controller keeps to what the role guarantees.
+///
+/// The app has one controller, [appFeedback].
+final class AppFeedbackController {
+  AppFeedbackController._(this._service);
+
+  FeedbackService _service;
+
+  /// Whether a call of [open] is on its way.
+  bool _opening = false;
+
+  /// Whether the app printed that the service failed to tell whether a user
+  /// can write.
+  bool _printedAvailable = false;
+
+  /// Whether a user can write now: the provider has what it needs, such as
+  /// an address. It does not change while the app runs.
+  ///
+  /// A service whose answer throws counts as one without what it needs, and
+  /// a debug build prints its error once.
+  bool get available {
+    try {
+      return _service.available;
+    } on Object catch (error) {
+      if (kDebugMode && !_printedAvailable) {
+        _printedAvailable = true;
+        debugPrint(
+          'The provider of feedback failed to tell whether a user can '
+          'write, so the app takes it as no: $error',
+        );
+      }
+      return false;
+    }
+  }
+
+  /// Opens the way of the provider for the user to write to the developer
+  /// of the app, such as the mail app with a new mail, a form or a survey,
+  /// over the screen of [context], a context below the root of the app.
+  ///
+  /// Completes with true once that way opened, without waiting for the user
+  /// to send anything, and with false when it could not open, after the
+  /// provider showed a way of its own to reach the developer if it has one.
+  /// It completes with false at once, without asking the provider, while
+  /// [available] is false, while [context] is no longer mounted, and while
+  /// another call is on its way.
+  ///
+  /// It never throws: an error of the provider goes to
+  /// `FlutterError.reportError` once and counts as false.
+  Future<bool> open(BuildContext context) async {
+    if (_opening || !context.mounted || !available) return false;
+    _opening = true;
+    try {
+      return await _service.open(context);
+    } on Object catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'feedback',
+          context: ErrorDescription(
+            'while opening the way to write to the developer of the app',
+          ),
+        ),
+      );
+      return false;
+    } finally {
+      _opening = false;
+    }
+  }
+
+  /// For a test: the service that [available] and [open] use from now on.
+  /// The code of the app never calls it.
+  void use(FeedbackService service) => _service = service;
+}
+
+/// The service of the provider of the feedback role. Only [appFeedback] and
+/// a test of the provider call this.
+FeedbackService createFeedbackService() => _feedbackService;
+
+final FeedbackService _feedbackService = impl0.createEmailFeedbackService();
+=== lib/core/feedback/email_feedback_mail.dart (email_feedback) ===
+/// The name of the app in the mail that a user writes to its developer: in
+/// the subject, such as "Feedback: My App", and in the line about the app.
+/// Change it here if you rename the app.
+///
+/// Unlike the name that the device shows, it is the same in every flavor,
+/// so a filter of your mail finds every such mail by its subject.
+const String emailFeedbackAppName = 'Fixture App';
+
+/// The flavor for a release, which users install from a store: the mail
+/// names any other flavor, and not this one.
+const String _releaseFlavor = 'prod';
+
+/// What an email address may not have: a white space, and what a `mailto:`
+/// link or a list of addresses would take apart.
+const String _notInAddress = r'\s@?&#,;<>"()\\/:\[\]';
+
+/// One email address, such as `support@example.com`: a name, an `@` and a
+/// domain with a dot.
+final RegExp _address = RegExp(
+  '^[^$_notInAddress]+@[^$_notInAddress.]+(?:\\.[^$_notInAddress.]+)+\$',
+);
+
+/// Whether [value], without the spaces around it, is one email address,
+/// such as `support@example.com`. Any other value, such as an empty one,
+/// two addresses or an address with a query, counts as none.
+bool isEmailFeedbackAddress(String? value) =>
+    value != null && _address.hasMatch(value.trim());
+
+/// The `mailto:` link of a new mail to [address], with [subject] and
+/// [body], which the mail app of the device opens.
+///
+/// Each part is encoded as RFC 6068 asks: a space is `%20` and never `+`,
+/// which a mail app would show as a plus, a line break is `%0D%0A`, and a
+/// `+` of the address is `%2B`, which keeps the `@` as it is. So build such
+/// a link here, and never with `Uri(queryParameters: ...)`, which writes a
+/// space as `+`.
+Uri emailFeedbackLink({
+  required String address,
+  required String subject,
+  required String body,
+}) {
+  final trimmed = address.trim();
+  final at = trimmed.lastIndexOf('@');
+  final to = at < 0
+      ? Uri.encodeComponent(trimmed)
+      : '${Uri.encodeComponent(trimmed.substring(0, at))}@'
+            '${Uri.encodeComponent(trimmed.substring(at + 1))}';
+  return Uri.parse(
+    'mailto:$to'
+    '?subject=${Uri.encodeComponent(subject)}'
+    '&body=${Uri.encodeComponent(body)}',
+  );
+}
+
+/// The line about the app in the mail, such as `My App 1.0.0 (1), dev`:
+/// [emailFeedbackAppName], the [version] and the [buildNumber] of the app,
+/// and the [flavor] of the build unless it is the flavor for a release,
+/// which users install from a store. A part that is unknown or empty is
+/// left out.
+String emailFeedbackAppLine({
+  String? version,
+  String? buildNumber,
+  String? flavor,
+}) {
+  final line = StringBuffer(emailFeedbackAppName);
+  if (_known(version) case final version?) line.write(' $version');
+  if (_known(buildNumber) case final build?) line.write(' ($build)');
+  if (_known(flavor) case final flavor? when flavor != _releaseFlavor) {
+    line.write(', $flavor');
+  }
+  return '$line';
+}
+
+/// The line about the device in the mail, such as
+/// `Android 14 (SDK 34), Google Pixel 7` or `iOS 17.4, iPhone 15 Pro`: the
+/// [system] with its [systemVersion] and, on Android, its [sdk], then the
+/// [manufacturer] and the [model]. A model that starts with the name of its
+/// manufacturer, whatever the case of its letters, does not repeat it. A
+/// part that is unknown or empty is left out.
+String emailFeedbackDeviceLine({
+  String? system,
+  String? systemVersion,
+  int? sdk,
+  String? manufacturer,
+  String? model,
+}) {
+  final maker = _known(manufacturer);
+  final name = _known(model);
+  final systemPart = [
+    ?_known(system),
+    ?_known(systemVersion),
+    ?(sdk == null ? null : '(SDK $sdk)'),
+  ].join(' ');
+  final repeats =
+      maker != null &&
+      name != null &&
+      name.toLowerCase().startsWith(maker.toLowerCase());
+  final devicePart = [?(repeats ? null : maker), ?name].join(' ');
+  return [
+    for (final part in [systemPart, devicePart])
+      if (part.isNotEmpty) part,
+  ].join(', ');
+}
+
+/// The body of the mail: two empty lines in which the user writes, then
+/// [header], such as "About the app and the device:", and each of [lines]
+/// that is not empty, with a line break of a mail, `\r\n`, between them.
+String emailFeedbackBody({
+  required String header,
+  required List<String> lines,
+}) => [
+  '',
+  '',
+  header,
+  for (final line in lines)
+    if (line.trim().isNotEmpty) line,
+].join('\r\n');
+
+/// [value] without the spaces around it, or `null` when that leaves
+/// nothing.
+String? _known(String? value) {
+  final trimmed = value?.trim();
+  return trimmed == null || trimmed.isEmpty ? null : trimmed;
+}
+=== lib/core/feedback/email_feedback_service.dart (email_feedback) ===
+import 'dart:async';
+
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:fixture_app/core/env/app_env.dart';
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import 'email_feedback_mail.dart';
+import 'email_feedback_sheet.dart';
+import 'feedback_service.dart';
+
+/// Creates the feedback of the app by email, with the app: a new mail to
+/// the address in `EMAIL_FEEDBACK_ADDRESS` of `.env`.
+FeedbackService createEmailFeedbackService() =>
+    EmailFeedbackService(address: AppEnv.emailFeedbackAddress);
+
+/// How long the mail waits for each read of what it tells about the app and
+/// the device. A read that takes longer leaves its part out, and the mail
+/// still opens.
+const Duration _readTime = Duration(milliseconds: 1500);
+
+/// The feedback of the app by email: "Write to us" opens a new mail to
+/// [address] in the mail app of the device, with url_launcher.
+///
+/// The subject is "Feedback: " and [emailFeedbackAppName], in the language
+/// of the app, so a filter of your mail finds it. The body leaves room for
+/// the message, then tells the name, the version, the build number and the
+/// flavor of the app, and the system and the model of the device, which the
+/// user sees and may delete before sending. The flavor for a release, which
+/// users install from a store, is not named.
+///
+/// It never asks the device first whether a mail app is there, as
+/// `canLaunchUrl` would: Android 11 and later answer no to an app whose
+/// manifest names no other app. Where no mail app opens the mail, such as
+/// on the iOS simulator, which has no Mail, it shows a sheet with the
+/// address, which the user copies.
+final class EmailFeedbackService implements FeedbackService {
+  /// Creates the feedback by email to [address], an email address such as
+  /// `support@example.com`. With no address, or a value that is none, the
+  /// app does not offer the way to write.
+  EmailFeedbackService({this.address});
+
+  /// The address that the mail goes to.
+  final String? address;
+
+  /// Whether the app printed that the address is missing.
+  bool _printed = false;
+
+  @override
+  bool get available {
+    final has = isEmailFeedbackAddress(address);
+    if (!has && kDebugMode && !_printed) {
+      _printed = true;
+      debugPrint(
+        'EMAIL_FEEDBACK_ADDRESS in .env is empty or no email address, '
+        'so "Write to us" hides: see "Values in .env" in the README.',
+      );
+    }
+    return has;
+  }
+
+  @override
+  Future<bool> open(BuildContext context) async {
+    if (!available) return false;
+    final to = address!.trim();
+    // The texts of the mail, read from the context before anything waits.
+    final String feedback = context.l10n.emailFeedbackSubject;
+    final String header = context.l10n.emailFeedbackDetails;
+    final lines = await emailFeedbackDetails();
+    final link = emailFeedbackLink(
+      address: to,
+      subject: '$feedback: $emailFeedbackAppName',
+      body: emailFeedbackBody(header: header, lines: lines),
+    );
+    try {
+      // false is what iOS answers when no app opened the link.
+      if (await launchUrl(link, mode: LaunchMode.externalApplication)) {
+        return true;
+      }
+    } on PlatformException {
+      // What Android throws when no app takes the link, or without an
+      // activity.
+    } on MissingPluginException {
+      // A platform without url_launcher.
+    }
+    if (context.mounted) unawaited(showEmailFeedbackSheet(context, to));
+    return false;
+  }
+}
+
+/// The two lines about the app and the device that the mail tells: the
+/// name, the version, the build number and the flavor of the app, and the
+/// system and the model of the device. The two are read at once, each for
+/// [_readTime] at most: a read that fails or takes longer leaves its part
+/// out, and the device line then tells the platform alone.
+Future<List<String>> emailFeedbackDetails() async {
+  final (app, device) = await (_appLine(), _deviceLine()).wait;
+  return [app, device];
+}
+
+/// The line about the app, from package_info_plus and the flavor of the
+/// build.
+Future<String> _appLine() async {
+  PackageInfo? info;
+  try {
+    info = await PackageInfo.fromPlatform().timeout(_readTime);
+  } on Object {
+    info = null;
+  }
+  return emailFeedbackAppLine(
+    version: info?.version,
+    buildNumber: info?.buildNumber,
+    flavor: appFlavor,
+  );
+}
+
+/// The line about the device, from device_info_plus: the version of Android
+/// with its SDK, the manufacturer and the model, or the version of iOS and
+/// the model, and the platform alone elsewhere.
+Future<String> _deviceLine() async {
+  final platform = defaultTargetPlatform;
+  try {
+    switch (platform) {
+      case TargetPlatform.android:
+        final info = await DeviceInfoPlugin().androidInfo.timeout(_readTime);
+        return emailFeedbackDeviceLine(
+          system: 'Android',
+          systemVersion: info.version.release,
+          sdk: info.version.sdkInt,
+          manufacturer: info.manufacturer,
+          model: info.model,
+        );
+      case TargetPlatform.iOS:
+        final info = await DeviceInfoPlugin().iosInfo.timeout(_readTime);
+        // device_info_plus names a model newer than its table this way.
+        final model = info.modelName == 'Unknown device'
+            ? info.utsname.machine
+            : info.modelName;
+        return emailFeedbackDeviceLine(
+          system: info.systemName,
+          systemVersion: info.systemVersion,
+          model: model,
+        );
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        return emailFeedbackDeviceLine(system: _nameOf(platform));
+    }
+  } on Object {
+    return emailFeedbackDeviceLine(system: _nameOf(platform));
+  }
+}
+
+/// The name of [platform], as the mail tells it.
+String _nameOf(TargetPlatform platform) => switch (platform) {
+  TargetPlatform.android => 'Android',
+  TargetPlatform.iOS => 'iOS',
+  TargetPlatform.fuchsia => 'Fuchsia',
+  TargetPlatform.linux => 'Linux',
+  TargetPlatform.macOS => 'macOS',
+  TargetPlatform.windows => 'Windows',
+};
+=== lib/core/feedback/email_feedback_sheet.dart (email_feedback) ===
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Shows the sheet with [address] over the screen of [context] where no
+/// mail app opens a new mail, such as on the iOS simulator, which has no
+/// Mail: the user copies the address and writes from their own email.
+///
+/// It is a sheet on the navigator at the root of the app, so it shows over
+/// the main navigation too, and comes at once in an app that asks for less
+/// motion. Edit the texts among those of the email_feedback module.
+Future<void> showEmailFeedbackSheet(BuildContext context, String address) =>
+    showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      isScrollControlled: true,
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : null,
+      builder: (context) => _AddressSheet(address: address),
+    );
+
+/// What the sheet shows: why, the address, and a button that copies it. It
+/// scrolls where it does not fit.
+class _AddressSheet extends StatefulWidget {
+  const _AddressSheet({required this.address});
+
+  /// The address that the user writes to.
+  final String address;
+
+  @override
+  State<_AddressSheet> createState() => _AddressSheetState();
+}
+
+class _AddressSheetState extends State<_AddressSheet> {
+  /// Whether the user copied the address.
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.address));
+    if (mounted) setState(() => _copied = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              header: true,
+              child: _WholeWords(
+                context.l10n.emailFeedbackNoMailTitle,
+                style: theme.textTheme.headlineSmall,
+                maxScaleFactor: 1.5,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _WholeWords(
+              context.l10n.emailFeedbackNoMailText,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            // The address in a field of its own, which the user may also
+            // select. It grows at most by half and stays on one line: where
+            // it does not fit, it is as large as the line allows.
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: colors.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: colors.outlineVariant),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                child: SelectionArea(
+                  child: _WholeWords(
+                    widget.address,
+                    style: theme.textTheme.titleMedium,
+                    maxScaleFactor: 1.5,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _copy,
+              // A screen reader reads "Address copied" once it comes.
+              child: Semantics(
+                liveRegion: true,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _copied ? Icons.check_rounded : Icons.copy_rounded,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      // The label grows at most by half.
+                      child: _WholeWords(
+                        _copied
+                            ? context.l10n.emailFeedbackCopied
+                            : context.l10n.emailFeedbackCopy,
+                        textAlign: TextAlign.center,
+                        maxScaleFactor: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device, by [maxScaleFactor] at most.
+/// Where its longest word would still not fit the width that the text has,
+/// as on a narrow phone with a large text size, the text is as large as
+/// that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.maxScaleFactor = double.infinity,
+  });
+
+  /// The text.
+  final String text;
+
+  /// The style of the text, over that of the text around it. With none, the
+  /// text is as the text around it, as the label of a button is in the style
+  /// that the theme of the app gives the button.
+  final TextStyle? style;
+
+  /// How the lines of the text are aligned.
+  final TextAlign? textAlign;
+
+  /// By how much the text grows at most with the text size of the device.
+  final double maxScaleFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: over that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style.merge(this.style);
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: maxScaleFactor);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font by
+        // more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textAlign: textAlign,
+          textScaler: scaler,
+        );
+      },
+    );
+  }
+}
+=== lib/core/feedback/feedback_service.dart (role:feedback) ===
+import 'package:flutter/widgets.dart';
+
+/// The way the users of the app write to its developer: what the provider
+/// of the feedback role implements. The code of the app uses appFeedback of
+/// app_feedback.dart.
+///
+/// A provider keeps to what the members say. Only a running app shows
+/// whether it does: the tests of the feedback role check what the app sees,
+/// and the tests of the module of the provider what reaches the developer.
+abstract interface class FeedbackService {
+  /// Whether a user can write now: the provider has what it needs, such as
+  /// an address. Reads at once, never throws, and does not change while the
+  /// app runs.
+  bool get available;
+
+  /// Opens the way of the provider for the user to write to the developer,
+  /// such as the mail app with a new mail, a form or a survey, over the
+  /// screen of [context], a context below the root of the app.
+  ///
+  /// Completes with true once that way opened, without waiting for the user
+  /// to send anything. Completes with false when it could not open, after
+  /// the provider showed a way of its own to reach the developer when it has
+  /// one, such as the address to copy, and at once while [available] is
+  /// false.
+  ///
+  /// It asks the platform nothing before it opens and learns from the answer
+  /// of the open itself: a platform may answer no while the way is there, as
+  /// Android 11 and later answer an app whose manifest names no other app.
+  /// What reaches the developer has the name, the version, the build number
+  /// and the flavor of the app, and its platform: that is the duty of each
+  /// provider, which the test of its module checks. Never throws.
+  Future<bool> open(BuildContext context);
+}
+=== lib/core/feedback/feedback_setting.dart (role:feedback) ===
+import 'dart:async';
+
+import 'package:fixture_app/core/l10n/l10n.dart';
+import 'package:flutter/material.dart';
+
+import 'app_feedback.dart';
+
+/// The entry of the settings screen through which the user writes to the
+/// developer of the app: a tap opens the way of the provider of the feedback
+/// role, such as a new mail in the mail app.
+///
+/// It shows nothing of its own: where the way cannot open, the provider
+/// shows its own way to reach the developer. It has no arrow and no icon of
+/// mail, since a provider may also show a form inside the app. A second tap
+/// while the first is on its way does nothing.
+class FeedbackSetting extends StatelessWidget {
+  /// Creates the setting.
+  const FeedbackSetting({super.key});
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    leading: const Icon(Icons.chat_bubble_outline_rounded),
+    // At a large text size the title wraps in the row between its words.
+    title: _WholeWords(context.l10n.feedbackSettingTitle),
+    onTap: () => unawaited(appFeedback.open(context)),
+  );
+}
+
+/// Whether the settings screen shows [FeedbackSetting]: only while the
+/// provider has what it needs, such as an address. It reads nothing else, so
+/// the row is there whatever the user did with the review dialog of a store.
+bool feedbackSettingShows() => appFeedback.available;
+
+/// A text that keeps its words whole: it breaks between its words and never
+/// inside one. A space, a tab or a line break parts two words, and a
+/// no-break space keeps the two words around it together as one.
+///
+/// It grows with the text size of the device. Where its longest word would
+/// still not fit the width that the text has, as on a narrow phone with a
+/// large text size, the text is as large as that word allows.
+class _WholeWords extends StatelessWidget {
+  const _WholeWords(this.text);
+
+  /// The text.
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    // The style in which a Text paints: that of the text around it, and
+    // bold for a user who asks for bold text.
+    var style = DefaultTextStyle.of(context).style;
+    if (MediaQuery.boldTextOf(context)) {
+      style = style.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = constraints.maxWidth;
+        final painter = TextPainter(
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        // The words of the text, between its white spaces, where a line may
+        // break: every one but a no-break space, which keeps the words
+        // around it together.
+        final words = text.split(RegExp(r'[^\S\u00A0\u2007\u202F]+'));
+        // How wide the longest word is in a font of [size].
+        double widestAt(double size) {
+          var widest = 0.0;
+          for (final word in words) {
+            painter
+              ..text = TextSpan(
+                text: word,
+                style: style.copyWith(fontSize: size),
+              )
+              ..layout();
+            if (painter.width > widest) widest = painter.width;
+          }
+          return widest;
+        }
+
+        // The size of a text of Flutter whose style gives none.
+        var size = style.fontSize ?? 14;
+        var widest = widestAt(size);
+        // In a few steps: the text size of a device may grow a small font
+        // by more than a large one.
+        for (var step = 0; step < 4 && widest > room && room > 0; step++) {
+          // A little smaller than the width allows, so that the rounding of
+          // the layout breaks no word.
+          size *= room / widest * 0.98;
+          widest = widestAt(size);
+        }
+        painter.dispose();
+        return Text(
+          text,
+          style: style.copyWith(fontSize: size),
+          textScaler: scaler,
+        );
+      },
+    );
+  }
 }
 === lib/core/fixture_analytics/fixture_analytics.dart (fake_analytics) ===
 import 'package:flutter/services.dart';
@@ -6226,6 +7042,44 @@ class FixtureTexts {
     _ => 'Not now',
   };
 
+  /// The text subject of the module email_feedback.
+  String get emailFeedbackSubject => switch (language) {
+    'uk' => 'Відгук',
+    _ => 'Feedback',
+  };
+
+  /// The text details of the module email_feedback.
+  String get emailFeedbackDetails => switch (language) {
+    'uk' => 'Про застосунок і пристрій:',
+    _ => 'About the app and the device:',
+  };
+
+  /// The text noMailTitle of the module email_feedback.
+  String get emailFeedbackNoMailTitle => switch (language) {
+    'uk' => 'Напишіть нам листом',
+    _ => 'Write to us by email',
+  };
+
+  /// The text noMailText of the module email_feedback.
+  String get emailFeedbackNoMailText => switch (language) {
+    'uk' =>
+      'Не вдалося відкрити поштовий застосунок. Скопіюйте адресу й напишіть нам зі своєї пошти.',
+    _ =>
+      'Couldn\'t open a mail app. Copy the address and write to us from your email.',
+  };
+
+  /// The text copy of the module email_feedback.
+  String get emailFeedbackCopy => switch (language) {
+    'uk' => 'Скопіювати адресу',
+    _ => 'Copy the address',
+  };
+
+  /// The text copied of the module email_feedback.
+  String get emailFeedbackCopied => switch (language) {
+    'uk' => 'Адресу скопійовано',
+    _ => 'Address copied',
+  };
+
   /// The text notFoundTitle of the template of the router role.
   String get routerNotFoundTitle => switch (language) {
     'uk' => 'Сторінку не знайдено',
@@ -6340,6 +7194,12 @@ class FixtureTexts {
   String get purchasesRestoreFailed => switch (language) {
     'uk' => 'Не вдалося відновити покупки. Спробуйте ще раз.',
     _ => 'Couldn\'t restore purchases. Try again.',
+  };
+
+  /// The text settingTitle of the template of the feedback role.
+  String get feedbackSettingTitle => switch (language) {
+    'uk' => 'Написати нам',
+    _ => 'Write to us',
   };
 }
 
@@ -17961,6 +18821,7 @@ class _Row extends StatelessWidget {
   }
 }
 === lib/features/settings/settings_screen.dart (settings) ===
+import 'package:fixture_app/core/feedback/feedback_setting.dart' as entry9;
 import 'package:fixture_app/core/fixture_hiding_setting/fixture_hiding_setting.dart'
     as entry2;
 import 'package:fixture_app/core/fixture_screen_log/fixture_screen_log_setting.dart'
@@ -18031,6 +18892,8 @@ class SettingsScreen extends StatelessWidget {
                 const entry6.LanguageSetting(),
                 const entry7.NotificationsSetting(),
                 const entry8.RestorePurchasesSetting(),
+                if (entry9.feedbackSettingShows())
+                  const entry9.FeedbackSetting(),
               ],
             ),
           ],
@@ -20830,6 +21693,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   crypto: "^3.0.7"
+  device_info_plus: "any"
   dio: "^5.11.1"
   firebase_analytics: "^12.6.0"
   firebase_auth: "^6.7.0"
@@ -20841,6 +21705,7 @@ dependencies:
   get_it: "^9.3.0"
   go_router: "^17.5.0"
   google_sign_in: "^7.2.0"
+  package_info_plus: "any"
   purchases_flutter: "^10.18.0"
   shared_preferences: "^2.5.5"
   shared_preferences_android: "^2.5.2"

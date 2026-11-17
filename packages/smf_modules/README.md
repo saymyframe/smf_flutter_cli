@@ -31,6 +31,7 @@ The modules that the [SMF CLI](https://pub.dev/packages/smf_flutter_cli) offers,
 | `smf_dio` | `dio`, REST requests with dio |
 | `smf_revenuecat` | `revenuecat`, premium access sold with RevenueCat |
 | `smf_paywall` | `paywall`, the paywall and the screen of the subscription |
+| `smf_email_feedback` | `email_feedback`, feedback by email from the mail app of the device |
 | `smf_github_actions` | `github_actions`, CI on GitHub Actions |
 
 `smf_contribution_engine` is not a module: it patches existing Dart files, and the modules do not use it.

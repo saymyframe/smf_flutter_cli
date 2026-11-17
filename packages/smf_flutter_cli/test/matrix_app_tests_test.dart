@@ -10,6 +10,7 @@ import 'package:mason/mason.dart';
 import 'package:path/path.dart' as p;
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_flutter_cli/matrix_app_tests.dart';
 import 'package:smf_flutter_cli/matrix_env.dart';
@@ -376,6 +377,18 @@ List<String> _paywallWith(
       for (final app in _paywall)
         if (roles.every(app.contains) && !without.any(app.contains)) app,
     ];
+
+/// The apps of email_feedback, with and without each role that the feedback
+/// role uses: the settings screen, which brings the router that it requires,
+/// and the localization. The module requires the env role, so each has it.
+const List<String> _emailFeedback = [_efAll, _efSettings, _efL10n, _ef];
+
+/// The app of email_feedback alone, and its apps with the roles that its
+/// role uses.
+const _ef = 'email_feedback';
+const _efAll = '$_ef with settings_screen, localization';
+const _efSettings = '$_ef with settings_screen';
+const _efL10n = '$_ef with localization';
 
 const _localizedSignIn = [
   'sign_in (bloc) with localization',
@@ -1322,6 +1335,9 @@ void main() {
         for (final app in _paywall)
           if (app.contains('localization') || app.contains('onboarding_screen'))
             app,
+        // The apps of email_feedback with the localization.
+        _efAll,
+        _efL10n,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1453,6 +1469,10 @@ void main() {
         _rcL10n,
         // The paywall, whose screens have texts.
         ..._paywallWith({'localization'}),
+        // The apps of email_feedback with the localization, whose mail and
+        // sheet have texts.
+        _efAll,
+        _efL10n,
         ..._authModes,
         ..._everyModule,
       ],
@@ -1493,6 +1513,7 @@ void main() {
         'sign_in (bloc) with localization': ['en', 'uk'],
         'sign_in (riverpod) with localization': ['en', 'uk'],
         for (final app in _paywallWith({'localization'})) app: ['en', 'uk'],
+        for (final app in [_efAll, _efL10n]) app: ['en', 'uk'],
         for (final app in _authModes) app: ['en', 'uk'],
         for (final app in _everyModule) app: ['en', 'uk'],
       },
@@ -1829,6 +1850,7 @@ void main() {
         _rcAll,
         _rcSettingsL10n,
         ..._paywallWith({'localization', 'settings_screen'}),
+        _efAll,
         ..._everyModule,
       ],
     );
@@ -2211,6 +2233,8 @@ void main() {
         'local_notifications':
             'integration_test/local_notifications/probe.dart '
                 'probeLocalNotifications',
+        'email_feedback':
+            'integration_test/email_feedback/probe.dart probeEmailFeedback',
         'di_role': 'integration_test/di_role/probe.dart probeServices',
         'preferences_role':
             'integration_test/preferences_role/probe.dart probePreferences',
@@ -2250,8 +2274,9 @@ void main() {
     // onboarding that a first launch shows, and the walk then goes through
     // the routes of the app past it. Those of Firebase Authentication, of
     // Google sign-in, of Firebase Cloud Messaging, of RevenueCat, of the
-    // notifications role, of local_notifications, of the push role and of
-    // the purchases role only read, so they hold wherever they come.
+    // notifications role, of local_notifications, of email_feedback, of the
+    // push role and of the purchases role only read, so they hold wherever
+    // they come.
     final app = apps.singleWhere((app) => app.name == 'every module (bloc)');
     final tests = appTestsFor(app, [named('start')], appTests.tests);
     expect(
@@ -2265,6 +2290,7 @@ void main() {
         'onboarding',
         'shared_preferences',
         'local_notifications',
+        'email_feedback',
         'di_role',
         'preferences_role',
         'notifications_role',
@@ -2316,15 +2342,16 @@ void main() {
         'probe4: onboarding/probe.dart',
         'probe5: shared_preferences/probe.dart',
         'probe6: local_notifications/probe.dart',
-        'probe7: di_role/probe.dart',
-        'probe8: preferences_role/probe.dart',
-        'probe9: notifications_role/probe.dart',
-        'probe10: push_role/probe.dart',
-        'probe11: purchases_role/probe.dart',
-        'probe12: router_walk/walk.dart',
-        'probe13: localization_role/probe.dart',
-        'probe14: flavors/probe.dart',
-        'probe15: rest_role/probe.dart',
+        'probe7: email_feedback/probe.dart',
+        'probe8: di_role/probe.dart',
+        'probe9: preferences_role/probe.dart',
+        'probe10: notifications_role/probe.dart',
+        'probe11: push_role/probe.dart',
+        'probe12: purchases_role/probe.dart',
+        'probe13: router_walk/walk.dart',
+        'probe14: localization_role/probe.dart',
+        'probe15: flavors/probe.dart',
+        'probe16: rest_role/probe.dart',
       ],
     );
     for (final (name, probe) in [
@@ -2335,15 +2362,16 @@ void main() {
       ('onboarding', 'probe4.probeOnboarding'),
       ('shared_preferences', 'probe5.probeSharedPreferences'),
       ('local_notifications', 'probe6.probeLocalNotifications'),
-      ('di_role', 'probe7.probeServices'),
-      ('preferences_role', 'probe8.probePreferences'),
-      ('notifications_role', 'probe9.probeNotifications'),
-      ('push_role', 'probe10.probePush'),
-      ('purchases_role', 'probe11.probePurchases'),
-      ('router_walk', 'probe12.probeRoutes'),
-      ('localization_role', 'probe13.probeLanguages'),
-      ('flavors', 'probe14.probeFlavor'),
-      ('rest_role', 'probe15.probeRest'),
+      ('email_feedback', 'probe7.probeEmailFeedback'),
+      ('di_role', 'probe8.probeServices'),
+      ('preferences_role', 'probe9.probePreferences'),
+      ('notifications_role', 'probe10.probeNotifications'),
+      ('push_role', 'probe11.probePush'),
+      ('purchases_role', 'probe12.probePurchases'),
+      ('router_walk', 'probe13.probeRoutes'),
+      ('localization_role', 'probe14.probeLanguages'),
+      ('flavors', 'probe15.probeFlavor'),
+      ('rest_role', 'probe16.probeRest'),
     ]) {
       expect(list, contains("('$name', $probe),"));
     }
@@ -2924,6 +2952,8 @@ void main() {
         _rcSettingsL10n,
         _rcSettings,
         ..._paywallWith({'settings_screen'}),
+        _efAll,
+        _efSettings,
         ..._everyModule,
       ],
     );
@@ -2985,6 +3015,8 @@ void main() {
           without: {'localization'},
         ))
           app: ['SubscriptionSetting', 'RestorePurchasesSetting'],
+        _efAll: ['FeedbackSetting', 'LanguageSetting'],
+        _efSettings: ['FeedbackSetting'],
         for (final app in _everyModule)
           app: [
             'AccountSetting',
@@ -2993,6 +3025,7 @@ void main() {
             'LanguageSetting',
             'NotificationsSetting',
             'RestorePurchasesSetting',
+            'FeedbackSetting',
           ],
       },
     );
@@ -3029,8 +3062,24 @@ void main() {
         ],
         reason: app.name,
       );
-      // No module of the CLI has an entry that shows only at times yet.
-      expect(text, isNot(contains('if (')), reason: app.name);
+      // An entry that shows only at times, as the entry "Write to us", is
+      // among the entries while its function returns true, and among the
+      // hidden ones while it returns false. Its function is in the file of
+      // its widget, with the same prefix.
+      for (final entry in entries) {
+        if (entry.showIf case final showIf?) {
+          expect(showIf.import, entry.widget.import, reason: app.name);
+        }
+      }
+      final hidden = <String>[];
+      for (final (index, entry) in entries.indexed) {
+        if (entry.showIf case final showIf?) {
+          hidden.add(
+            '  if (!entry$index.${showIf.name}()) '
+            'entry$index.${entry.widget.name},\n',
+          );
+        }
+      }
       expect(
         text,
         allOf(
@@ -3045,11 +3094,21 @@ void main() {
             'List<Type> get settingsEntries => [\n'
             '${[
               for (final (index, entry) in entries.indexed)
-                '  entry$index.${entry.widget.name},\n',
+                switch (entry.showIf) {
+                  final showIf? => '  if (entry$index.${showIf.name}()) '
+                      'entry$index.${entry.widget.name},\n',
+                  null => '  entry$index.${entry.widget.name},\n',
+                },
             ].join()}'
             '];',
           ),
-          contains('List<Type> get hiddenSettingsEntries => [];'),
+          contains(
+            hidden.isEmpty
+                ? 'List<Type> get hiddenSettingsEntries => [];'
+                : 'List<Type> get hiddenSettingsEntries => [\n'
+                    '${hidden.join()}'
+                    '];',
+          ),
         ),
         reason: app.name,
       );
@@ -3536,6 +3595,8 @@ void main() {
         _rcSettingsL10n,
         _rcSettings,
         ..._paywallWith({'settings_screen'}),
+        _efAll,
+        _efSettings,
         ..._everyModule,
       ],
     );
@@ -3562,6 +3623,7 @@ void main() {
         _rcAuthSettings,
         _rcSettings,
         ..._paywallWith({'settings_screen'}, without: {'localization'}),
+        _efSettings,
       ],
     );
     for (final app in withoutRole) {
@@ -3623,6 +3685,7 @@ void main() {
           _rcAll,
           _rcSettingsL10n,
           ..._paywallWith({'localization', 'settings_screen'}),
+          _efAll,
           ..._everyModule,
         ],
         reason: languages,
@@ -3724,30 +3787,55 @@ void main() {
       'the layout role', () {
     final settings = named('settings');
 
-    /// What the file of [app] says: the number of the entries, and whether
-    /// the screen is a destination.
-    (int, bool) ofApp(MatrixApp app) {
+    /// What the file of [app] says: the number of the entries, how many of
+    /// them show only while their function returns true, and whether the
+    /// screen is a destination.
+    (int, int, bool) ofApp(MatrixApp app) {
       final text = settings.generatedFiles!(app, 'my_app')[settingsOfAppFile]!;
       final (:index, :errors) = DartFileIndexer.parse(settingsOfAppFile, text);
       expect(errors, isEmpty, reason: app.name);
-      expect(index.imports, isEmpty, reason: app.name);
       expect(
         index.declarations.map((declaration) => declaration.name),
         ['settingsEntryCount', 'settingsInMainNavigation'],
         reason: app.name,
       );
-      // No module of the CLI has an entry that shows only at times yet, so
-      // the count is a number.
-      final count = RegExp(
-        r'^int get settingsEntryCount => (\d+);$',
-        multiLine: true,
-      ).firstMatch(text);
       final destination = RegExp(
         r'^const bool settingsInMainNavigation = (true|false);$',
         multiLine: true,
       ).firstMatch(text);
-      expect((count, destination), isNot(contains(null)), reason: app.name);
-      return (int.parse(count![1]!), destination![1] == 'true');
+      expect(destination, isNotNull, reason: app.name);
+      final shows = destination![1] == 'true';
+      // Without an entry that shows only at times, the count is a number.
+      final count = RegExp(
+        r'^int get settingsEntryCount => (\d+);$',
+        multiLine: true,
+      ).firstMatch(text);
+      if (count != null) {
+        expect(index.imports, isEmpty, reason: app.name);
+        return (int.parse(count[1]!), 0, shows);
+      }
+      // With one, it is a list of the entries, of which such an entry is
+      // there only while its function returns true, through an import of
+      // the file of the function with a prefix of its own.
+      final listed = RegExp(
+        r'^int get settingsEntryCount => \[\n((?:  .*\n)+)\]\.length;$',
+        multiLine: true,
+      ).firstMatch(text);
+      expect(listed, isNotNull, reason: app.name);
+      final items = listed![1]!.trimRight().split('\n');
+      final conditional = [
+        for (final item in items)
+          if (item.trimLeft().startsWith('if (')) item,
+      ];
+      expect(
+        index.imports.map((import) => import.prefix).toSet(),
+        {
+          for (final item in conditional)
+            RegExp(r'if \((entry\d+)\.').firstMatch(item)![1],
+        },
+        reason: app.name,
+      );
+      return (items.length, conditional.length, shows);
     }
 
     // The app of the module alone has no entry, so its screen has the note
@@ -3759,40 +3847,48 @@ void main() {
         for (final app in apps.where(settings.appliesTo)) app.name: ofApp(app),
       },
       {
-        'settings with localization': (1, false),
-        'settings': (0, false),
-        'material_theme with settings_screen, localization': (2, false),
-        'material_theme with settings_screen': (1, false),
+        'settings with localization': (1, 0, false),
+        'settings': (0, 0, false),
+        'material_theme with settings_screen, localization': (2, 0, false),
+        'material_theme with settings_screen': (1, 0, false),
         // The entry that restores purchases, and the setting of the
         // language.
-        for (final app in [_rcAll, _rcSettingsL10n]) app: (2, false),
-        for (final app in [_rcAuthSettings, _rcSettings]) app: (1, false),
-        for (final app in [_lnAll, _lnSettingsL10n]) app: (2, false),
-        for (final app in [_lnSettingsOnboarding, _lnSettings]) app: (1, false),
+        for (final app in [_rcAll, _rcSettingsL10n]) app: (2, 0, false),
+        for (final app in [_rcAuthSettings, _rcSettings]) app: (1, 0, false),
+        for (final app in [_lnAll, _lnSettingsL10n]) app: (2, 0, false),
+        for (final app in [_lnSettingsOnboarding, _lnSettings])
+          app: (1, 0, false),
         // The entry of the account, and the setting of the language.
-        for (final app in _localizedSignIn) app: (2, false),
-        'sign_in (bloc)': (1, false),
-        'sign_in (riverpod)': (1, false),
+        for (final app in _localizedSignIn) app: (2, 0, false),
+        'sign_in (bloc)': (1, 0, false),
+        'sign_in (riverpod)': (1, 0, false),
         // The entry of the subscription, the entry that restores purchases,
         // and the setting of the language.
         for (final app in _paywallWith({'localization', 'settings_screen'}))
-          app: (3, false),
+          app: (3, 0, false),
         for (final app in _paywallWith(
           {'settings_screen'},
           without: {'localization'},
         ))
-          app: (2, false),
-        for (final app in _everyModule) app: (6, true),
+          app: (2, 0, false),
+        // The entry "Write to us", which shows only while the provider of
+        // the feedback role has what it needs, and the setting of the
+        // language.
+        _efAll: (2, 1, false),
+        _efSettings: (1, 1, false),
+        for (final app in _everyModule) app: (7, 1, true),
       },
     );
     for (final app in apps.where(settings.appliesTo)) {
       final hook = app.hook!;
       final input = settingsScreenRole.hookInput(hook);
       final screen = settingsScreenRole.screenIn(input)!;
+      final entries = settingsScreenRole.entriesIn(input);
       expect(
         ofApp(app),
         (
-          settingsScreenRole.entriesIn(input).length,
+          entries.length,
+          entries.where((entry) => entry.showIf != null).length,
           hook.presentRoles.contains(layoutRole) &&
               layoutRole
                   .destinationsIn(layoutRole.hookInput(hook))
@@ -5885,7 +5981,8 @@ void main() {
       // The matrix of the CLI runs it in the apps whose roles and modules give
       // the role keys: those of dio, whose role gives the key of its address,
       // of revenuecat and of the paywall, whose tests give the keys values in
-      // .env, and those with every module.
+      // .env, those of email_feedback, whose test gives the key of its
+      // address a value, and those with every module.
       expect(
         [
           for (final app in apps)
@@ -5903,6 +6000,7 @@ void main() {
           _rcL10n,
           _rc,
           ..._paywall,
+          ..._emailFeedback,
           ..._everyModule,
         ],
       );
@@ -6206,8 +6304,8 @@ void main() {
 
   test(
       'the test of the feedback role applies to the apps with the role, '
-      'whichever module provides it, or to those of them that it is given; no '
-      'app of the CLI has the role yet', () async {
+      'whichever module provides it, or to those of them that it is given; '
+      'the matrix of the CLI runs it in every app with the role', () async {
     MatrixApp appWith(Set<Role> roles, {List<ModuleId>? everyModuleWith}) =>
         MatrixApp(
           'feedback',
@@ -6237,16 +6335,27 @@ void main() {
     expect(test.generatedFiles, isNull);
     expect(test.mocks, isNull);
     expect(test.startProbe, isNull);
+    // The matrix of the CLI runs it in every app with the role, which
+    // email_feedback provides there: the apps of the module and the apps
+    // with every module.
+    final registered = named('feedback_role');
+    expect(registered.roles, test.roles);
     expect(
       [
         for (final app in apps)
-          if (test.appliesTo(app)) app.name,
+          if (registered.appliesTo(app)) app.name,
       ],
-      isEmpty,
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles.contains(feedbackRole)) app.name,
+      ],
     );
     expect(
-      appTests.tests.map((test) => p.basename(test.directory)),
-      isNot(contains('feedback_role')),
+      [
+        for (final app in apps)
+          if (registered.appliesTo(app)) app.name,
+      ],
+      [..._emailFeedback, ..._everyModule],
     );
     // Each of its two test files starts the app once, since the start-up of
     // an app may not run twice: one for appFeedback over a service of the
@@ -6276,6 +6385,303 @@ void main() {
       everyModule.appliesTo(appWith(const {}, everyModuleWith: const [])),
       isFalse,
     );
+  });
+
+  test(
+      'the test of the entry "Write to us" applies to the apps with the '
+      'feedback role and the settings screen role, whichever modules provide '
+      'them, and gets the widget of the entry and its title in each language '
+      'of the app from the data of the roles', () async {
+    const settingFile = ImportRef.app('core/feedback/feedback_setting.dart');
+    RoleData<Object> entry(TypeRef widget, ContributionOrigin origin) =>
+        settingsScreenRole
+            .data(SettingsEntry(widget: widget))
+            .withOrigin(origin);
+    final ofRole = entry(
+      const TypeRef('FeedbackSetting', import: settingFile),
+      const RoleTemplateOrigin(feedbackRole),
+    );
+    // An entry of a module, whose widget has the same name, and one of the
+    // template of another role.
+    final others = [
+      entry(
+        const TypeRef(
+          'FeedbackSetting',
+          import: ImportRef.app('features/help/feedback_setting.dart'),
+        ),
+        const ModuleOrigin(ModuleId('help')),
+      ),
+      entry(
+        const TypeRef(
+          'ThemeModeSetting',
+          import: ImportRef.app('core/theme/theme_mode_setting.dart'),
+        ),
+        const RoleTemplateOrigin(themeRole),
+      ),
+    ];
+    MatrixApp withEntries(
+      Set<Role> roles, {
+      List<RoleData<Object>>? entries,
+      List<String>? languages,
+    }) =>
+        MatrixApp(
+          'feedback',
+          const [ModuleId('mail'), ModuleId('screen')],
+          hook: RoleHookRequest(
+            data: entries ?? [others.first, ofRole, others.last],
+            presentRoles: roles,
+            context: ContractHarness.defaultContext,
+            choices: {
+              if (languages != null)
+                localizationRole: LocalizationChoice(languages),
+            },
+          ),
+        );
+    final test = await feedbackSettingAppTest();
+
+    expect(p.basename(test.directory), 'feedback_setting');
+    expect(Directory(test.directory).existsSync(), isTrue);
+    // A test of the feedback role, whose template gives the entry.
+    expect(test.roles, {feedbackRole});
+    // A tap would leave the app on a device.
+    expect(test.startProbe, isNull);
+    expect(test.mocks, isNull);
+    expect(test.values, isNull);
+    expect(test.envValues, isNull);
+    expect(
+      test.appliesTo(withEntries({feedbackRole, settingsScreenRole})),
+      isTrue,
+    );
+    expect(test.appliesTo(withEntries({feedbackRole})), isFalse);
+    expect(test.appliesTo(withEntries({settingsScreenRole})), isFalse);
+    // The apps of the matrix of the CLI with both roles: the apps of
+    // email_feedback with a settings screen, and the apps with every module.
+    final registered = named('feedback_setting');
+    expect(registered.roles, test.roles);
+    final applies = [
+      for (final app in apps)
+        if (registered.appliesTo(app)) app.name,
+    ];
+    expect(applies, [
+      for (final app in apps)
+        if (app.hook!.presentRoles
+            .containsAll({feedbackRole, settingsScreenRole}))
+          app.name,
+    ]);
+    expect(applies, [_efAll, _efSettings, ..._everyModule]);
+    for (final app in apps.where(registered.appliesTo)) {
+      // It opens the settings screen with the helper of the tests of the
+      // settings screen role, and takes the service of the test from the
+      // files of the test of the feedback role, which apply to each of its
+      // apps.
+      for (final helper in ['settings_screen_role', 'feedback_role']) {
+        expect(
+          named(helper).appliesTo(app),
+          isTrue,
+          reason: '$helper in ${app.name}',
+        );
+      }
+      final text =
+          registered.generatedFiles!(app, 'my_app')[feedbackSettingFile]!;
+      final (:index, :errors) = DartFileIndexer.parse(
+        feedbackSettingFile,
+        text,
+      );
+      expect(errors, isEmpty, reason: app.name);
+      expect(
+        [
+          for (final import in index.imports)
+            '${import.uri} as ${import.prefix}',
+        ],
+        ['package:my_app/core/feedback/feedback_setting.dart as entry'],
+        reason: app.name,
+      );
+    }
+    expect('lib/${settingFile.uri}', FeedbackRole.settingFile);
+
+    final files = test.generatedFiles!(
+      withEntries(
+        {feedbackRole, settingsScreenRole, localizationRole},
+        languages: ['uk', 'en', 'de'],
+      ),
+      'my_app',
+    );
+    expect(files.keys, [feedbackSettingFile]);
+    final text = files[feedbackSettingFile]!;
+    final (:index, :errors) = DartFileIndexer.parse(feedbackSettingFile, text);
+    expect(errors, isEmpty);
+    // The entry of the template of the role, not that of the module, whose
+    // widget has the same name.
+    expect(
+      [for (final import in index.imports) '${import.uri} as ${import.prefix}'],
+      ['package:my_app/core/feedback/feedback_setting.dart as entry'],
+    );
+    expect(
+      index.declarations.map((declaration) => declaration.name),
+      ['feedbackSetting', 'feedbackTitles'],
+    );
+    expect(
+      text,
+      contains('const Type feedbackSetting = entry.FeedbackSetting;'),
+    );
+    // Each language of the app in its order, in English where the title has
+    // no translation.
+    expect(
+      text,
+      contains(
+        'const Map<String, String> feedbackTitles = {\n'
+        "  'uk': '${FeedbackRole.settingTitle.textIn('uk')}',\n"
+        "  'en': 'Write to us',\n"
+        "  'de': 'Write to us',\n"
+        '};\n',
+      ),
+    );
+    // An app without the localization role is in English alone.
+    expect(
+      test.generatedFiles!(
+        withEntries({feedbackRole, settingsScreenRole}),
+        'my_app',
+      )[feedbackSettingFile],
+      contains(
+        'const Map<String, String> feedbackTitles = {\n'
+        "  'en': 'Write to us',\n"
+        '};\n',
+      ),
+    );
+
+    // The test taps one entry: an app in which the template of the role
+    // gives the settings screen none, or two, is no app of the matrix.
+    for (final (entries, count) in [
+      (others, 0),
+      ([ofRole, ofRole], 2),
+    ]) {
+      expect(
+        () => test.generatedFiles!(
+          withEntries({feedbackRole, settingsScreenRole}, entries: entries),
+          'my_app',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'The template of the $feedbackRole gives the settings screen of '
+                'feedback $count entries, rather than the entry "Write to us" '
+                'alone.',
+          ),
+        ),
+        reason: '$count',
+      );
+    }
+  });
+
+  test(
+      'the test of email_feedback applies to the apps with the module, '
+      'whatever else they have, gives the key of the module an address in '
+      '.env, gets the texts of the module in each language of the app, '
+      'declares the mocks of its platform side for the tests of every module '
+      'of those apps, and has a probe for the start check', () {
+    final test = named('email_feedback');
+
+    expect(
+      [
+        for (final app in apps)
+          if (test.appliesTo(app)) app.name,
+      ],
+      [..._emailFeedback, ..._everyModule],
+    );
+    // It tests what only this provider of the feedback role does, what
+    // reaches the developer, so it names no role: the tests of the role
+    // check what every provider keeps to.
+    expect(test.roles, isEmpty);
+    expect(test.values, isNull);
+    // An address with a +, which the link must keep as %2B, so that the
+    // provider has what it needs in the tests of every app.
+    expect(
+      test.envValues!(apps.firstWhere(test.appliesTo)),
+      {'EMAIL_FEEDBACK_ADDRESS': 'feedback+tests@example.com'},
+    );
+    // The mocks put a device with a mail app in front of the platform side
+    // of url_launcher, whose interface the app does not have.
+    expect(test.devDependencies, ['url_launcher_platform_interface']);
+    expect(test.mocks!.path, 'test/email_feedback_mocks.dart');
+    expect(test.mocks!.function, 'mockEmailFeedback');
+    expect(
+      (
+        test.startProbe!.path,
+        test.startProbe!.function,
+        test.startProbe!.answer
+      ),
+      (
+        'integration_test/email_feedback/probe.dart',
+        'probeEmailFeedback',
+        null,
+      ),
+    );
+    for (final file in [
+      test.mocks!.path,
+      test.startProbe!.path,
+      'test/email_feedback/email_feedback.dart',
+      'test/email_feedback/mail_test.dart',
+      'test/email_feedback/fallback_test.dart',
+      'test/email_feedback/probe_test.dart',
+    ]) {
+      expect(
+        File(p.joinAll([test.directory, ...file.split('/')])).existsSync(),
+        isTrue,
+        reason: file,
+      );
+    }
+    final mocks = File(
+      p.joinAll([test.directory, ...test.mocks!.path.split('/')]),
+    ).readAsStringSync();
+    final (index: mocksIndex, errors: mocksErrors) =
+        DartFileIndexer.parse(test.mocks!.path, mocks);
+    expect(mocksErrors, isEmpty);
+    final function = mocksIndex.declarations
+        .singleWhere((declaration) => declaration.name == test.mocks!.function);
+    expect(function.kind, DeclarationKind.function);
+    expect(function.type, 'MailDevice');
+
+    // The texts of the module in each language of the app, and the flavor
+    // for a release.
+    for (final app in apps.where(test.appliesTo)) {
+      final files = test.generatedFiles!(app, 'my_app');
+      expect(files.keys, [emailFeedbackOfAppFile], reason: app.name);
+      final text = files[emailFeedbackOfAppFile]!;
+      final (:index, :errors) =
+          DartFileIndexer.parse(emailFeedbackOfAppFile, text);
+      expect(errors, isEmpty, reason: app.name);
+      expect(index.imports, isEmpty, reason: app.name);
+      expect(
+        index.declarations.map((declaration) => declaration.name),
+        ['emailFeedbackTexts', 'releaseFlavor'],
+        reason: app.name,
+      );
+      expect(
+        text,
+        contains("const String releaseFlavor = 'prod';"),
+        reason: app.name,
+      );
+      final languages = app.hook!.presentRoles.contains(localizationRole)
+          ? ['en', 'uk']
+          : ['en'];
+      for (final language in languages) {
+        final subject = EmailFeedbackModule.texts.texts.first;
+        expect(
+          text,
+          contains(
+            "  '$language': {\n"
+            "    'subject': '${subject.textIn(language) ?? subject.en}',\n",
+          ),
+          reason: '${app.name} in $language',
+        );
+      }
+      expect(
+        text.contains("'uk': {"),
+        languages.contains('uk'),
+        reason: app.name,
+      );
+    }
   });
 
   test(

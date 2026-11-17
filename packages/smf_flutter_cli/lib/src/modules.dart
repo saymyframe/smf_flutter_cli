@@ -4,6 +4,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/core.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_dio/smf_dio.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_event_bus/smf_event_bus.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
@@ -83,6 +84,7 @@ const List<SmfModule> smfModules = [
   DioModule(),
   RevenueCatModule(),
   PaywallModule(),
+  EmailFeedbackModule(),
   DartDefineModule(),
   // What tells how it runs.
   FirebaseCrashlyticsModule(),

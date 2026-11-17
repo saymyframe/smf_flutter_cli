@@ -6,6 +6,7 @@ library;
 import 'package:smf_apple_sign_in/smf_apple_sign_in.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dio/smf_dio.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -40,6 +41,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final analytics = await appTestsDirectoryOf('smf_firebase_analytics');
   final firebaseAuth = await appTestsDirectoryOf('smf_firebase_auth');
   final dio = await appTestsDirectoryOf('smf_dio');
+  final emailFeedback = await appTestsDirectoryOf('smf_email_feedback');
   final googleSignIn = await appTestsDirectoryOf('smf_google_sign_in');
   final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
@@ -518,6 +520,45 @@ Future<MatrixAppTests> smfAppTests() async {
         generatedFiles: _paywallStepOf,
         roles: {routerRole, onboardingScreenRole},
       ),
+      // The mail of the module on url_launcher, package_info_plus and
+      // device_info_plus, what reaches the developer, which is a duty of
+      // the provider of the feedback role: on Android and on iOS, in each
+      // language of the app, one new mail outside the app to the address of
+      // .env, without asking the device first whether it can, with %20 for a
+      // space and never +, the subject and the body in the language of the
+      // app, and the app and the device in the body; a device or a version
+      // that the platform does not give leaves its part out, and the mail
+      // still opens. Where no mail app opens it, a sheet on the root of the
+      // app shows the address and copies it, and fits a small phone with a
+      // large text size. For them the matrix writes the texts of the module
+      // in each language of the app (see _emailFeedbackOfAppOf), and gives
+      // the key of the module an address in .env (see
+      // _emailFeedbackAddressOf), so the provider has what it needs in the
+      // tests of every app. The tests use the service of the module, and
+      // leave what every provider of the feedback role does to the tests of
+      // the role. The mocks are a device with a mail app, which opens every
+      // mail and says no when it is asked whether it can, the version 1.0.0
+      // of the app and a device of each platform, and the matrix sets them
+      // up for the tests of every module of the app, since the tests of the
+      // role open a mail through the provider. Its probe sees on a device
+      // that the mail tells the version and the device that the platform
+      // gives, also in a release build, and that the app offers the way to
+      // write exactly with an address.
+      MatrixAppTest(
+        '$emailFeedback/email_feedback',
+        appliesTo: _has(EmailFeedbackModule.id),
+        devDependencies: const ['url_launcher_platform_interface'],
+        envValues: _emailFeedbackAddressOf,
+        generatedFiles: _emailFeedbackOfAppOf,
+        mocks: const MatrixMocks(
+          'test/email_feedback_mocks.dart',
+          'mockEmailFeedback',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/email_feedback/probe.dart',
+          'probeEmailFeedback',
+        ),
+      ),
       // The services of the apps whose modules register some in the DI
       // container, whichever module provides it.
       await diRoleAppTest(),
@@ -645,6 +686,18 @@ Future<MatrixAppTests> smfAppTests() async {
       // which the app is then in and remembers, or the languages of the
       // device.
       await languageSettingAppTest(),
+      // The way through which the users of the apps with the feedback role
+      // write to the developer, whichever module provides it: appFeedback
+      // over a service of the test, and the service of the provider on the
+      // device of its mocks, which has what the provider opens and says no
+      // when it is asked whether it has it.
+      await feedbackRoleAppTest(),
+      // The entry "Write to us" on the settings screen of the apps with the
+      // feedback role and the settings screen role, whichever modules
+      // provide them: it shows its title in the language of the app, a tap
+      // opens the way of the provider once, and the screen leaves it out
+      // while the provider has not what it needs.
+      await feedbackSettingAppTest(),
       // The requests of the apps with the REST role, whichever module provides
       // it: an address, the failures, the token, the repeats, the stops and
       // the log. Its probe sees on a device that the stack of the provider
@@ -711,11 +764,11 @@ Future<MatrixAppTests> smfAppTests() async {
     // screen, the fixture registry tests the rest of the role, and each
     // provider of the DI role, of the events role, of the preferences
     // role, of the env role, of the auth role, of the notifications role,
-    // of the push role, of the purchases role, of the REST role, of the
-    // settings screen role, of the theme role, of the localization role, of
-    // the app icon role and of the splash role gets the tests of its role. Each
-    // provider of the app entry role gets the test of the theme role, which
-    // checks that its root rebuilds.
+    // of the push role, of the purchases role, of the feedback role, of the
+    // REST role, of the settings screen role, of the theme role, of the
+    // localization role, of the app icon role and of the splash role gets the
+    // tests of its role. Each provider of the app entry role gets the test of
+    // the theme role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -726,6 +779,7 @@ Future<MatrixAppTests> smfAppTests() async {
       notificationsRole,
       pushRole,
       purchasesRole,
+      feedbackRole,
       restRole,
       settingsScreenRole,
       themeRole,
@@ -1946,6 +2000,107 @@ Future<MatrixAppTest> feedbackRoleAppTest({
           (among?.call(app) ?? true),
       roles: {feedbackRole},
     );
+
+/// The test of the entry "Write to us" on the settings screen, which the
+/// template of the feedback role contributes, that the CLI keeps in its
+/// `app_tests/feedback_setting`, for the apps with the feedback role and the
+/// settings screen role, whichever modules provide them. Over a service of
+/// feedback of the test that scripts what a provider answers:
+/// - the settings screen shows the entry once, with its title in each
+///   language of the app, as one button for a screen reader;
+/// - a tap opens the way of the service once, with a context below the root
+///   of the app, and a second tap while the first is on its way opens
+///   nothing more;
+/// - while the service has not what it needs, a new settings screen leaves
+///   the entry out;
+/// - on a small phone with a large text size, the title stays in the row of
+///   the entry, in full, and keeps its words whole.
+///
+/// The test knows only the two roles. The matrix writes the type of the
+/// widget of the entry for it into [feedbackSettingFile], from the entries
+/// of the settings screen role of the app, with the title of the entry in
+/// each language of the app, from the localization role. It opens the
+/// settings screen with the helper of the tests of the settings screen role,
+/// and takes the service of the test from the files of the test of the
+/// feedback role ([feedbackRoleAppTest]), which runs in every app that this
+/// test runs in. It has no probe for the start check: a tap would leave the
+/// app on a device, and the walk of the routes goes to the settings screen
+/// there.
+Future<MatrixAppTest> feedbackSettingAppTest() async => MatrixAppTest(
+      '${await appTestsDirectoryOf('smf_flutter_cli')}/feedback_setting',
+      appliesTo: (app) => app.hook!.presentRoles
+          .containsAll(const [feedbackRole, settingsScreenRole]),
+      generatedFiles: _feedbackSettingOf,
+      roles: {feedbackRole},
+    );
+
+/// The path in an app of what the matrix writes for the test of the entry
+/// "Write to us" on the settings screen: `feedbackSetting`, the type of the
+/// widget of the entry that the template of the feedback role gives the
+/// settings screen role, and `feedbackTitles`, the title of the entry
+/// ([FeedbackRole.settingTitle]) in each language of the app, by the code
+/// of the language. The languages are those of the localization role of the
+/// app ([LocalizationRole.localesIn]), in its order, and English alone in an
+/// app without the role, whose entry has the English title.
+const feedbackSettingFile = 'test/feedback_setting/setting.dart';
+
+/// The file at [feedbackSettingFile] of [app], an app of the matrix with
+/// the feedback role and the settings screen role, whose package is
+/// [packageName].
+///
+/// It imports the file of the entry with the prefix `entry`. A title
+/// without a translation into a language of the app is the English one
+/// there, as the localization role says of the texts of an app. Throws a
+/// [StateError] if the template of the feedback role gives the settings
+/// screen no entry or more than one: the test taps one entry.
+Map<String, String> _feedbackSettingOf(MatrixApp app, String packageName) {
+  final hook = app.hook!;
+  final entries = [
+    for (final RoleData(:value, :origin)
+        in settingsScreenRole.hookInput(hook).data)
+      if (value is SettingsEntry &&
+          origin == const RoleTemplateOrigin(feedbackRole))
+        value,
+  ];
+  if (entries.length != 1) {
+    throw StateError(
+      'The template of the $feedbackRole gives the settings screen of '
+      '${app.name} ${entries.length} entries, rather than the entry "Write '
+      'to us" alone.',
+    );
+  }
+  final widget = entries.single.widget;
+  final languages = hook.presentRoles.contains(localizationRole)
+      ? localizationRole.localesIn(localizationRole.hookInput(hook))
+      : const ['en'];
+  final titles = StringBuffer();
+  for (final language in languages) {
+    const title = FeedbackRole.settingTitle;
+    titles.writeln(
+      '  ${SmfNames.dartString(language)}: '
+      '${SmfNames.dartString(title.textIn(language) ?? title.en)},',
+    );
+  }
+  return {
+    feedbackSettingFile: '''
+// The entry "Write to us" on the settings screen and its title, which the
+// matrix of SMF writes from the data of the settings screen role and of the
+// localization role of the app for the test of the entry, in
+// test/feedback_setting.
+import '${widget.import!.resolveUri(packageName)}' as entry;
+
+/// The type of the widget of the entry "Write to us", an entry of the
+/// settings screen.
+const Type feedbackSetting = ${widget.codeWith('entry')};
+
+/// The title of the entry by the code of each language of the app, the
+/// first of which the app uses when the device asks for none of them. An app
+/// without the localization role has the English title alone.
+const Map<String, String> feedbackTitles = {
+$titles};
+''',
+  };
+}
 
 /// The test of the entry that restores purchases on the settings screen,
 /// which the template of the purchases role contributes, that the CLI keeps
@@ -3207,6 +3362,50 @@ Map<String, String?> _paywallLinksOf(MatrixApp app) => {
       PaywallModule.termsKey.name: 'https://example.com/terms',
       PaywallModule.privacyKey.name: '',
     };
+
+/// The address of the tests in `.env` for the key of the email_feedback
+/// module, with a `+`, which the link of a mail must keep as `%2B`: with
+/// it, the provider of the feedback role has what it needs in the tests of
+/// every app, as the role asks of the mocks of every provider.
+Map<String, String?> _emailFeedbackAddressOf(MatrixApp app) => {
+      EmailFeedbackModule.addressKey.name: 'feedback+tests@example.com',
+    };
+
+/// The path in an app of what the matrix writes for the tests of the
+/// email_feedback module: `emailFeedbackTexts`, the texts of the module
+/// ([EmailFeedbackModule.texts]), each by its name, in each language of the
+/// app, by the code of the language, and `releaseFlavor`, the flavor for a
+/// release ([AppEntryRole.releaseFlavor]), which the mail does not name. The
+/// languages are those of the localization role of the app
+/// ([LocalizationRole.localesIn]), in its order, and English alone in an app
+/// without the role.
+const emailFeedbackOfAppFile = 'test/email_feedback/of_app.dart';
+
+/// The file at [emailFeedbackOfAppFile] of [app], an app of the matrix with
+/// the email_feedback module.
+Map<String, String> _emailFeedbackOfAppOf(MatrixApp app, String packageName) {
+  final texts = _textsByLanguageOf(app, EmailFeedbackModule.texts);
+  return {
+    emailFeedbackOfAppFile: '''
+// The texts of the email_feedback module in each language of the app, and
+// the flavor for a release, which the matrix of SMF writes from the texts of
+// the module, the languages of the localization role of the app and the
+// flavors of the app entry role for the tests of the module, in
+// test/email_feedback.
+
+/// The texts of the module by their names, by the code of each language of
+/// the app, the first of which the app uses when the device asks for none
+/// of them. An app without the localization role has the English texts
+/// alone.
+const Map<String, Map<String, String>> emailFeedbackTexts = {
+$texts};
+
+/// The flavor for a release, which users install from a store: the mail
+/// does not name it.
+const String releaseFlavor = ${SmfNames.dartString(AppEntryRole.releaseFlavor.name)};
+''',
+  };
+}
 
 /// The path in an app of what the matrix writes for the tests of the
 /// paywall module: `startScreen`, the type of the screen that the app

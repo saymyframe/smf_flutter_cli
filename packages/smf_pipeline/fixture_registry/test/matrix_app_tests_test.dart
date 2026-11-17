@@ -1196,6 +1196,30 @@ void main() {
     expect(roleTest.envValues, isNull);
     expect(roleTest.values, isNull);
     expect(roleTest.generatedFiles, isNull);
+    // The test of the entry "Write to us" is not registered for the
+    // fixtures: no app of their matrix has a settings screen next to the
+    // feedback, so it would apply to no app, which fails the run. Once an
+    // app of the matrix has both roles, such as with a fixture provider of
+    // the settings screen role, the test belongs among those of the
+    // fixtures.
+    expect(
+      [
+        for (final test in appTests.tests)
+          if (nameOf(test) == 'feedback_setting') test,
+      ],
+      isEmpty,
+    );
+    expect(
+      [
+        for (final app in apps)
+          if (app.hook!.presentRoles
+              .containsAll({feedbackRole, settingsScreenRole}))
+            app.name,
+      ],
+      isEmpty,
+      reason: 'Register feedbackSettingAppTest() in fixtureAppTests() for '
+          'these apps.',
+    );
   });
 
   test(
@@ -2392,6 +2416,9 @@ void main() {
           'purchases_session',
           'purchases_setting',
           'paywall',
+          'email_feedback',
+          'feedback_role',
+          'feedback_setting',
           'app_icon_role',
           'launcher_icons',
           'splash_role',
@@ -2547,6 +2574,44 @@ void main() {
       expect(test.appliesTo(everyModule), isTrue);
       for (final app in matrix.where(test.appliesTo)) {
         for (final helper in ['settings_screen_role', 'purchases_role']) {
+          expect(
+            ofSeveral(helper).appliesTo(app),
+            isTrue,
+            reason: '$helper in ${app.name}',
+          );
+        }
+      }
+    });
+
+    test(
+        'has the entry "Write to us" on the settings screen, which the '
+        'template of the feedback role gives it with the provider of the CLI, '
+        'and the test of the entry, a test of the feedback role, applies to it '
+        'with the helpers of the tests of the settings screen and of the '
+        'feedback', () {
+      expect(
+        [
+          for (final module in severalProvidersModules())
+            if (module.descriptor.provides.contains(feedbackRole))
+              module.descriptor.id,
+        ],
+        [const ModuleId('email_feedback')],
+      );
+      expect(
+        [
+          for (final entry in settingsScreenRole
+              .entriesIn(settingsScreenRole.hookInput(everyModule.hook!)))
+            entry.file,
+        ],
+        contains(FeedbackRole.settingFile),
+      );
+      for (final name in ['feedback_role', 'feedback_setting']) {
+        expect(ofSeveral(name).roles, {feedbackRole}, reason: name);
+        expect(ofSeveral(name).appliesTo(everyModule), isTrue, reason: name);
+      }
+      final test = ofSeveral('feedback_setting');
+      for (final app in matrix.where(test.appliesTo)) {
+        for (final helper in ['settings_screen_role', 'feedback_role']) {
           expect(
             ofSeveral(helper).appliesTo(app),
             isTrue,

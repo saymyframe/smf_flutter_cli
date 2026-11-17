@@ -32,6 +32,10 @@ dependencies:
   # The provider of the REST role in the registry of several providers, for the
   # app test that it keeps and the tests of the role that the CLI keeps.
   smf_dio: ^0.8.0
+  # The provider of the feedback role in the registry of several providers,
+  # for the app test that it keeps and the tests of the role that the CLI
+  # keeps.
+  smf_email_feedback: ^0.8.0
   # The providers of the roles that an app can have several providers of,
   # in the registry of several providers.
   smf_firebase_analytics: ^0.5.0

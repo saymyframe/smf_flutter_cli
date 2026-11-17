@@ -29,6 +29,7 @@ import 'package:smf_bottom_tabs/smf_bottom_tabs.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 import 'package:smf_dart_define/smf_dart_define.dart';
 import 'package:smf_dio/smf_dio.dart';
+import 'package:smf_email_feedback/smf_email_feedback.dart';
 import 'package:smf_firebase_analytics/smf_firebase_analytics.dart';
 import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
@@ -238,7 +239,11 @@ List<ModuleId> everyFixture({
 /// the purchases of RevenueCat: that of the paywall, whose entry of the
 /// subscription the settings screen shows below the entries of the other
 /// features, and that of its step of the onboarding, which comes after the
-/// steps of the fixture steps and of the notifications role.
+/// steps of the fixture steps and of the notifications role. After them
+/// comes email_feedback, the provider of the feedback role that the CLI has,
+/// for the app test that it keeps and for the tests of that role that the
+/// CLI keeps, of the role and of its entry "Write to us" of the settings
+/// screen, which shows only while the module has the address of .env.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -287,5 +292,6 @@ List<SmfModule> severalProvidersModules() => const [
       DioModule(),
       RevenueCatModule(),
       PaywallModule(),
+      EmailFeedbackModule(),
       LauncherIconsModule(),
     ];
