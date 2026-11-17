@@ -236,7 +236,7 @@ With `go_router`:
 With `in_app_review`:
 
 - `InAppReviewService` in `lib/core/review/in_app_review_service.dart` implements `ReviewService` of `lib/core/review/review_service.dart`: it asks for the review dialog with `InAppReview.instance.requestReview()`, opens the page of the app in its store with `launchUrl` of url_launcher, and reads the version of the app with `PackageInfo.fromPlatform()` of package_info_plus. In `lib/`, only that file imports in_app_review.
-- Keep `openStoreListing()` of in_app_review out of the app: on Android it opens the page of the id of the build that runs, such as that of the flavor `dev`, which has no page in Google Play. `appReview.openStorePage()` opens the right page.
+- Keep `openStoreListing()` of in_app_review out of the app: on Android it opens the page for the id of the running build, such as that of the flavor `dev`, which has no page in Google Play. `appReview.openStorePage()` opens the right page.
 - The app asks for the dialog only where its code calls `appReview.requestIfDue()`. Google Play shows the dialog only in an app that it installed, such as from an internal test track, and the README of the app tells how to see it there. Never send a review while testing: Google Play shows no dialog to an account that has reviewed the app.
 - Through the dialog, Google Play collects the rating and the text of a review. Both stores require a link to a privacy policy in the listing of the app and inside the app.
 
