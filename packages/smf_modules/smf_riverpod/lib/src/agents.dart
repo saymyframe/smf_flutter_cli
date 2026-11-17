@@ -20,3 +20,16 @@ With `flutter_riverpod`:
 - A widget talks only to providers, never to a service or a DI container. A provider gets a service through another provider, which a test overrides.
 - `ProviderScope` is around the root widget in `runApp()`, in `${AppEntryRole.mainFile}`: keep it above every widget that reads a provider.
 ''';
+
+/// The note of the module in the guide for coding agents of an app whose
+/// controllers keep values that the state manager follows: where the
+/// providers of those values are, with [example], the provider of the first
+/// value of the app, how a widget reads one, and that code changes a value
+/// only through its controller.
+///
+/// Its inline code names what the file of the providers and the code of a
+/// variant for this module use, and the file, which every app with the
+/// note has.
+String bridgesAgentNote(String example) => '''
+- The values that controllers of the app keep, such as the theme mode, have providers in `lib/core/state/shared_state_providers.dart`, one for each value, such as `$example`, each a `NotifierProvider` of a `ListenableNotifier`. A widget reads one with `ref.watch`, and code changes the value only through its controller, which the doc of the provider names.
+''';
