@@ -615,8 +615,9 @@ void main() {
 
       test(
           'tells that the app asks only where its code asks, how Google Play '
-          'shows the dialog, that a test review is never sent, what Google '
-          'Play collects, and that both stores require a privacy policy', () {
+          'shows the dialog, never to send a review while testing, what '
+          'Google Play collects, and that both stores require a privacy '
+          'policy', () {
         expect(
           agentNote,
           allOf(
@@ -624,7 +625,8 @@ void main() {
                 '`appReview.requestIfDue()`.'),
             contains('Google Play shows the dialog only in an app that it '
                 'installed, such as from an internal test track'),
-            contains('A test review is never sent'),
+            contains('Never send a review while testing: Google Play shows '
+                'no dialog to an account that has reviewed the app.'),
             contains('Google Play collects the rating and the text of a '
                 'review.'),
             contains('Both stores require a link to a privacy policy in the '
