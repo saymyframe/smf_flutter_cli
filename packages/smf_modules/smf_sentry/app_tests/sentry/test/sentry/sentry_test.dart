@@ -1,7 +1,7 @@
 // A test that continuous integration runs in the apps with the sentry module
 // whose .env has a DSN: the start of Sentry, initSentryCrashReporter(),
-// leaves the handlers of the errors that nothing catches as it found them,
-// since they belong to the crash reporting of the app, and the crash reporter
+// leaves the handlers of the errors that nothing catches to the crash
+// reporting of the app and sends no default PII, and the crash reporter
 // of the module reports each of its calls to Sentry, with the environment of
 // the flavor of the build, and neither presents nor prints what it reports.
 //
@@ -27,27 +27,21 @@ import 'sentry.dart';
 /// A handler of the errors of Flutter that the start of Sentry finds.
 void _flutterErrors(FlutterErrorDetails details) {}
 
-/// A handler of the other errors that the start of Sentry finds.
-bool _platformErrors(Object error, StackTrace stackTrace) => false;
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('With a DSN, the start of Sentry', () {
     late CrashReporter reporter;
     late FlutterExceptionHandler? flutterErrorsAfter;
-    late ErrorCallback? platformErrorsAfter;
 
     setUpAll(() async {
       final flutterErrorsBefore = FlutterError.onError;
       final platformErrorsBefore = PlatformDispatcher.instance.onError;
       FlutterError.onError = _flutterErrors;
-      PlatformDispatcher.instance.onError = _platformErrors;
       try {
         reporter = await initSentryCrashReporter();
       } finally {
         flutterErrorsAfter = FlutterError.onError;
-        platformErrorsAfter = PlatformDispatcher.instance.onError;
         FlutterError.onError = flutterErrorsBefore;
         PlatformDispatcher.instance.onError = platformErrorsBefore;
       }
@@ -56,8 +50,10 @@ void main() {
     setUp(sentryEvents.clear);
 
     test(
-        'starts Sentry and leaves the handlers of the errors as it found them, '
-        'which belong to the crash reporting of the app', () {
+        'starts Sentry and leaves the handlers of the errors to the crash '
+        'reporting of the app: it puts back the handler of the errors of '
+        'Flutter that it found, and removes the integration of Sentry that '
+        'takes the handler of the other errors', () async {
       expect(Sentry.isEnabled, isTrue);
       expect(reporter, isA<SentryCrashReporter>());
       expect(
@@ -67,11 +63,19 @@ void main() {
             'the integration of Sentry for the errors of Flutter replaces, so '
             'that such an error reaches Sentry once.',
       );
+      // flutter_test keeps no handler that a test gives
+      // PlatformDispatcher.instance.onError, so the test reads the
+      // integrations that ran, which each event lists.
+      await reporter.recordError(StateError('for the integrations'), null);
+      final event = (await eventsOf('Bad state: for the integrations')).single;
+      final integrations = event.sdk?.integrations ?? const <String>[];
+      expect(integrations, contains('flutterErrorIntegration'));
       expect(
-        platformErrorsAfter,
-        same(_platformErrors),
-        reason: 'The start of Sentry removed the integration of Sentry that '
-            'takes PlatformDispatcher.instance.onError.',
+        integrations,
+        isNot(contains('OnErrorIntegration')),
+        reason: 'The start of Sentry removed OnErrorIntegration, which would '
+            'take PlatformDispatcher.instance.onError, a handler of the crash '
+            'reporting of the app.',
       );
     });
 
@@ -103,6 +107,12 @@ void main() {
         ('CrashReporter.recordError', true, SentryLevel.error),
       );
       expect(caught.contexts['reason'], {'reason': 'while saving'});
+      expect(
+        caught.user?.ipAddress,
+        isNull,
+        reason: 'Sentry starts without its default PII, so an event asks '
+            'Sentry for no IP address of the user.',
+      );
       expect(exceptionOf(caught).stackTrace?.frames, isNotEmpty);
       expect(
         (
@@ -174,6 +184,12 @@ void main() {
         contains('saved the note'),
       );
       expect(forUser.user?.id, 'user-1');
+      expect(
+        forUser.user?.ipAddress,
+        isNull,
+        reason: 'Sentry starts without its default PII, so the user of an '
+            'event has the id that the code set and no IP address.',
+      );
       expect(forNobody.user?.id, isNull);
     });
   }, skip: hasDsn ? false : withoutDsn);
