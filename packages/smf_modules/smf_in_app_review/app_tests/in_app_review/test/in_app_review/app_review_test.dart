@@ -138,12 +138,6 @@ void main() {
         greaterThanOrEqualTo(now.millisecondsSinceEpoch - 1000),
         reason: 'The app saves the time of the request.',
       );
-      expect(
-        device.methods,
-        isNot(contains('openStoreListing')),
-        reason: 'The reviews of the app never call openStoreListing() of '
-            'in_app_review.',
-      );
 
       // The next launch, on which a review is due again: the app asked a
       // month ago, in an earlier version. The platform refuses the request.

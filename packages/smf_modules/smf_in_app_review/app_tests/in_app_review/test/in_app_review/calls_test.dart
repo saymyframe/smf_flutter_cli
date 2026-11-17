@@ -3,10 +3,15 @@
 // side of in_app_review and of url_launcher. It asks the store for its review
 // dialog and lets a refusal of the platform through, as the review role
 // asks. It opens exactly the page of the store that it gets with
-// url_launcher, outside the app, and never through openStoreListing() of
+// url_launcher, outside the app. And it gives the version of the app
+// without its build number.
+//
+// That the module never opens a page with openStoreListing() of
 // in_app_review, which on Android opens the page of the id of the build that
-// runs, such as that of a flavor that has no page in Google Play. And it
-// gives the version of the app without its build number.
+// runs, such as that of a flavor that has no page in Google Play, is for the
+// unit tests of the module: that method picks its platform by the system of
+// the machine that runs the test, not by the platform of the test, so no
+// test of an app sees what it would send.
 //
 // It uses the service of the module, and leaves what every provider of the
 // review role does to the test of the role. The platform side is that of
@@ -107,8 +112,7 @@ void main() {
 
   test(
     'openStorePage() gives url_launcher exactly the page, to open outside the '
-    'app, on Android and on iOS, and never asks in_app_review for the page '
-    'of the app in its store',
+    'app, on Android and on iOS',
     () async {
       final service = createInAppReviewService();
       final opened = <bool>[];
@@ -136,14 +140,6 @@ void main() {
         reason: 'openStorePage() returns whether an app of the device opened '
             'the page.',
       );
-      expect(
-        device.methods,
-        isNot(contains('openStoreListing')),
-        reason: 'openStorePage() never calls openStoreListing() of '
-            'in_app_review, which on Android opens the page of the id of the '
-            'build that runs, such as that of a flavor that has no page in '
-            'Google Play.',
-      );
     },
   );
 
@@ -168,10 +164,9 @@ void main() {
             'opens the page, and when url_launcher fails, and never throws.',
       );
       expect(
-        device.methods,
-        isNot(contains('openStoreListing')),
-        reason: 'openStorePage() never calls openStoreListing() of '
-            'in_app_review, also when the page does not open.',
+        device.opened,
+        ['$_play externalApplication', '$_play externalApplication'],
+        reason: 'Both pages reached url_launcher, which did not open them.',
       );
     },
   );

@@ -525,13 +525,12 @@ Future<MatrixAppTests> smfAppTests() async {
       // url_launcher, on Android and on iOS, such as a request for the
       // dialog, a refusal of the platform, which the service lets through,
       // and the page of the store, which it opens with url_launcher outside
-      // the app and never through openStoreListing() of the package, which
-      // would open the page of the id of the build that runs; the version of
-      // the app; and appReview over the service of the module, which asks
-      // the platform only where the code of the app calls it, saves the
-      // request, and asks again after a refusal. The tests use the service
-      // of the module, and leave what every provider of the review role does
-      // to the tests of the role; the matrix fills in the keys of the role.
+      // the app; the version of the app; and appReview over the service of
+      // the module, which asks the platform only where the code of the app
+      // calls it, saves the request, and asks again after a refusal. The
+      // tests use the service of the module, and leave what every provider
+      // of the review role does to the tests of the role; the matrix fills
+      // in the keys of the role.
       // The mocks are a device with the store of its platform, whose dialog
       // shows nothing, on which a page of the store opens and the version of
       // the app is 1.0.0, and the matrix sets them up for the tests of every

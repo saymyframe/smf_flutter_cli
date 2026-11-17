@@ -9,9 +9,11 @@
 //
 // in_app_review has no mocks for tests, so this answers the messages of the
 // package to the platform on its method channel. A version of the package
-// that changes its messages breaks these tests. It records every call, also
-// one of openStoreListing, which the module never makes: the tests of the
-// module expect never to see it.
+// that changes its messages breaks these tests. It records every call that
+// reaches the channel. openStoreListing() of the package, which the module
+// never calls, picks its platform by the system of the machine that runs
+// the test and not by the platform of the test, so it would not reach the
+// channel there: the unit tests of the module keep it out.
 //
 // The page of the app in its store opens with url_launcher, so this puts a
 // recorder of the pages of the stores in place of the platform side of
@@ -79,7 +81,7 @@ final class MockInAppReview {
       if (_failures.remove(call.method) case final error?) throw error;
       return switch (call.method) {
         'isAvailable' => available,
-        'requestReview' || 'openStoreListing' => null,
+        'requestReview' => null,
         _ => throw MissingPluginException('No answer for ${call.method}'),
       };
     });
