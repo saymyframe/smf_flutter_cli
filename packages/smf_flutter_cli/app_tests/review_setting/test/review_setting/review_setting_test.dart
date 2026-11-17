@@ -234,6 +234,15 @@ void main() {
 
       // A small phone with insets and the text at three times its size,
       // about the largest that the settings of a device have.
+      //
+      // Under flutter test every glyph of the font of the tests is one em
+      // wide, so at this size the title has 160 pixels of room in its row,
+      // and even "Rate", 192 pixels wide, does not fit: the English title is
+      // smaller than the text size asks here too. With the font of the app,
+      // such as Geist of material_theme, the English title wraps between its
+      // words at the size that the text size asks. So the size that this
+      // check sees is no look of the app: it checks that the title keeps its
+      // words whole and stays in its row, whichever size that takes.
       tester.view
         ..physicalSize = const Size(320, 480)
         ..padding = const FakeViewPadding(top: 40, bottom: 40);
