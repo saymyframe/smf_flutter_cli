@@ -12,8 +12,17 @@
 // sentry_uncaught_errors_test.dart checks the handlers that the start-up
 // installs. The mocks of Sentry keep the events and send none
 // (sentry_mocks.dart), and the matrix sets them up before the tests.
+//
+// On Windows, flutter_tester gives Dart its arguments in the code page of
+// Windows, and a read of them fails with an error that no catch takes once a
+// path among them has a letter beyond ASCII, as the directory of the app may
+// have. The processor of Sentry that adds the device and the runtime to each
+// event reads them, so the start leaves it out there; the test checks that,
+// and that a report completes in time wherever the app is.
 @Timeout(Duration(minutes: 2))
 library;
+
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,20 +36,32 @@ import 'sentry.dart';
 /// A handler of the errors of Flutter that the start of Sentry finds.
 void _flutterErrors(FlutterErrorDetails details) {}
 
+/// The class of the processor of Sentry that adds the device, the system
+/// and the runtime to each event, which the start leaves out on Windows by
+/// this name.
+const _enricher = 'IoEnricherEventProcessor';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('With a DSN, the start of Sentry', () {
     late CrashReporter reporter;
     late FlutterExceptionHandler? flutterErrorsAfter;
+    late SentryFlutterOptions options;
 
     setUpAll(() async {
       final flutterErrorsBefore = FlutterError.onError;
       final platformErrorsBefore = PlatformDispatcher.instance.onError;
+      final mocks = configureSentryForTests;
+      configureSentryForTests = (started) {
+        mocks?.call(started);
+        options = started;
+      };
       FlutterError.onError = _flutterErrors;
       try {
         reporter = await initSentryCrashReporter();
       } finally {
+        configureSentryForTests = mocks;
         flutterErrorsAfter = FlutterError.onError;
         FlutterError.onError = flutterErrorsBefore;
         PlatformDispatcher.instance.onError = platformErrorsBefore;
@@ -48,6 +69,48 @@ void main() {
     });
 
     setUp(sentryEvents.clear);
+
+    test(
+        'leaves out the processor of Sentry that reads the arguments of the '
+        'process on Windows, where the app runs only in flutter test, and '
+        'keeps it elsewhere', () {
+      final processors = [
+        for (final processor in options.eventProcessors)
+          '${processor.runtimeType}',
+      ];
+      if (Platform.isWindows) {
+        expect(
+          processors,
+          isNot(contains(_enricher)),
+          reason: 'flutter_tester gives Dart its arguments in the code page '
+              'of Windows, and the processor reads them for each event, which '
+              'fails with an error that no catch takes once the path of the '
+              'app has a letter beyond ASCII: the event never reaches Sentry.',
+        );
+      } else {
+        expect(
+          processors,
+          contains(_enricher),
+          reason: 'The start leaves out the processor by the name of its '
+              'class on Windows, so Sentry still has a processor of that name.',
+        );
+      }
+    });
+
+    test('completes a report in time, wherever the app is', () async {
+      await reporter
+          .recordError(StateError('wherever the app is'), StackTrace.current)
+          .timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => fail(
+              'The report did not complete in 30 seconds: on Windows, a '
+              'processor of Sentry that reads the arguments of flutter_tester '
+              'fails once the path of the app has a letter beyond ASCII.',
+            ),
+          );
+
+      expect(await eventsOf('Bad state: wherever the app is'), hasLength(1));
+    });
 
     test(
         'starts Sentry and leaves the handlers of the errors to the crash '

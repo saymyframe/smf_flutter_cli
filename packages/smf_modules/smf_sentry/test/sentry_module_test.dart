@@ -391,6 +391,7 @@ void main() {
       ];
 
       expect(assignments, [
+        'started = options',
         'dsn = dsn',
         "environment = appFlavor ?? 'dev'",
         'debug = false',
@@ -459,6 +460,46 @@ void main() {
       // The variable is read before the try, so the handler is the one that
       // the start found.
       expect(kept.offset, lessThan(attempt.offset));
+    });
+
+    test(
+        'leaves out the processor of Sentry that reads the arguments of the '
+        'process once Sentry started, on Windows alone, by the name of its '
+        'class', () {
+      final start = _functionOf(unit, 'initSentryCrashReporter');
+      final statements =
+          (start.functionExpression.body as BlockFunctionBody).block.statements;
+      // After the check that Sentry started, so that the options are those
+      // of the Sentry that runs, and right before the reporter is returned.
+      expect(
+        [for (final statement in statements.reversed.take(3)) '$statement'],
+        [
+          'return const SentryCrashReporter();',
+          '_withoutEnricherOnWindows(started);',
+          startsWith('if (!Sentry.isEnabled)'),
+        ],
+      );
+      final leaveOut = _functionOf(unit, '_withoutEnricherOnWindows');
+      final body =
+          (leaveOut.functionExpression.body as BlockFunctionBody).block;
+      expect('${body.statements.first}', 'if (!Platform.isWindows) return;');
+      expect(
+        '${body.statements.last}',
+        allOf(
+          contains(r"'${processor.runtimeType}' == _enricherClass"),
+          contains('options.removeEventProcessor(processor)'),
+        ),
+      );
+      final enricher = unit.declarations
+          .whereType<TopLevelVariableDeclaration>()
+          .expand((declaration) => declaration.variables.variables)
+          .singleWhere(
+            (variable) => variable.name.lexeme == '_enricherClass',
+          );
+      expect(
+        (enricher.initializer! as StringLiteral).stringValue,
+        'IoEnricherEventProcessor',
+      );
     });
 
     test(

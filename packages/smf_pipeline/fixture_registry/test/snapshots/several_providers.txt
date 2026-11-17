@@ -4238,6 +4238,8 @@ final class CrashlyticsCrashReporter implements CrashReporter {
       _crashlytics.setUserIdentifier(userId ?? '');
 }
 === lib/core/crash_reporting/sentry_crash_reporter.dart (sentry) ===
+import 'dart:io' show Platform;
+
 import 'package:fixture_app/core/env/app_env.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show appFlavor;
@@ -4266,6 +4268,11 @@ void Function(SentryFlutterOptions options)? configureSentryForTests;
 /// The environment of the events is the flavor of the build. A debug build
 /// sends its events too.
 ///
+/// On Windows, where the app runs only in `flutter test`, Sentry processes
+/// the events without the processor that adds the device, the system and
+/// the runtime, whose read of the arguments of flutter_tester fails there
+/// once a path among them has a letter beyond ASCII.
+///
 /// Throws a [StateError] when the build has no DSN, has a value that is no
 /// DSN of Sentry, or when Sentry does not start with it: the app then reports
 /// nothing to Sentry, and a debug build prints why, without the value.
@@ -4280,8 +4287,10 @@ Future<CrashReporter> initSentryCrashReporter() async {
     );
   }
   final flutterErrors = FlutterError.onError;
+  late final SentryFlutterOptions started;
   try {
     await SentryFlutter.init((options) {
+      started = options;
       options
         ..dsn = dsn
         ..environment = appFlavor ?? 'dev'
@@ -4317,7 +4326,31 @@ Future<CrashReporter> initSentryCrashReporter() async {
       '.env again.',
     );
   }
+  _withoutEnricherOnWindows(started);
   return const SentryCrashReporter();
+}
+
+/// The class of the processor of Sentry that adds the device, the system,
+/// the runtimes and the context of Dart to each event.
+const _enricherClass = 'IoEnricherEventProcessor';
+
+/// Leaves out the processor [_enricherClass] of Sentry, which [options]
+/// has once Sentry started, on Windows, where the app runs only in
+/// `flutter test`. There flutter_tester gives Dart its arguments in the code
+/// page of Windows rather than in UTF-8, and the processor reads them
+/// (`Platform.executableArguments`) for each event: when a path among them
+/// has a letter beyond ASCII, such as the directory of the app, the read
+/// fails with an error of the engine that no `catch` takes, so the event
+/// never reaches Sentry and the call that reported it never completes. The
+/// app is never obfuscated in `flutter test`, so the name of the class holds
+/// there. On Android and iOS, the events keep the processor.
+void _withoutEnricherOnWindows(SentryFlutterOptions options) {
+  if (!Platform.isWindows) return;
+  for (final processor in options.eventProcessors) {
+    if ('${processor.runtimeType}' == _enricherClass) {
+      options.removeEventProcessor(processor);
+    }
+  }
 }
 
 /// Why the app reports nothing to Sentry when Sentry does not take the
