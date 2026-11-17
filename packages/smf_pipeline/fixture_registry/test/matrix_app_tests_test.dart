@@ -2469,8 +2469,9 @@ void main() {
     test(
         'gets the app tests of the modules of the CLI, the tests of the DI '
         'role, of the events role, of the preferences role, of the auth '
-        'role, of the purchases role, of the settings screen role and of the '
-        'theme role, the test of the paywall, the mocks of the fixture '
+        'role, of the purchases role, of the settings screen role, of the '
+        'theme role and of the remote config role, the test of the paywall, '
+        'the mocks of the fixture '
         'providers, the tests of the '
         'roles of several providers and the test of the onboarding screen '
         'role, which all apply to it', () {
@@ -2518,6 +2519,8 @@ void main() {
           'splash_role',
           'native_splash',
           'state_management_role',
+          'remote_config_role',
+          'firebase_remote_config',
         ]),
       );
       // The test of the purchases of the user of the device is for an app

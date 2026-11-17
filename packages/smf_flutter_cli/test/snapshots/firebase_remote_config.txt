@@ -1,0 +1,2081 @@
+=== .gitignore (flutter_core) ===
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+=== AGENTS.md (role:app_entry) ===
+# AGENTS.md
+
+This guide tells coding agents what the code of this Flutter app does not show. Setup that needs a person or an account is in [README.md](README.md). When you change what a section describes, change the section too.
+
+## App entry
+
+The app is plain Flutter code that nothing regenerates. Change it by hand, unless a section below says what writes a file.
+
+- `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
+- `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
+- The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
+- The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
+
+After a change, run:
+
+```bash
+dart format lib test
+flutter analyze
+flutter test
+```
+
+Format only `lib/` and `test/`: `dart format .` also formats what Flutter writes into `build/`. The app as generated is formatted, `flutter analyze` finds no issue in it and `flutter test` passes.
+
+- `App` in `lib/app.dart` is the root widget of the app and creates its one `MaterialApp`. Every screen is below it, so create no other `MaterialApp` in `lib/`. The only other one is in `FailedStartApp`, which `main()` runs in its place when the start-up fails.
+- The `theme`, `darkTheme`, `themeMode`, `locale` and localizations of the app go into the arguments of that `MaterialApp`.
+- Tests mirror `lib/`: the test of `lib/<path>.dart` is `test/<path>_test.dart`.
+- The app has only an Android and an iOS project, in `android/` and `ios/`.
+- The entitlements of the iOS app, such as Push Notifications or Sign in with Apple, are in `ios/Runner/Runner.entitlements`. Every build configuration of the Runner target signs with this file, even while it is empty. The Signing & Capabilities tab of Xcode edits the same file.
+- Each flavor is in `productFlavors` of `android/app/build.gradle.kts`, and on iOS in `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme` and in the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` of `ios/Runner.xcodeproj/project.pbxproj`. Change both places together. A new setting of the Runner target goes into each of its twelve build configurations.
+
+## Firebase
+
+- `bootstrap()` initializes Firebase with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, by the flavor of the build. `lib/firebase_options_dev.dart`, `lib/firebase_options_staging.dart` and `lib/firebase_options_prod.dart` are placeholders until `tool/configure_firebase.dart` writes them, and a build of such a flavor stops at start-up with an `UnsupportedError`. Do not write them by hand.
+- `tool/configure_firebase.dart` needs a Firebase account and a project: run it only when asked, with the command of the section Firebase of `README.md`. Do not run `flutterfire configure`, which writes one configuration that every flavor then shares.
+- A test that runs `main()` or `bootstrap()` starts Firebase with the options of the flavor of the test, `dev`, which needs a mock of its platform side. Prefer a test of a widget, which needs neither.
+
+## Remote config
+
+- `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart` holds the values of remote config, which a backend changes without a new version of the app. Its `value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave or the default of the parameter. It is a `ValueListenable`: a widget that follows a value reads it in `build` under a `ValueListenableBuilder`, and code that must not change on the screen reads it once, such as in `initState`. The app has one controller, so create no other `AppRemoteConfigController`.
+- The values never hold the start. The start makes active what the device kept from the last fetch, and an app with parameters fetches new values in the background, also each time the user comes back to it, which take effect at once. While the app has no parameter, it asks the backend nothing.
+- A parameter has a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and the same name and type in the backend of the provider. The code of a module reads only its own parameters.
+- Every value reaches every installation that fetches it, where anyone can read it: never put a secret into remote config, such as a key or a password.
+- A new provider implements `RemoteConfigService` of `lib/core/remote_config/remote_config_service.dart`, and only the files of that implementation import it. The code of the app imports `lib/core/remote_config/app_remote_config.dart`, which exports `RemoteValues`, and calls neither `initRemoteConfig()` nor `createRemoteConfigService()` nor `appRemoteConfig.start()`. A test gives `appRemoteConfig.start()` a service of its own.
+
+With `firebase_remote_config`:
+
+- `FirebaseRemoteConfigService` in `lib/core/remote_config/firebase_remote_config_service.dart` implements `RemoteConfigService` on `FirebaseRemoteConfig`. In `lib/`, only that file imports the package: other code reads the values through `appRemoteConfig`.
+- A parameter that the app reads is created in Firebase Remote Config of the Firebase project of each flavor, with the name and the type of `RemoteValues.defaults`. The section Firebase Remote Config of the README tells how, and which two APIs of Google the project needs.
+- `values` of the service has only the values whose `source` is `ValueSource.valueRemote`: `getAll()` of Firebase has the defaults of the app too. Keep that filter, or a parameter that the project lacks reads a value of Firebase in place of its default.
+- `updates` passes on `onConfigUpdated` of Firebase, after which `appRemoteConfig` calls `activate()`. Do not call `activate()`, `fetch()` or `fetchAndActivate()` of the package elsewhere: values that change in the middle of a screen come only through `appRemoteConfig`.
+- The package has no platform side for tests. A test that runs `bootstrap()` answers its messages to the platform itself, with `setMockMessageHandler` of `TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger`, on the channels `dev.flutter.pigeon.firebase_remote_config_platform_interface.FirebaseRemoteConfigHostApi.<method>` in the codec of the package, and on the event channel `plugins.flutter.io/firebase_remote_config_updated`. A test of the values alone gives `appRemoteConfig.start()` a service of its own.
+=== CLAUDE.md (role:app_entry) ===
+@AGENTS.md
+=== README.md (flutter_core) ===
+# my_app
+
+A new Flutter project.
+
+Generated with [Say My Frame](https://doc.saymyframe.com).
+
+## Flavors
+
+The app has three flavors, which install next to each other on a device, each under an id of its own:
+
+| Flavor | Android application id | iOS bundle id |
+| --- | --- | --- |
+| `dev` | `com.example.my_app.dev` | `com.example.my-app.dev` |
+| `staging` | `com.example.my_app.staging` | `com.example.my-app.staging` |
+| `prod` | `com.example.my_app` | `com.example.my-app` |
+
+A `flutter` command without `--flavor` builds `dev`, because `default-flavor` in `pubspec.yaml` says so. That holds in release mode too: `flutter build appbundle` and `flutter build ipa` build a release of `dev`, under its id. For a store, name the flavor:
+
+```bash
+flutter run --flavor staging
+flutter build appbundle --flavor prod
+flutter build ipa --flavor prod
+```
+
+Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. A service that knows your app by its id, such as a store or a push provider, knows each flavor as an app of its own, so you repeat a step of its setup for each flavor that needs it.
+
+## Flavors in the native projects
+
+Each flavor is in two places, so change both when you rename, add or remove one:
+
+- Android: `productFlavors` in `android/app/build.gradle.kts`, with its id suffix and its name on the device.
+- iOS: `ios/Runner.xcodeproj/xcshareddata/xcschemes/<flavor>.xcscheme`, and the build configurations `Debug-<flavor>`, `Profile-<flavor>` and `Release-<flavor>` in each configuration list of `ios/Runner.xcodeproj/project.pbxproj`. The name of a flavor has no hyphen, since Flutter splits the name of a configuration on it.
+
+In Xcode, select the scheme of a flavor, not `Runner`. The scheme of a flavor builds that flavor, with its id, its name and its `appFlavor`. `Runner` builds the id and the name of `prod`, and takes `appFlavor` from `ios/Flutter/Generated.xcconfig`, which has one only after a `flutter` command that builds or runs the iOS app with a flavor. `flutter build ios --config-only --flavor <flavor>` gives that file a flavor.
+
+On Android, a release build is signed with the debug key until `android/app/build.gradle.kts` has a signing config of yours, and a store refuses such a build. [Sign the app](https://docs.flutter.dev/deployment/android#sign-the-app) tells how.
+
+## When the start-up fails
+
+`bootstrap()` in `lib/bootstrap.dart` runs before the first frame. When it throws, `main()` shows `FailedStartApp` of `lib/core/app/failed_start.dart` in place of the splash screen, which would otherwise stay. A debug build shows the error and its stack trace there and prints them to the console. Any other build only says that the app could not start.
+
+The error also reaches `FlutterError.onError`, so crash reporting that the start-up set up before the error reports it. An error before that reaches no crash reporter, so reproduce it in a debug build. The error usually says what to do, such as a command to run.
+
+The texts of the screen are in English, since the texts of the app need the start-up that failed. Change them in that file.
+
+## Firebase
+
+The app uses [Firebase](https://firebase.google.com/docs/flutter/setup) through `firebase_core`: `bootstrap()` initializes it with `firebaseOptionsOfFlavor` of `lib/firebase_options_of_flavor.dart`, which takes the options of the flavor of the build from `lib/firebase_options_<flavor>.dart`. A flavor may have a Firebase project of its own or share one. Until a flavor is configured, its options are a placeholder, and a build of it stops at start-up with an `UnsupportedError` that gives the command below. A debug build shows that error on the screen of a failed start.
+
+`smf create` offers to configure `dev`, and otherwise leaves the command for later. To configure a flavor, or to configure it again, such as for another project or on another machine, run in the directory of the app:
+
+```bash
+dart pub global activate flutterfire_cli 1.4.1
+firebase login
+dart tool/configure_firebase.dart staging --project=<id>
+```
+
+Use this script rather than `flutterfire configure`, which writes one configuration that every flavor then shares: `ios/Runner/GoogleService-Info.plist` goes into the resources of every flavor, and `android/app/google-services.json` is what the Google services plugin takes for any variant without a file of its own. It registers the Android and iOS apps of the flavor in the project and writes its options, `android/app/src/<flavor>/google-services.json`, `firebase.json` and, on macOS, `ios/flavors/<flavor>/GoogleService-Info.plist`. Commit them. Elsewhere the script leaves the Xcode project and that file as they were, so run it again on a Mac for iOS. In a terminal you may leave `--project` out, and flutterfire then asks. Other arguments, such as `--account=<email>`, go to flutterfire. The ids of each flavor are at the top of the script: if you change them in the projects, change them there too.
+
+Once one flavor is configured, a build of a flavor that is not fails on Android, with `File google-services.json is missing`. On iOS it builds and stops at start-up, unless a build phase that flutterfire adds for a Firebase package fails the build there first.
+
+In Xcode, select the scheme of a flavor. It builds that flavor, whatever `ios/Flutter/Generated.xcconfig` says. The scheme `Runner` takes the flavor from that file, which has none after a fresh `flutter pub get`, so `appFlavor` is `null` there and `firebaseOptionsOfFlavor` throws an `UnsupportedError`. `flutter build ios --config-only --flavor <flavor>` gives the file a flavor.
+
+The script changes the Xcode project only on macOS, and adds a build phase that runs `flutterfire` from `~/.pub-cache/bin`. So every Mac that builds the app for iOS needs the FlutterFire CLI activated, flutterfire_cli 1.4.1 or a later 1.x; if `dart pub global list` shows one already, skip its activation above. flutterfire needs the [Firebase CLI](https://firebase.google.com/docs/cli).
+
+## Firebase Remote Config
+
+The app reads its values of remote config from [Firebase Remote Config](https://firebase.google.com/docs/remote-config) with [firebase_remote_config](https://pub.dev/packages/firebase_remote_config): `lib/core/remote_config/firebase_remote_config_service.dart` implements the remote config service of the app on it (see the section Remote config, which lists the parameters of the app).
+
+Create each parameter of the app in the Firebase console of the project of each flavor: open Remote Config, add the parameter with the name, the type and the default that the section Remote config lists, and publish the changes. A value that differs by platform, such as one for Android and one for iOS, gets a condition of the platform in the console. The section Finish the setup lists this among the steps that you do by hand once the app has a parameter. A value that you publish reaches an app that runs through the real-time updates of Firebase, and an app that starts later with its next fetch.
+
+The app needs two APIs of Google in the project: the Firebase Remote Config API (`firebaseremoteconfig.googleapis.com`) for its fetches, and the Firebase Remote Config Realtime API (`firebaseremoteconfigrealtime.googleapis.com`) for the values that you publish while it runs, which answers 403 while it is disabled. If the API keys of the Android and iOS apps of the project have API restrictions, in the Google Cloud console under APIs & Services, Credentials, each key must allow both APIs, or the fetches and the real-time updates of the app fail.
+
+A release build fetches at most every 12 hours, and a debug build at each start and each time you come back to the app, so a value that you change shows at once while you develop. The real-time updates do not wait for that interval. Firebase gives a project 100,000 fetches a day for free; beyond them, a project on the Spark plan is throttled and one on the Blaze plan is billed for each fetch (see the [prices of Remote Config](https://firebase.google.com/docs/remote-config/pricing)). An app without parameters fetches nothing.
+
+Each fetch sends the Firebase installation ID of the app on the device, an identifier of the installation. Declare it in the App Privacy details of App Store Connect and in the Data safety form of Google Play. Both stores also ask for a link to the privacy policy of the app, in the listing of the app and inside the app: name Firebase Remote Config there among the services that the app sends data to.
+
+## Remote config
+
+The app reads values of remote config through `appRemoteConfig` in `lib/core/remote_config/app_remote_config.dart`. A backend of the provider changes them without a new version of the app. `appRemoteConfig.value` is a `RemoteValues` with a getter for each parameter of the app, which returns the value that the backend gave the parameter, or its default while the backend gives none or gives a value that the type of the parameter does not take.
+
+The values never hold the start of the app. The start makes active what the last fetch got, which the device keeps, also without the network, and waits for that at most a second. In an app with parameters, the app then asks the backend for new values in the background, at the start and each time the user comes back to the app, and makes them active at once, also while a screen shows. Where the provider tells of values that the backend publishes while the app runs, they come the same way. While the app has no parameter, it asks the backend nothing: it starts asking with its first parameter. A widget that follows a value reads it in `build` under a `ValueListenableBuilder` of `appRemoteConfig`, and code that must not change on the screen reads it once, such as in `initState`.
+
+No module of the app reads a parameter yet.
+
+To add a parameter of your own, give it a default in `RemoteValues.defaults` and a getter in `lib/core/remote_config/remote_values.dart`, and create it in the backend of the provider with the same name and type. The section of the module that provides remote config tells where its backend is.
+
+Every value reaches every installation of the app that fetches it, where anyone can read it. So never put a secret into remote config, such as a key or a password.
+=== android/app/build.gradle.kts (flutter_core) ===
+plugins {
+    id("com.android.application")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.my_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.my_app"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    flavorDimensions += "default"
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            manifestPlaceholders["appName"] = "My App Dev"
+        }
+        create("staging") {
+            dimension = "default"
+            applicationIdSuffix = ".staging"
+            manifestPlaceholders["appName"] = "My App Staging"
+        }
+        create("prod") {
+            dimension = "default"
+            manifestPlaceholders["appName"] = "My App"
+        }
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+}
+=== android/app/src/main/AndroidManifest.xml (flutter_core) ===
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="${appName}"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>
+=== android/settings.gradle.kts (flutter_core) ===
+pluginManagement {
+    val flutterSdkPath =
+        run {
+            val properties = java.util.Properties()
+            file("local.properties").inputStream().use { properties.load(it) }
+            val flutterSdkPath = properties.getProperty("flutter.sdk")
+            require(flutterSdkPath != null) { "flutter.sdk not set in local.properties" }
+            flutterSdkPath
+        }
+
+    includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    id("com.android.application") version "9.1.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.20" apply false
+}
+
+include(":app")
+=== ios/Runner.xcodeproj/project.pbxproj (flutter_core) ===
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+=== ios/Runner/AppDelegate.swift (flutter_core) ===
+import Flutter
+import UIKit
+
+@main
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+}
+=== ios/Runner/Info.plist (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>$(APP_DISPLAY_NAME)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>MyApp</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>
+=== ios/Runner/Runner.entitlements (flutter_core) ===
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
+=== lib/app.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+import 'core/app/fallback_start_screen.dart';
+
+/// The root widget of the app.
+class App extends StatelessWidget {
+  /// Creates the root widget.
+  const App({super.key});
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    title: 'My App',
+    home: const FallbackStartScreen(),
+    builder: (context, child) => StatusBarIcons(child: child!),
+  );
+}
+=== lib/bootstrap.dart (flutter_core) ===
+import 'package:firebase_core/firebase_core.dart';
+import 'package:my_app/core/remote_config/app_remote_config.dart';
+import 'package:my_app/firebase_options_of_flavor.dart';
+
+/// Runs the start-up code of the app before its first frame: first what
+/// must come before anything else, then the platform services, then the
+/// services of the app, then what needs them.
+Future<void> bootstrap() async {
+  await Firebase.initializeApp(options: firebaseOptionsOfFlavor);
+  await initRemoteConfig();
+}
+=== lib/core/app/failed_start.dart (role:app_entry) ===
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+
+import 'status_bar_icons.dart';
+
+/// Shows why the app could not start, in place of the splash screen of the
+/// system, which would otherwise stay, and reports [error] with its
+/// [stackTrace] to the handler of the errors of Flutter.
+///
+/// `main()` calls it when `bootstrap()` throws, and then returns: the app
+/// does not start. The screen comes first, so a handler that throws cannot
+/// keep it away. The handlers that the start-up set up before it failed,
+/// such as those of crash reporting, hear of the error, and so does a test
+/// that runs `main()`.
+void showFailedStart(Object error, StackTrace stackTrace) {
+  runApp(FailedStartApp(error: error, stackTrace: stackTrace));
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: error,
+      stack: stackTrace,
+      library: 'the start-up of the app',
+      context: ErrorDescription('while main() awaited bootstrap()'),
+    ),
+  );
+}
+
+/// The app that runs when the start-up failed: a screen that says so, with
+/// [error] and [stackTrace] in a debug build.
+///
+/// It needs nothing of the start-up: it has neither the theme nor the texts
+/// nor the root wrappers of the app, which the start-up sets up, and so its
+/// texts are in English. Change them here.
+class FailedStartApp extends StatelessWidget {
+  /// Creates the app of a start-up that failed with [error] at
+  /// [stackTrace].
+  const FailedStartApp({
+    required this.error,
+    required this.stackTrace,
+    this.showsError = kDebugMode,
+    super.key,
+  });
+
+  /// What `bootstrap()` threw.
+  final Object error;
+
+  /// Where `bootstrap()` threw [error].
+  final StackTrace stackTrace;
+
+  /// Whether the screen shows [error] and [stackTrace]: only in a debug
+  /// build, since the message of an error may hold data of the user and
+  /// means nothing to a user.
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: ThemeData(),
+    darkTheme: ThemeData(brightness: Brightness.dark),
+    builder: (context, child) => StatusBarIcons(child: child!),
+    home: _FailedStartScreen(
+      error: error,
+      stackTrace: stackTrace,
+      showsError: showsError,
+    ),
+  );
+}
+
+class _FailedStartScreen extends StatelessWidget {
+  const _FailedStartScreen({
+    required this.error,
+    required this.stackTrace,
+    required this.showsError,
+  });
+
+  final Object error;
+
+  final StackTrace stackTrace;
+
+  final bool showsError;
+
+  @override
+  Widget build(BuildContext context) {
+    final texts = Theme.of(context).textTheme;
+    final code = texts.bodySmall?.copyWith(
+      fontFamily: 'monospace',
+      fontFamilyFallback: const ['Menlo', 'Courier'],
+    );
+    return Scaffold(
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                'The app could not start',
+                style: texts.headlineSmall,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (showsError) ...[
+              Text(
+                'bootstrap() in lib/bootstrap.dart threw:',
+                style: texts.bodyLarge,
+              ),
+              const SizedBox(height: 8),
+              SelectableText('$error', style: code),
+              const SizedBox(height: 16),
+              SelectableText('$stackTrace', style: code),
+            ] else
+              Text('Close the app and open it again.', style: texts.bodyLarge),
+          ],
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/fallback_start_screen.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// The path of this file, which the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// The monospaced font of the device, for a path and a number.
+const _mono = TextStyle(
+  fontFamily: 'monospace',
+  fontFamilyFallback: ['Menlo', 'Courier'],
+);
+
+/// The screen the app starts on when no route of the app can start it: the
+/// [FallbackStartView] with its texts.
+class FallbackStartScreen extends StatelessWidget {
+  /// Creates the screen.
+  const FallbackStartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => const FallbackStartView(
+    hint:
+        'No start screen yet. Add a feature with a route, or replace this screen.',
+    copied: 'Copied',
+  );
+}
+
+/// What the [FallbackStartScreen] shows: the name of the app, and where its
+/// developer puts its first screen.
+///
+/// It takes its texts, so a test shows it with texts of its own.
+class FallbackStartView extends StatelessWidget {
+  /// Creates the view with its texts.
+  const FallbackStartView({
+    required this.hint,
+    required this.copied,
+    super.key,
+  });
+
+  /// Tells the developer of the app that it has no start screen yet.
+  final String hint;
+
+  /// What the view says before the path of this file once a tap copied it.
+  final String copied;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Scaffold(
+      body: SafeArea(
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          // An app that asks for less motion shows the screen at once.
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Durations.long2,
+          curve: Easing.emphasizedDecelerate,
+          builder: (context, shown, child) => Opacity(
+            opacity: shown,
+            child: Transform.translate(
+              offset: Offset(0, (1 - shown) * 16),
+              child: child,
+            ),
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 48),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // A picture, which a screen reader passes over.
+                  ExcludeSemantics(
+                    child: SizedBox(
+                      width: 196,
+                      height: 156,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Smaller cells around the cell of the app.
+                          for (final (alignment, size, color, outlined) in [
+                            (
+                              const Alignment(-1, -0.7),
+                              40.0,
+                              colors.secondaryContainer,
+                              false,
+                            ),
+                            (
+                              const Alignment(1, -1),
+                              28.0,
+                              colors.outline,
+                              true,
+                            ),
+                            (
+                              const Alignment(0.9, 0.9),
+                              34.0,
+                              colors.tertiaryContainer,
+                              false,
+                            ),
+                          ])
+                            Align(
+                              alignment: alignment,
+                              child: Container(
+                                width: size,
+                                height: size,
+                                decoration: BoxDecoration(
+                                  color: outlined ? null : color,
+                                  border: outlined
+                                      ? Border.all(color: color)
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          // The letters are part of the picture, so
+                          // they keep their size with a larger text.
+                          MediaQuery.withNoTextScaling(
+                            child: Container(
+                              width: 116,
+                              height: 116,
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLowest,
+                                border: Border.all(
+                                  color: colors.onSurface,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    top: 7,
+                                    right: 10,
+                                    child: Text(
+                                      '5',
+                                      style: _mono.copyWith(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: colors.onSurface,
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Ma',
+                                      style: theme.textTheme.displayMedium
+                                          ?.copyWith(
+                                            fontSize: 54,
+                                            fontWeight: FontWeight.w500,
+                                            letterSpacing: -2,
+                                            color: colors.onSurface,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'My App',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: Text(
+                      hint,
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Semantics(
+                    button: true,
+                    child: Material(
+                      color: colors.surfaceContainer,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(color: colors.outlineVariant),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () async {
+                          final messenger = ScaffoldMessenger.of(context);
+                          await Clipboard.setData(
+                            const ClipboardData(text: _file),
+                          );
+                          messenger
+                            ..hideCurrentSnackBar()
+                            ..showSnackBar(
+                              SnackBar(content: Text('$copied: $_file')),
+                            );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 9,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                // A path grows less than other text, so
+                                // that it breaks at its slashes.
+                                child: MediaQuery.withClampedTextScaling(
+                                  maxScaleFactor: 1.5,
+                                  child: Text(
+                                    _file,
+                                    style: _mono.copyWith(
+                                      fontSize: 12,
+                                      color: colors.onSurface,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 15,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+=== lib/core/app/status_bar_icons.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Asks the system for the icons of the status bar that suit the theme,
+/// around [child]: dark icons on a light theme, light ones on a dark theme.
+///
+/// The root of the app puts it around the content of every route, below
+/// the `MaterialApp` whose theme it reads. It leaves the navigation bar of
+/// the system as the platform has it. A screen with an `AppBar` gets the
+/// icons that suit its bar, since the bar tells them for the top of the
+/// screen itself.
+class StatusBarIcons extends StatelessWidget {
+  /// Creates the widget around [child].
+  const StatusBarIcons({required this.child, super.key});
+
+  /// What the icons suit: the content of a route.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // iOS takes the brightness of the bar, and Android that of its icons.
+      value: SystemUiOverlayStyle(
+        statusBarBrightness: brightness,
+        statusBarIconBrightness: brightness == Brightness.dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: child,
+    );
+  }
+}
+=== lib/core/remote_config/app_remote_config.dart (role:remote_config) ===
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:my_app/core/remote_config/firebase_remote_config_service.dart'
+    as impl0;
+
+import 'remote_config_service.dart';
+import 'remote_values.dart';
+
+export 'remote_values.dart';
+
+/// The values of remote config of the app: `appRemoteConfig.value` has a
+/// getter for each parameter of the app.
+///
+/// It tells its listeners when the value of a parameter changes. A widget
+/// follows it with a `ValueListenableBuilder`, and code that must not change
+/// on the screen reads it once, such as in `initState`.
+final appRemoteConfig = AppRemoteConfigController._();
+
+/// The values of remote config as a [ValueListenable], for the state manager
+/// of the app: [appRemoteConfig] itself.
+ValueListenable<RemoteValues> remoteConfigValuesListenable() => appRemoteConfig;
+
+/// Keeps the values of remote config of the app up to date with the service
+/// of the provider of remote config. The app has one, [appRemoteConfig].
+///
+/// The values never hold the start of the app: [start] makes active what
+/// the last fetch got, which the device keeps, and waits for that at most
+/// [startWait]. In an app with parameters, the controller then asks the
+/// backend for new values in the background, in a later turn of the event
+/// loop, and again each time the user comes back to the app, and makes them
+/// active at once. Where the service tells of values that the backend
+/// publishes while the app runs, the controller makes each active as it
+/// comes. While the app has no parameter, it asks the backend nothing and
+/// listens to nothing.
+///
+/// The calls of the service run one after another, and the controller drops
+/// those of a service that it no longer has. An error of the service keeps
+/// the values, reaches no handler of the uncaught errors of the app, and
+/// prints in a debug build. So does a value that the type of its parameter
+/// does not take, once, and the parameter reads its default.
+///
+/// It tells its listeners of a change only when the values of the
+/// parameters of the app change: from the completion of a call of the
+/// service, from the values that the service tells of, and from [start],
+/// which takes the defaults back. Never while a widget builds.
+final class AppRemoteConfigController extends ChangeNotifier
+    implements ValueListenable<RemoteValues> {
+  AppRemoteConfigController._();
+
+  /// How long [start] waits at most for the values that the device kept.
+  static const startWait = Duration(seconds: 1);
+
+  /// How often the service may ask the backend at most, also across
+  /// launches of the app: every 12 hours in a release build, which keeps the
+  /// app within the quotas of a backend, and at each fetch in a debug build,
+  /// so that a value that a developer changed shows at the next start.
+  static const fetchInterval = kDebugMode ? Duration.zero : Duration(hours: 12);
+
+  /// How long a fetch may take.
+  static const fetchTimeout = Duration(seconds: 10);
+
+  /// How much longer than [fetchTimeout] the controller waits for a fetch of
+  /// a provider that does not stop, before it goes on with the other calls
+  /// of the service.
+  static const fetchGrace = Duration(seconds: 5);
+
+  /// Whether the app has a parameter: an app without one asks the backend
+  /// nothing.
+  static bool get _asks => RemoteValues.defaults.isNotEmpty;
+
+  RemoteValues _values = RemoteValues.initial;
+
+  /// What the controller does with the service of the last start, if any.
+  _Run? _run;
+
+  /// Tells when the user comes back to the app.
+  _ResumeObserver? _observer;
+
+  /// The values of parameters that their types do not take, which the
+  /// controller printed.
+  final Set<String> _printed = {};
+
+  /// The values of the parameters of the app.
+  @override
+  RemoteValues get value => _values;
+
+  /// Starts with [service]: opens it, makes active what the last fetch got,
+  /// which the device keeps, and takes those values. In an app with
+  /// parameters, it then fetches new values in the background, in a later
+  /// turn of the event loop, and follows those that the service tells of.
+  ///
+  /// `initRemoteConfig()` calls it in `bootstrap()`. It waits at most
+  /// [startWait]: values that come later still become [value], and the app
+  /// starts without waiting for them.
+  ///
+  /// It may be called again, with the service that the app has from then
+  /// on: `initRemoteConfig()` does so in a test of the next launch of the
+  /// app, and a test gives it a service of its own. The controller then drops
+  /// the calls of the service before, and [value] has the defaults until the
+  /// new service gives its values.
+  Future<void> start(RemoteConfigService service) {
+    unawaited(_run?.updates?.cancel());
+    final run = _run = _Run(service);
+    _set(RemoteValues.initial);
+    if (_observer == null) {
+      final observer = _observer = _ResumeObserver(_onResume);
+      WidgetsBinding.instance.addObserver(observer);
+    }
+    final ready = _inTurn(run, () => _open(run));
+    // In a later turn of the event loop, so that the code that runs right
+    // after the start reads what the start made active, and the first frame
+    // does not wait for the backend.
+    if (_asks) unawaited(ready.then((_) => Timer.run(() => _follow(run))));
+    return ready.timeout(startWait, onTimeout: () {});
+  }
+
+  /// Opens the service of [run], and makes active what the device kept.
+  Future<void> _open(_Run run) async {
+    await run.service.open(
+      RemoteValues.defaults,
+      fetchInterval: fetchInterval,
+      fetchTimeout: fetchTimeout,
+    );
+    run.opened = true;
+    await _activate(run);
+  }
+
+  /// Follows the backend with the service of [run], once it opened: listens
+  /// to the values that the service tells of, if it tells of any, and
+  /// fetches. It runs in a turn of the event loop of its own, where no call
+  /// awaits it, so an error of the service that it meets is printed as any
+  /// other, and the fetch still comes.
+  void _follow(_Run run) {
+    if (!identical(run, _run) || !run.opened) return;
+    final service = run.service;
+    try {
+      if (service.liveUpdates) {
+        run.updates = service.updates.listen(
+          (_) => _activateLater(run),
+          onError: (Object error) => _report(error),
+        );
+      }
+    } on Object catch (error) {
+      _report(error);
+    }
+    _fetchLater(run);
+  }
+
+  /// The user came back to the app: in an app with parameters, the
+  /// controller fetches again, which the provider throttles to
+  /// [fetchInterval].
+  void _onResume() {
+    final run = _run;
+    if (run != null && _asks && run.opened) _fetchLater(run);
+  }
+
+  /// Fetches with the service of [run] in its turn and makes what it got
+  /// active, unless a fetch waits for its turn already.
+  void _fetchLater(_Run run) {
+    if (run.fetchWaits) return;
+    run.fetchWaits = true;
+    unawaited(
+      _inTurn(run, () async {
+        run.fetchWaits = false;
+        await run.service.fetch().timeout(fetchTimeout + fetchGrace);
+        await _activate(run);
+      }),
+    );
+  }
+
+  /// Makes active in its turn what the service of [run] told of, unless an
+  /// activation waits for its turn already.
+  void _activateLater(_Run run) {
+    if (run.activationWaits) return;
+    run.activationWaits = true;
+    unawaited(
+      _inTurn(run, () {
+        run.activationWaits = false;
+        return _activate(run);
+      }),
+    );
+  }
+
+  /// Makes active what the last fetch of the service of [run] got, and takes
+  /// the active values, while the controller has that service.
+  Future<void> _activate(_Run run) async {
+    if (!identical(run, _run)) return;
+    await run.service.activate();
+    if (identical(run, _run)) {
+      _set(RemoteValues.of(run.service.values, onInvalid: _printInvalid));
+    }
+  }
+
+  /// Runs [job] once the calls of [run] made before it are over, unless the
+  /// controller has another service by then. An error of [job] keeps the
+  /// values.
+  Future<void> _inTurn(_Run run, Future<void> Function() job) async {
+    final earlier = run.last;
+    final done = Completer<void>();
+    final own = run.last = done.future;
+    try {
+      if (earlier != null) await earlier;
+      if (identical(run, _run)) await job();
+    } on Object catch (error) {
+      _report(error);
+    } finally {
+      if (identical(run.last, own)) run.last = null;
+      done.complete();
+    }
+  }
+
+  /// Takes [values] as [value], and tells the listeners when that changes
+  /// it.
+  void _set(RemoteValues values) {
+    if (values == _values) return;
+    _values = values;
+    notifyListeners();
+  }
+
+  /// Prints [error] of the service in a debug build, which no caller sees.
+  void _report(Object error) {
+    if (kDebugMode) {
+      debugPrint('Remote config keeps its values; its service failed: $error');
+    }
+  }
+
+  /// Prints once in a debug build that [text], the value that the backend
+  /// gives [parameter], is not of the type of the parameter.
+  void _printInvalid(String parameter, String text) {
+    if (!kDebugMode || !_printed.add('$parameter=$text')) return;
+    final type = switch (RemoteValues.defaults[parameter]) {
+      bool() => 'bool',
+      int() => 'int',
+      double() => 'double',
+      _ => 'String',
+    };
+    debugPrint(
+      'Remote config gives $parameter the value "$text", which is no $type, '
+      'so the app reads its default.',
+    );
+  }
+}
+
+/// What the controller does with the service of one start: the calls of the
+/// service run one after another, and those of a service that the
+/// controller no longer has are dropped.
+final class _Run {
+  _Run(this.service);
+
+  final RemoteConfigService service;
+
+  /// The call that was made last, while a call is on its way: the next one
+  /// waits for it.
+  Future<void>? last;
+
+  /// Whether the service opened.
+  bool opened = false;
+
+  /// Whether a fetch waits for its turn, so that a return to the app
+  /// meanwhile needs no other.
+  bool fetchWaits = false;
+
+  /// Whether an activation of what the service told of waits for its turn.
+  bool activationWaits = false;
+
+  /// The values that the service tells of, while the controller follows
+  /// them.
+  StreamSubscription<void>? updates;
+}
+
+/// Calls [_onResume] each time the app is resumed, whatever state it was in
+/// before.
+final class _ResumeObserver with WidgetsBindingObserver {
+  _ResumeObserver(this._onResume);
+
+  final VoidCallback _onResume;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _onResume();
+  }
+}
+
+/// Returns the service of the provider of remote config, which
+/// [initRemoteConfig] created: `bootstrap()` awaits it before the first
+/// frame, and there is none to return before that.
+///
+/// The code of the app does not call it: it reads the values from
+/// [appRemoteConfig].
+RemoteConfigService createRemoteConfigService() => _remoteConfigService;
+
+late RemoteConfigService _remoteConfigService;
+
+/// Creates the service of the provider of remote config and starts
+/// [appRemoteConfig] with it; `bootstrap()` awaits it before the first
+/// frame, and nothing else in the app calls it. It waits at most
+/// [AppRemoteConfigController.startWait] for the values that the device
+/// kept.
+///
+/// It may run again, as a test does to see what the next launch of the app
+/// finds: it creates the service anew, with what the device kept, and starts
+/// [appRemoteConfig] with it.
+Future<void> initRemoteConfig() async {
+  _remoteConfigService = impl0.createFirebaseRemoteConfigService();
+  await appRemoteConfig.start(_remoteConfigService);
+}
+=== lib/core/remote_config/firebase_remote_config_service.dart (firebase_remote_config) ===
+import 'package:firebase_remote_config/firebase_remote_config.dart';
+
+import 'remote_config_service.dart';
+
+/// The remote config of the app on Firebase Remote Config: the values that
+/// the Firebase project of the flavor of the build publishes.
+///
+/// Firebase keeps on the device what the last fetch got and what was
+/// activated, from one launch of the app to the next. While the app runs,
+/// it tells of the values that the project publishes in real time, once it
+/// fetched them.
+///
+/// The code of the app reads the values through `appRemoteConfig` of
+/// `app_remote_config.dart`, which calls this service.
+final class FirebaseRemoteConfigService implements RemoteConfigService {
+  FirebaseRemoteConfigService._(this._config);
+
+  final FirebaseRemoteConfig _config;
+
+  /// Takes what the device kept, then gives Firebase the fetch interval,
+  /// the timeout of a fetch and the defaults of the parameters of the app.
+  @override
+  Future<void> open(
+    Map<String, Object> defaults, {
+    required Duration fetchInterval,
+    required Duration fetchTimeout,
+  }) async {
+    await _config.ensureInitialized();
+    await _config.setConfigSettings(
+      RemoteConfigSettings(
+        fetchTimeout: fetchTimeout,
+        minimumFetchInterval: fetchInterval,
+      ),
+    );
+    await _config.setDefaults(defaults);
+  }
+
+  @override
+  Future<bool> activate() => _config.activate();
+
+  /// The active values that the Firebase project gave: Firebase also has
+  /// the defaults of the app among its values, which are not the project's.
+  @override
+  Map<String, String> get values => {
+    for (final MapEntry(key: parameter, value: value)
+        in _config.getAll().entries)
+      if (value.source == ValueSource.valueRemote) parameter: value.asString(),
+  };
+
+  @override
+  Future<void> fetch() => _config.fetch();
+
+  /// Firebase tells of the values that the project publishes while the app
+  /// runs.
+  @override
+  bool get liveUpdates => true;
+
+  /// Each update of Firebase, once Firebase fetched the values that the
+  /// project published. Listening opens a connection to Firebase, which the
+  /// last listener closes.
+  @override
+  Stream<void> get updates => _config.onConfigUpdated.map((_) {});
+}
+
+/// Returns the remote config service of the app on Firebase Remote Config.
+/// It asks Firebase nothing.
+RemoteConfigService createFirebaseRemoteConfigService() =>
+    FirebaseRemoteConfigService._(FirebaseRemoteConfig.instance);
+=== lib/core/remote_config/remote_config_service.dart (role:remote_config) ===
+/// The backend of the values of remote config, which the provider of remote
+/// config implements: it keeps on the device what the last fetch got, and
+/// asks its backend for new values.
+///
+/// The code of the app does not use it: it reads the values from
+/// `appRemoteConfig` of `app_remote_config.dart`, which calls this service,
+/// applies the defaults of the parameters of the app, and makes new values
+/// active once they are fetched.
+///
+/// Every implementation keeps to this:
+/// - The function that creates the service asks the backend nothing. It may
+///   be called again, as at the next launch of the app, and the service that
+///   it returns then has what the device kept.
+/// - [open] comes once, before any other member.
+/// - What was activated stays on the device from one launch of the app to
+///   the next: after [open], [activate] makes what the last fetch got the
+///   active values, also without the network, and [values] has them.
+/// - [values] has the active values that the backend gave, and nothing else:
+///   never a default, and never a value that the provider makes up for a
+///   parameter that the backend lacks.
+/// - [fetch] asks the backend for its values, unless the last fetch that
+///   succeeded is more recent than the fetch interval of [open], also one of
+///   an earlier launch of the app. It fails when the backend cannot be
+///   reached or refuses, and the active values stay as they were.
+/// - [updates] is a broadcast stream, which tells of nothing where
+///   [liveUpdates] is false.
+abstract interface class RemoteConfigService {
+  /// Opens the service for [defaults], the parameters of the app by name,
+  /// each with the value that the app has while the backend gives none, of
+  /// the type of the parameter. [fetchInterval] is how often [fetch] may ask
+  /// the backend at most, also across launches of the app, and
+  /// [fetchTimeout] how long a fetch may take. It takes what the device kept
+  /// and asks the backend nothing.
+  Future<void> open(
+    Map<String, Object> defaults, {
+    required Duration fetchInterval,
+    required Duration fetchTimeout,
+  });
+
+  /// Makes what the last fetch got the active values, without asking the
+  /// backend, and returns whether they changed.
+  Future<bool> activate();
+
+  /// The active values that the backend gave, by parameter, as texts.
+  Map<String, String> get values;
+
+  /// Asks the backend for its values and keeps them for [activate], unless
+  /// the last fetch that succeeded is more recent than the fetch interval:
+  /// then it completes at once.
+  Future<void> fetch();
+
+  /// Whether [updates] tells of the values that the backend publishes while
+  /// the app runs.
+  bool get liveUpdates;
+
+  /// Tells of the values that the backend publishes while the app runs, once
+  /// the provider fetched them, so that [activate] makes them active: a
+  /// broadcast stream, which tells of nothing where [liveUpdates] is false.
+  /// Listening to it may open a connection to the backend.
+  Stream<void> get updates;
+}
+=== lib/core/remote_config/remote_values.dart (role:remote_config) ===
+import 'package:flutter/foundation.dart';
+
+/// The values of remote config that the code of the app reads: a getter for
+/// each parameter of the app, which returns the value that the backend gave
+/// the parameter, or its default while the backend gives none.
+///
+/// Add a parameter: give it a default in [defaults] and a getter, and create
+/// it in the backend of the provider with the same name and type. Every value
+/// reaches every installation that fetches it, where anyone can read it, so
+/// never put a secret into remote config.
+@immutable
+final class RemoteValues {
+  const RemoteValues._(this._values);
+
+  /// Each parameter of the app by name, with the value that the app reads
+  /// while the backend gives none, whose type is the type of the parameter:
+  /// a `String`, a `bool`, an `int` or a `double`.
+  static const Map<String, Object> defaults = {};
+
+  /// The values while the backend gives none: the [defaults].
+  static const initial = RemoteValues._(defaults);
+
+  /// The values of [texts], the active values that the backend gave, by
+  /// parameter: each parameter of the app takes its text as the type of its
+  /// default takes it, and its default when [texts] lacks it or when the type
+  /// does not take the text, which [onInvalid] is told of.
+  ///
+  /// A `bool` takes `true` and `false`, in any case; an `int` what
+  /// [int.tryParse] takes; a `double` a finite number that [double.tryParse]
+  /// takes; and a `String` any text.
+  factory RemoteValues.of(
+    Map<String, String> texts, {
+    void Function(String parameter, String text)? onInvalid,
+  }) {
+    final values = <String, Object>{};
+    for (final MapEntry(key: parameter, value: fallback) in defaults.entries) {
+      final text = texts[parameter];
+      final value = text == null ? fallback : _parsed(text, fallback);
+      if (text != null && value == null) onInvalid?.call(parameter, text);
+      values[parameter] = value ?? fallback;
+    }
+    return RemoteValues._(values);
+  }
+
+  /// [text] as a value of the type of [fallback], or `null` if that type does
+  /// not take it.
+  static Object? _parsed(String text, Object fallback) => switch (fallback) {
+    bool() => switch (text.toLowerCase()) {
+      'true' => true,
+      'false' => false,
+      _ => null,
+    },
+    int() => int.tryParse(text),
+    double() => switch (double.tryParse(text)) {
+      final number? when number.isFinite => number,
+      _ => null,
+    },
+    _ => text,
+  };
+
+  final Map<String, Object> _values;
+
+  @override
+  bool operator ==(Object other) =>
+      other is RemoteValues &&
+      defaults.keys.every(
+        (parameter) => _values[parameter] == other._values[parameter],
+      );
+
+  @override
+  int get hashCode => Object.hashAll([
+    for (final parameter in defaults.keys) _values[parameter],
+  ]);
+
+  @override
+  String toString() => 'RemoteValues($_values)';
+}
+=== lib/firebase_options_dev.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor dev.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart dev` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor dev on web. '
+        'Run: dart tool/configure_firebase.dart dev --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor dev on android. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor dev on ios. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor dev on macos. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor dev on windows. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor dev on linux. '
+          'Run: dart tool/configure_firebase.dart dev --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/firebase_options_of_flavor.dart (firebase_core) ===
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/services.dart' show appFlavor;
+
+import 'firebase_options_dev.dart' as dev_options;
+import 'firebase_options_prod.dart' as prod_options;
+import 'firebase_options_staging.dart' as staging_options;
+
+/// The options of the Firebase apps of the flavor of this build.
+///
+/// `appFlavor` is a constant, so a release build keeps only the options of
+/// its own flavor.
+FirebaseOptions get firebaseOptionsOfFlavor => switch (appFlavor) {
+  'dev' => dev_options.DefaultFirebaseOptions.currentPlatform,
+  'staging' => staging_options.DefaultFirebaseOptions.currentPlatform,
+  'prod' => prod_options.DefaultFirebaseOptions.currentPlatform,
+  _ => throw UnsupportedError(
+    'The app has no Firebase options for the flavor $appFlavor. A new '
+    'flavor goes into this file and into tool/configure_firebase.dart. '
+    'A run from Xcode of the scheme Runner reads the flavor from '
+    'ios/Flutter/Generated.xcconfig, which has none after flutter pub '
+    'get: select the scheme of a flavor, or run flutter build ios '
+    '--config-only --flavor <flavor> first.',
+  ),
+};
+=== lib/firebase_options_prod.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor prod.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart prod` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor prod on web. '
+        'Run: dart tool/configure_firebase.dart prod --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on android. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on ios. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on macos. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on windows. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor prod on linux. '
+          'Run: dart tool/configure_firebase.dart prod --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/firebase_options_staging.dart (firebase_core) ===
+// File generated by FlutterFire CLI.
+// ignore_for_file: type=lint
+import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
+
+/// The [FirebaseOptions] of the Firebase apps of the flavor staging.
+///
+/// `firebaseOptionsOfFlavor` reads them in a build of the flavor. Each
+/// platform throws until `dart tool/configure_firebase.dart staging` writes its
+/// options here.
+class DefaultFirebaseOptions {
+  static FirebaseOptions get currentPlatform {
+    if (kIsWeb) {
+      throw UnsupportedError(
+        'Firebase is not configured for the flavor staging on web. '
+        'Run: dart tool/configure_firebase.dart staging --project=<id>',
+      );
+    }
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on android. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.iOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on ios. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.macOS:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on macos. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.windows:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on windows. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      case TargetPlatform.linux:
+        throw UnsupportedError(
+          'Firebase is not configured for the flavor staging on linux. '
+          'Run: dart tool/configure_firebase.dart staging --project=<id>',
+        );
+      default:
+        throw UnsupportedError(
+          'DefaultFirebaseOptions are not supported for this platform.',
+        );
+    }
+  }
+}
+=== lib/main.dart (flutter_core) ===
+import 'package:flutter/widgets.dart';
+
+import 'app.dart';
+import 'bootstrap.dart';
+import 'core/app/failed_start.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await bootstrap();
+  } on Object catch (error, stackTrace) {
+    // The app shows why it could not start, in place of a splash screen
+    // that would stay.
+    showFailedStart(error, stackTrace);
+    return;
+  }
+  runApp(const App());
+}
+=== pubspec.yaml (flutter_core) ===
+name: my_app
+description: "A new Flutter project."
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.12.0"
+  flutter: ">=3.44.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  firebase_core: "^4.15.0"
+  firebase_remote_config: "^6.7.1"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: "^6.0.0"
+
+flutter:
+  default-flavor: "dev"
+  uses-material-design: true
+=== test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/fallback_start_screen.dart';
+
+/// The path that the screen names.
+const _file = 'lib/core/app/fallback_start_screen.dart';
+
+/// Shows the view of the fallback start screen with texts of the test.
+Future<void> _show(WidgetTester tester) => tester.pumpWidget(
+  const MaterialApp(
+    home: FallbackStartView(hint: 'A hint', copied: 'Copied'),
+  ),
+);
+
+/// How much of the view is shown while it comes in, from 0 to 1.
+double _shown(WidgetTester tester) => tester
+    .widget<Opacity>(
+      find.ancestor(of: find.text(_file), matching: find.byType(Opacity)),
+    )
+    .opacity;
+
+void main() {
+  testWidgets('names the app, and tells where its first screen goes', (
+    tester,
+  ) async {
+    await _show(tester);
+    // It comes in with a short fade.
+    expect(_shown(tester), 0);
+    await tester.pumpAndSettle();
+    expect(_shown(tester), 1);
+
+    // The cell of the app is a picture, which a screen reader passes over,
+    // so only the name of the app has this label.
+    expect(find.bySemanticsLabel('5'), findsNothing);
+    final name = find.bySemanticsLabel('My App');
+    expect(tester.getSemantics(name), isSemantics(isHeader: true));
+    expect(find.text('A hint'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text(_file)),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+  });
+
+  testWidgets('copies the path of its file on a tap, and says so', (
+    tester,
+  ) async {
+    final copied = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') copied.add(call.arguments);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _show(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_file));
+    await tester.pumpAndSettle();
+
+    expect(copied, [
+      {'text': _file},
+    ]);
+    expect(find.text('Copied: $_file'), findsOneWidget);
+  });
+
+  testWidgets('fits a small phone with the largest text, and comes in at '
+      'once when the device asks for less motion', (tester) async {
+    tester.view
+      ..physicalSize = const Size(320, 480)
+      ..devicePixelRatio = 1;
+    tester.platformDispatcher
+      ..textScaleFactorTestValue = 3
+      ..accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(
+        disableAnimations: true,
+      );
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearAllTestValues);
+
+    // A widget that does not fit fails the test.
+    await _show(tester);
+
+    expect(_shown(tester), 1);
+    TextScaler scalerOf(Finder text) =>
+        MediaQuery.textScalerOf(tester.element(text));
+    // The letters of the cell are a part of the picture and keep their
+    // size, and the path grows less than the other texts.
+    expect(scalerOf(find.text('Ma').first), TextScaler.noScaling);
+    expect(scalerOf(find.text(_file)).scale(10), 15);
+    expect(scalerOf(find.text('A hint')).scale(10), 30);
+  });
+}
+=== test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_app/core/app/status_bar_icons.dart';
+
+/// What the widget asks the system for on a screen in [theme].
+Future<SystemUiOverlayStyle> _styleIn(
+  WidgetTester tester,
+  ThemeData theme,
+) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: theme,
+      home: const StatusBarIcons(child: Text('A screen')),
+    ),
+  );
+  return tester
+      .widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.descendant(
+          of: find.byType(StatusBarIcons),
+          matching: find.byType(AnnotatedRegion<SystemUiOverlayStyle>),
+        ),
+      )
+      .value;
+}
+
+void main() {
+  testWidgets('asks for dark icons on a light theme', (tester) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.statusBarIconBrightness, Brightness.dark);
+    expect(style.statusBarBrightness, Brightness.light);
+    expect(find.text('A screen'), findsOneWidget);
+  });
+
+  testWidgets('asks for light icons on a dark theme', (tester) async {
+    final style = await _styleIn(
+      tester,
+      ThemeData(brightness: Brightness.dark),
+    );
+
+    expect(style.statusBarIconBrightness, Brightness.light);
+    expect(style.statusBarBrightness, Brightness.dark);
+  });
+
+  testWidgets('leaves the navigation bar of the system as it is', (
+    tester,
+  ) async {
+    final style = await _styleIn(tester, ThemeData());
+
+    expect(style.systemNavigationBarColor, isNull);
+    expect(style.systemNavigationBarIconBrightness, isNull);
+  });
+}
+=== tool/configure_firebase.dart (firebase_core) ===
+// Configures Firebase for one flavor of the app, with the FlutterFire CLI:
+//
+//     dart tool/configure_firebase.dart <flavor> --project=<id>
+//
+// In a terminal, without --project, flutterfire asks for the project. The
+// other arguments go to flutterfire as they are, such as --account=<email>.
+//
+// flutterfire writes one iOS build configuration in a run, and the build of
+// each needs its entry in firebase.json, so on macOS this script runs it once
+// for each. Run it again at any time: it changes nothing but the ids of the
+// build phases that flutterfire added, or moves the flavor to another project.
+//
+// Then it formats the options that flutterfire wrote, and runs each Dart file
+// of tool/firebase_configured by the order of their names, for what has to
+// follow every run of flutterfire.
+
+import 'dart:convert';
+import 'dart:io';
+
+/// The Android application id and the iOS bundle id of a flavor, each `null`
+/// for a platform that the app does not have, and its Xcode build
+/// configurations.
+typedef _Flavor = ({String? android, String? ios, List<String> configurations});
+
+/// The flavors of the app. SMF wrote their ids from the ids of the app: if you
+/// change them in the Android and Xcode projects, change them here too.
+const Map<String, _Flavor> _flavors = {
+  'dev': (
+    android: 'com.example.my_app.dev',
+    ios: 'com.example.my-app.dev',
+    configurations: ['Debug-dev', 'Profile-dev', 'Release-dev'],
+  ),
+  'staging': (
+    android: 'com.example.my_app.staging',
+    ios: 'com.example.my-app.staging',
+    configurations: ['Debug-staging', 'Profile-staging', 'Release-staging'],
+  ),
+  'prod': (
+    android: 'com.example.my_app',
+    ios: 'com.example.my-app',
+    configurations: ['Debug-prod', 'Profile-prod', 'Release-prod'],
+  ),
+};
+
+/// The platforms of the app.
+const _platforms = 'android,ios';
+
+/// The directory of what has to follow every run of flutterfire.
+const _hooks = 'tool/firebase_configured';
+
+/// What flutterfire_cli 1.4.1 takes with `--android-package-name`, as
+/// `validateAndroidPackageName` of its `lib/src/common/utils.dart` checks it.
+final _packageName = RegExp(
+  r'^[a-zA-Z][a-zA-Z0-9]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$',
+);
+
+/// What flutterfire_cli 1.4.1 takes with `--ios-bundle-id`, as
+/// `validateAppBundleId` of the same file checks it.
+final _bundleId = RegExp(
+  r'^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?|([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+))$',
+);
+
+Future<void> main(List<String> arguments) async {
+  final script = File.fromUri(Platform.script).resolveSymbolicLinksSync();
+  try {
+    exitCode = await _configure(File(script).parent.parent, arguments);
+  } on _Stop catch (stop) {
+    stderr.writeln(stop.why);
+    exitCode = 1;
+  }
+}
+
+/// Why the script stops before flutterfire.
+final class _Stop implements Exception {
+  const _Stop(this.why);
+
+  final String why;
+}
+
+/// Configures the flavor that [arguments] names in [app], and returns the exit
+/// code of the script.
+Future<int> _configure(Directory app, List<String> arguments) async {
+  final (named, others) = _withoutProject(arguments);
+  // The word that names a flavor, which may come after another option.
+  final flavors = others.where(_flavors.containsKey).toList();
+  if (flavors.length != 1) {
+    throw _Stop(
+      'Name a flavor: dart tool/configure_firebase.dart '
+      '<${_flavors.keys.join('|')}> --project=<id>',
+    );
+  }
+  final flavor = flavors.single;
+  final ofFlavor = _flavors[flavor]!;
+  final rest = [...others]..remove(flavor);
+  var project = named;
+  final terminal = _hasTerminal();
+  if (project == null && !terminal) {
+    throw _Stop(
+      'Name the Firebase project: dart tool/configure_firebase.dart $flavor '
+      '--project=<id>. Without a terminal, nobody can answer the question of '
+      'flutterfire.',
+    );
+  }
+  final platforms = _platformsIn(rest);
+  final android = platforms.contains('android') ? ofFlavor.android : null;
+  final ios = platforms.contains('ios') ? ofFlavor.ios : null;
+  _checkIds(android, ios);
+
+  // flutterfire changes the Xcode project only on macOS, so the runs differ
+  // only there.
+  final configurations = Platform.isMacOS && ios != null
+      ? ofFlavor.configurations
+      : ofFlavor.configurations.take(1);
+  for (final configuration in configurations) {
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [
+        'pub',
+        'global',
+        'run',
+        'flutterfire_cli:flutterfire',
+        'configure',
+        if (project != null) '--project=$project',
+        '--platforms=$_platforms',
+        '--overwrite-firebase-options',
+        '--out=lib/firebase_options_$flavor.dart',
+        if (android != null) ...[
+          '--android-package-name=$android',
+          '--android-out=android/app/src/$flavor/google-services.json',
+        ],
+        if (ios != null) ...[
+          '--ios-bundle-id=$ios',
+          '--ios-out=ios/flavors/$flavor/GoogleService-Info.plist',
+          '--ios-build-config=$configuration',
+        ],
+        ...rest,
+      ],
+      workingDirectory: app.path,
+      // Without a terminal, flutterfire fails rather than wait for an answer.
+      environment: terminal ? null : const {'CI': 'true'},
+      mode: ProcessStartMode.inheritStdio,
+    );
+    final code = await process.exitCode;
+    if (code != 0) {
+      stderr.writeln(
+        'flutterfire failed for the flavor $flavor (exit code $code). What it '
+        'wrote stays, and running this script again does the rest. It needs '
+        'the FlutterFire CLI, a login of the Firebase CLI and, on macOS, the '
+        'Ruby gem xcodeproj: see the section Firebase of README.md.',
+      );
+      return code;
+    }
+    // The next runs need no answer.
+    project ??= _projectOf(app, flavor);
+  }
+
+  await _format(app, flavor);
+  for (final hook in _hooksOf(app)) {
+    final process = await Process.start(
+      Platform.resolvedExecutable,
+      [hook.path],
+      workingDirectory: app.path,
+      mode: ProcessStartMode.inheritStdio,
+    );
+    final code = await process.exitCode;
+    if (code != 0) {
+      stderr.writeln(
+        '${hook.path} failed (exit code $code). flutterfire configured the '
+        'flavor $flavor, and running this script again runs it again.',
+      );
+      return code;
+    }
+  }
+  stdout.writeln(
+    'Configured the flavor $flavor for the Firebase project $project. Commit '
+    'firebase.json and the files it names.',
+  );
+  if (ios != null && !Platform.isMacOS) {
+    stdout.writeln(
+      'flutterfire changes the Xcode project only on macOS, so this run left '
+      'it and ios/flavors/$flavor/GoogleService-Info.plist as they were. Run '
+      'dart tool/configure_firebase.dart $flavor again on a Mac for the iOS '
+      'app.',
+    );
+  }
+  return 0;
+}
+
+/// Whether someone can answer a question of flutterfire.
+///
+/// `stdin.hasTerminal` also holds for any other character device, such as the
+/// `/dev/null` of cron, `nohup`, `ssh -n` or Docker without `-i`, where
+/// flutterfire would wait forever. Only a terminal has an echo mode to read.
+bool _hasTerminal() {
+  try {
+    stdin.echoMode;
+    return true;
+  } on StdinException {
+    return false;
+  }
+}
+
+/// The project that [arguments] name, as flutterfire reads it, with the last
+/// one counting, and the other arguments.
+(String?, List<String>) _withoutProject(List<String> arguments) {
+  String? project;
+  final rest = <String>[];
+  for (var index = 0; index < arguments.length; index++) {
+    final argument = arguments[index];
+    if (argument == '--project' || argument == '-p') {
+      // Another option is no id, and flutterfire would take it for one.
+      if (++index == arguments.length || arguments[index].startsWith('-')) {
+        throw _Stop('$argument needs the id of a Firebase project.');
+      }
+      project = arguments[index];
+    } else if (argument.startsWith('--project=')) {
+      project = argument.substring('--project='.length);
+    } else if (argument.startsWith('-p')) {
+      project = argument.substring('-p'.length);
+    } else {
+      rest.add(argument);
+    }
+  }
+  if (project != null && project.isEmpty) {
+    throw _Stop('--project needs the id of a Firebase project.');
+  }
+  return (project, rest);
+}
+
+/// The platforms of this run: those of the app, unless [rest] names others.
+/// [rest] comes last on the command line of flutterfire, which takes the last
+/// value of an option.
+List<String> _platformsIn(List<String> rest) {
+  var platforms = _platforms;
+  for (var index = 0; index < rest.length; index++) {
+    if (rest[index].startsWith('--platforms=')) {
+      platforms = rest[index].substring('--platforms='.length);
+    } else if (rest[index] == '--platforms' && index + 1 < rest.length) {
+      platforms = rest[index + 1];
+    }
+  }
+  return platforms.split(',');
+}
+
+/// Stops at an id that flutterfire would refuse, with what to do about it.
+void _checkIds(String? android, String? ios) {
+  if (android != null && !_packageName.hasMatch(android)) {
+    throw _Stop(
+      'flutterfire takes no application id like $android (it allows no '
+      'underscore in its first part): use another org.',
+    );
+  }
+  if (ios != null && !_bundleId.hasMatch(ios)) {
+    throw _Stop(
+      'flutterfire takes no bundle id like $ios (it allows no hyphen at either '
+      'end of a part, and at most 63 characters in one): use another org.',
+    );
+  }
+}
+
+/// The project of the options of [flavor], which flutterfire wrote into
+/// `firebase.json` of [app].
+///
+/// It reads the entry of the options: the keys of the Android apps in that
+/// file depend on the path of the app.
+String _projectOf(Directory app, String flavor) {
+  final file = File('${app.path}/firebase.json');
+  final json = file.existsSync() ? jsonDecode(file.readAsStringSync()) : null;
+  Object? entry = json;
+  for (final key in [
+    'flutter',
+    'platforms',
+    'dart',
+    'lib/firebase_options_$flavor.dart',
+    'projectId',
+  ]) {
+    entry = entry is Map ? entry[key] : null;
+  }
+  if (entry is! String) {
+    throw _Stop(
+      '${file.path} names no Firebase project for the flavor $flavor, though '
+      'flutterfire succeeded. Run this script again with --project=<id>.',
+    );
+  }
+  return entry;
+}
+
+/// Formats the options of [flavor], which flutterfire writes in a format of
+/// its own, so that the check of the format of the app passes. They work
+/// without it, so a failure only warns.
+Future<void> _format(Directory app, String flavor) async {
+  final options = 'lib/firebase_options_$flavor.dart';
+  final result = await Process.run(Platform.resolvedExecutable, [
+    'format',
+    options,
+  ], workingDirectory: app.path);
+  if (result.exitCode != 0) {
+    stderr.writeln(
+      'Warning: dart format left $options as flutterfire wrote it (exit code '
+      '${result.exitCode}): ${result.stderr}',
+    );
+  }
+}
+
+/// The Dart files of the hooks directory of [app], by the order of their
+/// names. An app whose modules have nothing to do after flutterfire has no
+/// such directory.
+List<File> _hooksOf(Directory app) {
+  final directory = Directory('${app.path}/$_hooks');
+  if (!directory.existsSync()) return const [];
+  return [
+    for (final entity in directory.listSync())
+      if (entity is File && entity.path.endsWith('.dart')) entity,
+  ]..sort((a, b) => a.path.compareTo(b.path));
+}

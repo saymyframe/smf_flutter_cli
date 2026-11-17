@@ -12,6 +12,7 @@ import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
+import 'package:smf_firebase_remote_config/smf_firebase_remote_config.dart';
 import 'package:smf_flutter_cli/matrix.dart';
 import 'package:smf_google_sign_in/smf_google_sign_in.dart';
 import 'package:smf_home_flutter/smf_home_flutter.dart';
@@ -47,6 +48,7 @@ Future<MatrixAppTests> smfAppTests() async {
   final googleSignIn = await appTestsDirectoryOf('smf_google_sign_in');
   final appleSignIn = await appTestsDirectoryOf('smf_apple_sign_in');
   final messaging = await appTestsDirectoryOf('smf_firebase_messaging');
+  final remoteConfig = await appTestsDirectoryOf('smf_firebase_remote_config');
   final home = await appTestsDirectoryOf('smf_home_flutter');
   final inAppReview = await appTestsDirectoryOf('smf_in_app_review');
   final launcherIcons = await appTestsDirectoryOf('smf_launcher_icons');
@@ -777,6 +779,43 @@ Future<MatrixAppTests> smfAppTests() async {
       // keep, whichever modules provide the roles: each bridge has the value
       // of its controller, at the start and once the controller changed it.
       await stateManagementRoleAppTest(),
+      // The values of remote config of the apps with the remote config role,
+      // whichever module provides it: the parameters of the app read their
+      // defaults until values are activated, the start waits at most a
+      // second, an app with parameters follows the backend and one without
+      // asks it nothing, and the device keeps what was activated.
+      await remoteConfigRoleAppTest(),
+      // The remote config service of the module on Firebase Remote Config:
+      // what each of its calls sends to Firebase, on Android and on iOS, with
+      // the timeout and the interval of a fetch of the role and the defaults
+      // of the app; its values, which are those of the project and never a
+      // default; a value that the project publishes while an app with
+      // parameters runs, which becomes active through appRemoteConfig; and
+      // what an earlier launch activated, which the next start finds without
+      // the network. The tests use the service of the module, and leave what
+      // every provider of the remote config role does to the test of the
+      // role. The mocks are a device and a project in memory, which the
+      // matrix sets up for the tests of every module of the app, since the
+      // start-up of the app starts remote config. Its probe fetches on a
+      // device through the service of the app, and then asks the script of
+      // CI that started the app for a value published in Remote Config of
+      // the Firebase project, the answer firebase_remote_config, which it
+      // sees become active. The probe comes before that of the REST role,
+      // whose worst case takes longest.
+      MatrixAppTest(
+        '$remoteConfig/firebase_remote_config',
+        appliesTo: _has(FirebaseRemoteConfigModule.id),
+        devDependencies: const ['firebase_remote_config_platform_interface'],
+        mocks: const MatrixMocks(
+          'test/firebase_remote_config_mocks.dart',
+          'mockFirebaseRemoteConfig',
+        ),
+        startProbe: const MatrixStartProbe(
+          'integration_test/firebase_remote_config/probe.dart',
+          'probeFirebaseRemoteConfig',
+          answer: 'firebase_remote_config',
+        ),
+      ),
       // The requests of the apps with the REST role, whichever module provides
       // it: an address, the failures, the token, the repeats, the stops and
       // the log. Its probe sees on a device that the stack of the provider
@@ -844,11 +883,11 @@ Future<MatrixAppTests> smfAppTests() async {
     // provider of the DI role, of the events role, of the preferences
     // role, of the env role, of the auth role, of the notifications role,
     // of the push role, of the purchases role, of the review role, of the
-    // feedback role, of the REST role, of the settings screen role, of the
-    // theme role, of the localization role, of the app icon role, of the
-    // splash role and of the state management role gets the tests of its
-    // role. Each provider of the app entry role gets the test of the theme
-    // role, which checks that its root rebuilds.
+    // feedback role, of the REST role, of the remote config role, of the
+    // settings screen role, of the theme role, of the localization role, of
+    // the app icon role, of the splash role and of the state management role
+    // gets the tests of its role. Each provider of the app entry role gets
+    // the test of the theme role, which checks that its root rebuilds.
     testedRoles: {
       routerRole,
       diRole,
@@ -862,6 +901,7 @@ Future<MatrixAppTests> smfAppTests() async {
       reviewRole,
       feedbackRole,
       restRole,
+      remoteConfigRole,
       settingsScreenRole,
       themeRole,
       appEntryRole,

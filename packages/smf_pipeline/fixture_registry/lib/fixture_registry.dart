@@ -35,6 +35,7 @@ import 'package:smf_firebase_auth/smf_firebase_auth.dart';
 import 'package:smf_firebase_core/smf_firebase_core.dart';
 import 'package:smf_firebase_crashlytics/smf_firebase_crashlytics.dart';
 import 'package:smf_firebase_messaging/smf_firebase_messaging.dart';
+import 'package:smf_firebase_remote_config/smf_firebase_remote_config.dart';
 import 'package:smf_flutter_core/smf_flutter_core.dart';
 import 'package:smf_get_it/smf_get_it.dart';
 import 'package:smf_go_router/smf_go_router.dart';
@@ -250,7 +251,10 @@ List<ModuleId> everyFixture({
 /// Then comes email_feedback, the provider of the feedback role that the CLI
 /// has, for the app test that it keeps and for the tests of that role that
 /// the CLI keeps, of the role and of its entry "Write to us" of the settings
-/// screen, which shows only while the module has the address of .env.
+/// screen, which shows only while the module has the address of .env. Then
+/// comes Firebase Remote Config, the provider of the remote config role that
+/// the CLI has, for the app test that it keeps and for the test of that role
+/// that the CLI keeps, which run there next to the other Firebase modules.
 ///
 /// With two state managers, the registry has two apps with every module,
 /// one for each. Its tool checks the first one, in which the screens of the
@@ -302,5 +306,6 @@ List<SmfModule> severalProvidersModules() => const [
       PaywallModule(),
       InAppReviewModule(),
       EmailFeedbackModule(),
+      FirebaseRemoteConfigModule(),
       LauncherIconsModule(),
     ];

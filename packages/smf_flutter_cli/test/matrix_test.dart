@@ -376,7 +376,8 @@ void main() {
       'localization and without each, which all get the values of .env, the '
       'apps of the paywall for each state manager with the localization, '
       'the settings screen and the onboarding screen and without each, which '
-      'get RevenueCat, the values of .env and the router, the apps of CI with '
+      'get RevenueCat, the values of .env and the router, the app of Firebase '
+      'Remote Config, which gets Firebase, the apps of CI with '
       'the values of .env and without, the apps of the onboarding with the '
       'localization and without, which get the preferences and the router, '
       'the apps of the notifications with the settings screen, the '
@@ -410,7 +411,8 @@ void main() {
         'material_theme, gen_l10n, local_notifications, get_it, $stateManager, '
         'event_bus, shared_preferences, firebase_core, firebase_messaging, '
         'firebase_auth, google_sign_in, apple_sign_in, sign_in, dio, '
-        'revenuecat, paywall, in_app_review, email_feedback, dart_define, '
+        'revenuecat, paywall, in_app_review, email_feedback, '
+        'firebase_remote_config, dart_define, '
         'firebase_crashlytics, sentry, firebase_analytics, '
         'launcher_icons, native_splash, github_actions)';
     // The app of the sign-in with a state manager, which gets the provider
@@ -704,6 +706,10 @@ void main() {
         'flutter_core, dart_define, shared_preferences)',
       ),
       'email_feedback (email_feedback, flutter_core, dart_define)',
+      equals(
+        'firebase_remote_config (firebase_remote_config, firebase_core, '
+        'flutter_core)',
+      ),
       'dart_define (dart_define, flutter_core)',
       equals(
         'firebase_crashlytics with di (firebase_crashlytics, get_it, '

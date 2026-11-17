@@ -47,6 +47,10 @@ dependencies:
   # The provider of the push role in the registry of several providers, for
   # the app test that it keeps and the test of the role that the CLI keeps.
   smf_firebase_messaging: ^0.7.0
+  # The provider of the remote config role in the registry of several
+  # providers, for the app test that it keeps and the test of the role that
+  # the CLI keeps.
+  smf_firebase_remote_config: ^0.8.0
   # The matrix of CI, for the tests of the apps of the fixtures.
   smf_flutter_cli: ^0.8.0
   smf_flutter_core: ^0.7.0
