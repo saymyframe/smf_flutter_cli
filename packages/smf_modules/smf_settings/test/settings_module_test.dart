@@ -705,6 +705,41 @@ void main() {
     });
 
     test(
+        'tells that an entry may show only at times, and that the screen '
+        'shows the note for the developer of the app while none of its '
+        'entries shows, as in an app whose entries all hide', () async {
+      // An app whose only setting shows only at times: while it hides, the
+      // screen shows the note, whose class the screen declares.
+      const alerts = SettingsInfrastructure(
+        'alerts',
+        settings: ['AlertSetting'],
+        hiding: {'AlertSetting'},
+      );
+      final hiding = (await _rendered(
+        [SettingsModule.id, alerts.id],
+        registry: [..._modules, alerts],
+      ))
+          .app!;
+
+      expect(_declaredBy(hiding), contains('_NoSettings'));
+      expect(
+        agentNote,
+        allOf(
+          contains('An entry may show only at times, such as one that hides '
+              'on a platform: the screen asks it each time it builds.'),
+          contains('While no module of the app has a setting, or while none '
+              'of its entries shows, the screen shows a note for the '
+              'developer of the app in place of the group: the first entry '
+              'that shows replaces that note.'),
+        ),
+      );
+      expect(
+        hiding.files[AppEntryRole.agentsFile]!.text,
+        contains(agentNote.trim()),
+      );
+    });
+
+    test(
         'names in inline code only the screen with its file and its route, '
         'the prefixes of the files of the entries, and the two calls of the '
         'navigation', () {
