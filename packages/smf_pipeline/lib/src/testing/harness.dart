@@ -184,16 +184,22 @@ final class ContractResult {
   String? get appKey {
     final resolution = this.resolution;
     if (resolution == null) return null;
-    final modules = [
-      for (final module in resolution.modules)
-        '${module.id}(${module.variant ?? ''})',
-    ]..sort();
-    final options = [
-      for (final MapEntry(:key, :value) in contractCase.roleOptions.entries)
-        if (value != null) '--$key=$value',
-    ]..sort();
-    return [modules.join(','), ...options].join(' ');
+    return _appKeyOf(contractCase, resolution);
   }
+}
+
+/// The [ContractResult.appKey] of [contractCase], whose app has the modules
+/// of [resolution].
+String _appKeyOf(ContractCase contractCase, Resolution resolution) {
+  final modules = [
+    for (final module in resolution.modules)
+      '${module.id}(${module.variant ?? ''})',
+  ]..sort();
+  final options = [
+    for (final MapEntry(:key, :value) in contractCase.roleOptions.entries)
+      if (value != null) '--$key=$value',
+  ]..sort();
+  return [modules.join(','), ...options].join(' ');
 }
 
 /// The contract test harness: checks that the modules and roles of a
@@ -1372,6 +1378,12 @@ final class ContractHarness {
   /// returns the results of the cases whose app no case before built. A
   /// case with a value of a role option builds an app of its own, as the
   /// cases of the mode options do (see [casesOfRole]).
+  ///
+  /// A case whose app a case before built is not checked, since it gets no
+  /// result: the harness only resolves it, as its modules and the values of
+  /// its options tell its app (see [ContractResult.appKey]). In the
+  /// registries of the CLI and of the fixtures, more than two cases in five
+  /// are such cases.
   Future<List<ContractResult>> checkAll() async {
     final results = <ContractResult>[];
     final apps = <String>{};
@@ -1380,9 +1392,12 @@ final class ContractHarness {
         ...casesOfModule(module.descriptor.id),
       for (final role in registry.roles) ...casesOfRole(role),
     ]) {
-      final result = await check(contractCase);
-      final key = result.appKey;
-      if (key == null || apps.add(key)) results.add(result);
+      final resolution = await _resolutionOf(contractCase);
+      if (resolution != null &&
+          !apps.add(_appKeyOf(contractCase, resolution))) {
+        continue;
+      }
+      results.add(await check(contractCase));
     }
     return results;
   }
