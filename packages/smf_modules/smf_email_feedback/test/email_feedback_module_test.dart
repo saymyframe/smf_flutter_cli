@@ -650,6 +650,12 @@ void main() {
         final sentences = readmeSection
             .replaceAll('\n', ' ')
             .split(RegExp(r'(?<=\.) (?=[A-Z`"])'));
+        const hides = 'In an app with a settings screen, its row "Write to '
+            'us" hides then.';
+        const texts = 'In an app with localization, they are texts of the '
+            'app, which `$serviceFile` and `$sheetFile` read from '
+            '`context.l10n`: change them where the provider of the '
+            'localization keeps the texts of the app, in each language.';
         expect(
           [
             for (final sentence in sentences)
@@ -659,12 +665,8 @@ void main() {
                 sentence,
           ],
           [
-            'In an app with a settings screen, its row "Write to us" hides '
-                'then.',
-            'In an app with localization, they are texts of the app, which '
-                '`$serviceFile` and `$sheetFile` read from `context.l10n`: '
-                'change them where the provider of the localization keeps '
-                'the texts of the app, in each language.',
+            hides,
+            texts,
             'In an app with a settings screen, tap "Write to us" there.',
           ],
         );
