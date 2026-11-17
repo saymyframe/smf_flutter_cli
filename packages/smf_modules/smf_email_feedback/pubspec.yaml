@@ -1,5 +1,5 @@
 name: smf_email_feedback
-description: The SMF module of feedback by email for the Flutter app that SMF generates. "Write to us" opens a new mail to the developer in the mail app of the device, with the version of the app and the device.
+description: The SMF module of feedback by email for the Flutter app that SMF generates. "Write to us" opens a new mail to the developer in the mail app, with the app version and the device.
 version: 0.8.0
 homepage: https://saymyframe.com
 repository: https://github.com/saymyframe/smf_flutter_cli/tree/main/packages/smf_modules/smf_email_feedback

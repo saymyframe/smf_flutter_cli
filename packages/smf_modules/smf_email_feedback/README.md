@@ -4,9 +4,9 @@ The SMF module of feedback by email. It provides the feedback role of SMF: "Writ
 
 What the mail holds:
 
-- It goes to the address in `EMAIL_FEEDBACK_ADDRESS` of `.env`. Until that has one, the app does not offer the way to write: "Write to us" hides from the settings screen, and `appFeedback.available` is false for a button of yours.
+- It goes to the address in `EMAIL_FEEDBACK_ADDRESS` of `.env`. Until that key has a value, the app offers no way to write: "Write to us" is hidden on the settings screen, and `appFeedback.available` is false for a button of yours.
 - Its subject is "Feedback: " and the name of the app, in the language of the app.
-- Its body leaves room for the message, then tells the name, the version, the build number and the flavor of the app, from [package_info_plus](https://pub.dev/packages/package_info_plus), and the system and the model of the device, from [device_info_plus](https://pub.dev/packages/device_info_plus). The mail of the flavor for a release names no flavor.
+- Its body leaves room for the message, then gives the name, the version, the build number and the flavor of the app, from [package_info_plus](https://pub.dev/packages/package_info_plus), and the system and the model of the device, from [device_info_plus](https://pub.dev/packages/device_info_plus). A mail from the release flavor names no flavor.
 - The link encodes a space as `%20`, never as `+`, as RFC 6068 asks.
 
 The app asks the device nothing before it opens the mail, so it needs no `<queries>` on Android. Where no mail app opens it, such as on the iOS simulator, a sheet shows the address with a button that copies it.
