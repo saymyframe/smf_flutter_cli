@@ -351,9 +351,9 @@ jobs:
     # writes an entry of the cache of Gradle from an empty cache, it also
     # downloads about 1.8 GB and builds a release app, a few minutes more. The
     # commands of the CI of the app add a minute, and the first job of the
-    # matrix builds a release app twice more: once in the clone of its CI,
-    # and once in the check that a release build stops without the values of
-    # .env.
+    # matrix builds a release app three times more: once in the clone of its
+    # CI, and twice in the check that a release build stops without the
+    # values of .env and carries those that .env has.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -511,12 +511,17 @@ jobs:
       # alone. The check of the role stops it only while the compiler of a
       # release build of Flutter evaluates its constant, which no test with
       # the Dart SDK alone shows, so the nightly run checks it with each
-      # version of Flutter. each_app.sh gives the test the app in
-      # SMF_RELEASE_APP and its tool arguments in SMF_TOOL_ARGUMENTS, from the
-      # file that the --create of the matrix tool writes next to the app. The
-      # build without them stops within a minute, and the build with them
-      # takes a few minutes on top of the debug build.
-      - name: Check that a release build of the app with every module stops without the values of .env and builds with them
+      # version of Flutter. The APK of the build with them has the values of
+      # .env, and so has a second build after an edit of .env, without those
+      # of the build before. Flutter 3.44.0 to 3.44.4 keep the libapp.so of
+      # the release build before, such as that of the build for the cache of
+      # Gradle above, so the test of the values skips with them. each_app.sh
+      # gives the test the app in SMF_RELEASE_APP and its tool arguments in
+      # SMF_TOOL_ARGUMENTS, from the file that the --create of the matrix tool
+      # writes next to the app. The build without them stops within a minute,
+      # the build with them takes a few minutes on top of the debug build, and
+      # the second one takes less.
+      - name: Check that a release build of the app with every module stops without the values of .env, and builds with them, also a second time after an edit
         if: strategy.job-index == 0
         working-directory: packages/smf_contracts
         run: |
