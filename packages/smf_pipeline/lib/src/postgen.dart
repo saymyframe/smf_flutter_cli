@@ -69,10 +69,13 @@ const codegenArguments = ['run', 'build_runner', 'build', '--force-jit'];
 /// a fragment may import a library that its file imports anyway. `dart fix`
 /// cleans the imports of a file only when it makes no other fix in the file
 /// in the same run, so the cleanup runs alone, after the full `dart fix`.
-/// That run may import a library twice itself: the `dart fix` of Flutter
-/// 3.50, which deprecates Flutter's material library, imports
-/// `package:material_ui` once in place of that library and once more for a
-/// deprecated name that the new library declares too. It also adds the new
+/// That run may import a library twice itself, where a fix moves code from
+/// a deprecated library to a package: the `dart fix` of Flutter 3.50, which
+/// deprecates Flutter's material library, imports `package:material_ui`
+/// once in place of that library and once more for a deprecated name that
+/// the new library declares too. SMF's own code ignores that deprecation
+/// and keeps the library, so this happens only to a file that does not,
+/// such as one of a module outside the CLI. Such a fix also adds the new
 /// package to the pubspec, and the cleanup sees the second import only once
 /// the app has the package, so the packages are got again before it.
 const importCleanupCodes = [

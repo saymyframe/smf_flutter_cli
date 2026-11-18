@@ -9,6 +9,10 @@ import 'support.dart';
 /// counter is paused.
 const _counterFile = ImportRef.app('features/counter/counter.dart');
 
+/// The line of the comment that ignores what the analyzer reports of the
+/// directive below it, as an import that ignores a deprecation has it.
+const _ignored = '// ignore: deprecated_member_use\n';
+
 /// The count of the counter as an entry of the role, of the module
 /// `counter`.
 const _count = SharedState(
@@ -796,7 +800,9 @@ void main() {
       expect(
         [for (final import in code.imports) import.toDirective('my_app')],
         [
-          "import 'package:flutter/material.dart' as state0;",
+          // Flutter 3.50 deprecates its material library, which the type
+          // of the theme mode is of, and the import ignores that.
+          "${_ignored}import 'package:flutter/material.dart' as state0;",
           "import 'package:my_app/core/theme/theme_mode.dart' as state1;",
           "import 'package:flutter/widgets.dart' as state2;",
           "import 'package:my_app/core/l10n/app_locale.dart' as state3;",
@@ -831,13 +837,24 @@ void main() {
     test(
         'writes the directives of the file with those of the provider, '
         'merged and in order, each as dart format writes it', () {
-      final code = SharedStateCode(
-        const [ThemeRole.modeState, LocalizationRole.localeState],
-        appName: 'my_app',
-      );
       const path = 'core/state/'
           'a_directory_with_a_name_long_enough_for_a_line_of_its_own/'
           'bridges.dart';
+      // An entry whose type is of a library with a long path, which the
+      // file imports with an ignore comment.
+      const long = SharedState(
+        'counterLong',
+        listenable: FunctionRef('longListenable', import: _counterFile),
+        type: TypeRef(
+          'Long',
+          import: ImportRef.app(path, ignore: ['deprecated_member_use']),
+        ),
+        description: 'The long one.',
+      );
+      final code = SharedStateCode(
+        const [ThemeRole.modeState, LocalizationRole.localeState, long],
+        appName: 'my_app',
+      );
       final directives = code.directives(const [
         ImportRef('package:flutter/foundation.dart', show: ['ValueListenable']),
         ImportRef('package:flutter/foundation.dart', show: ['Listenable']),
@@ -856,16 +873,20 @@ void main() {
       const widgets = "import 'package:flutter/widgets.dart'\n"
           '    show BuildContext, StatelessWidget, Widget;';
       // A directive without combinators stays on its line, however long.
-      const long = "import 'package:my_app/$path';";
+      const own = "import 'package:my_app/$path';";
       expect(directives, [
         "import 'dart:async';",
         foundation,
-        "import 'package:flutter/material.dart' as state0;",
+        // The ignore comment of an import is on the line above it, also
+        // above a directive that dart format wraps.
+        "${_ignored}import 'package:flutter/material.dart' as state0;",
         widgets,
         "import 'package:flutter/widgets.dart' as state2;",
         "import 'package:my_app/core/l10n/app_locale.dart' as state3;",
-        long,
+        own,
+        "${_ignored}import 'package:my_app/$path'\n    as state4;",
         "import 'package:my_app/core/theme/theme_mode.dart' as state1;",
+        "import 'package:my_app/features/counter/counter.dart' as state5;",
       ]);
       final unit = parseString(
         content: [...directives, '', 'void main() {}'].join('\n'),

@@ -1,4 +1,6 @@
+// ignore: deprecated_member_use
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The accent of the app, and the colour that `ColorScheme.fromSeed` derives

@@ -469,7 +469,12 @@ const _step = OnboardingStep(
   stage: OnboardingStage.permission,
   icon: Fragment(
     'Icons.notifications_active_outlined',
-    imports: [ImportRef('package:flutter/material.dart')],
+    imports: [
+      ImportRef(
+        'package:flutter/material.dart',
+        ignore: ['deprecated_member_use'],
+      ),
+    ],
   ),
   title: NotificationsRole.stepTitle,
   text: NotificationsRole.stepText,

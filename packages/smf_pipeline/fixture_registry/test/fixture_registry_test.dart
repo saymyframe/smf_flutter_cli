@@ -280,6 +280,18 @@ void main() {
     });
 
     test(
+        'ignores in every app what Flutter 3.50 deprecates of its material '
+        'and cupertino libraries', () {
+      expect(
+        {
+          for (final result in results)
+            if (result.app case final app?) ...flutterDeprecationProblems(app),
+        },
+        isEmpty,
+      );
+    });
+
+    test(
         'checks each fixture with every provider of each role it requires or '
         'uses', () async {
       expect(
@@ -1579,13 +1591,17 @@ on request staging
         rendered(AppEntryRole.appArgs).split('\n'),
         [
           'locale: AppLocaleScope.of(context),',
-          'localizationsDelegates: [${[
-            'FixtureTexts.delegate',
-            'flutter_localizations.GlobalMaterialLocalizations.delegate',
-            'flutter_localizations.GlobalWidgetsLocalizations.delegate',
-            'flutter_localizations.GlobalCupertinoLocalizations.delegate',
-          ].join(', ')}],',
-          'supportedLocales: [...appLocales],',
+          'localizationsDelegates: [',
+          'FixtureTexts.delegate,',
+          '// ignore: deprecated_member_use',
+          'flutter_localizations.GlobalMaterialLocalizations.delegate,',
+          'flutter_localizations.GlobalWidgetsLocalizations.delegate,',
+          '// ignore: deprecated_member_use',
+          'flutter_localizations.GlobalCupertinoLocalizations.delegate,',
+          '],',
+          'supportedLocales: [',
+          '...appLocales,',
+          '],',
         ],
       );
       expect(
@@ -1650,7 +1666,7 @@ on request staging
             ])
             .values
             .single,
-        "supportedLocales: [Locale('sk')],",
+        "supportedLocales: [\nLocale('sk'),\n],",
       );
 
       // Two such modules are two contributors.

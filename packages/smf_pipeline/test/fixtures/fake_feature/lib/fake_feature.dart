@@ -92,7 +92,12 @@ final class FakeFeatureModule extends SmfModule {
                 label: LocalizedText('label', en: 'Fixture'),
                 icon: Fragment(
                   'Icons.star',
-                  imports: [ImportRef('package:flutter/material.dart')],
+                  imports: [
+                    ImportRef(
+                      'package:flutter/material.dart',
+                      ignore: ['deprecated_member_use'],
+                    ),
+                  ],
                 ),
               ),
               startCandidate: true,
@@ -221,7 +226,11 @@ final class FakeSecondModule extends SmfModule {
                 icon: Fragment(
                   'Icons.looks_two',
                   imports: [
-                    ImportRef('package:flutter/material.dart', show: ['Icons']),
+                    ImportRef(
+                      'package:flutter/material.dart',
+                      show: ['Icons'],
+                      ignore: ['deprecated_member_use'],
+                    ),
                   ],
                 ),
               ),

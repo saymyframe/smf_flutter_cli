@@ -203,6 +203,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- The root of the app is a `MaterialApp` of Flutter's own Material library, `package:flutter/material.dart`, and the screens are written for it. Flutter 3.50 deprecates that library, `package:flutter/cupertino.dart` and their localizations, `GlobalMaterialLocalizations` and `GlobalCupertinoLocalizations`, for `package:material_ui` and `package:cupertino_ui`, while the app also allows older Flutter. So each import of the two libraries, and each name of the two localizations, has `// ignore: deprecated_member_use` on the line above it: `flutter analyze` finds no issue on any Flutter that the app allows, and `dart fix` leaves the code as it is. Do the same in new code. Move no file to `package:material_ui` or `package:cupertino_ui`, also not through `dart fix`: their widgets find neither the theme nor the localizations of this root.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 - The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
@@ -1858,6 +1859,7 @@ import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/theme/app_theme.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'
     as flutter_localizations;
@@ -1878,8 +1880,10 @@ class App extends StatelessWidget {
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
       FixtureTexts.delegate,
+      // ignore: deprecated_member_use
       flutter_localizations.GlobalMaterialLocalizations.delegate,
       flutter_localizations.GlobalWidgetsLocalizations.delegate,
+      // ignore: deprecated_member_use
       flutter_localizations.GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: [...appLocales],
@@ -2556,6 +2560,7 @@ void logPostHogScreen(String? route, String location) {
 }
 === lib/core/app/failed_start.dart (role:app_entry) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'status_bar_icons.dart';
@@ -2673,6 +2678,7 @@ class _FailedStartScreen extends StatelessWidget {
   }
 }
 === lib/core/app/status_bar_icons.dart (role:app_entry) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -2711,6 +2717,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
@@ -5689,6 +5696,7 @@ String _nameOf(TargetPlatform platform) => switch (platform) {
 };
 === lib/core/feedback/email_feedback_sheet.dart (email_feedback) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5949,6 +5957,7 @@ abstract interface class FeedbackService {
 import 'dart:async';
 
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_feedback.dart';
@@ -6224,6 +6233,7 @@ final class FixtureEvents implements CommunicationService {
 }
 === lib/core/fixture_hiding_setting/fixture_hiding_setting.dart (fake_hiding_setting) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// Whether the settings screen of the app shows [FixtureHidingSetting]: on
@@ -6264,6 +6274,7 @@ void noteFixtureScreenLog(String? route, String location) {
   }
 }
 === lib/core/fixture_screen_log/fixture_screen_log_setting.dart (fake_screen_log) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The settings of the fixture screen log: two rows of the settings screen
@@ -6453,6 +6464,7 @@ Future<void> startFixture() async {
 === lib/core/fixture_steps/fixture_steps.dart (fake_steps) ===
 import 'dart:async';
 
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The steps of the onboarding of the fixture whose action ran, in the
@@ -8137,6 +8149,7 @@ class _FixtureTextsDelegate extends LocalizationsDelegate<FixtureTexts> {
 }
 === lib/core/l10n/language_setting.dart (role:localization) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_locale.dart';
@@ -9085,6 +9098,7 @@ abstract interface class NotificationsService {
 }
 === lib/core/notifications/notifications_setting.dart (role:notifications) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_notifications.dart';
@@ -9235,6 +9249,7 @@ import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/notifications/notifications_step.dart'
     as step1;
 import 'package:fixture_app/features/paywall/paywall_step.dart' as step2;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -10396,6 +10411,7 @@ abstract interface class PurchasesService {
 === lib/core/purchases/restore_purchases_setting.dart (role:purchases) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_purchases.dart';
@@ -13974,6 +13990,7 @@ abstract interface class ReviewService {
 }
 === lib/core/review/review_setting.dart (role:review) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_review.dart';
@@ -15809,6 +15826,7 @@ final class UpdateRequiredRoutes {
 import 'dart:math' as math;
 
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_router.dart';
@@ -16084,6 +16102,7 @@ import 'package:fixture_app/core/theme/theme_mode.dart' as state2;
 import 'package:fixture_app/features/onboarding/onboarding_status.dart'
     as state0;
 import 'package:flutter/foundation.dart' show ValueListenable;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart' as state1;
 import 'package:flutter/widgets.dart'
     show BuildContext, StatelessWidget, Widget;
@@ -16193,7 +16212,9 @@ abstract base class ListenableCubit<T> extends Cubit<T> {
   }
 }
 === lib/core/theme/app_theme.dart (material_theme) ===
+// ignore: deprecated_member_use
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The accent of the app, and the colour that `ColorScheme.fromSeed` derives
@@ -16504,6 +16525,7 @@ ThemeData _themeOf(Brightness brightness) {
 }
 === lib/core/theme/theme_mode.dart (role:theme) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -16596,6 +16618,7 @@ class AppThemeModeScope extends InheritedNotifier<AppThemeModeController> {
 }
 === lib/core/theme/theme_mode_setting.dart (role:theme) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'theme_mode.dart';
@@ -16769,6 +16792,7 @@ class _WholeWords extends StatelessWidget {
   }
 }
 === lib/features/fake_second/fixture_members_screens.dart (fake_second) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature for the holders of a badge: its
@@ -16825,6 +16849,7 @@ class FixtureLoungeSeatScreen extends StatelessWidget {
 }
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature outside the main navigation,
@@ -16840,6 +16865,7 @@ class FixtureOutsideScreen extends StatelessWidget {
 }
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The screen of the second fixture feature, which can start the app too,
@@ -16854,6 +16880,7 @@ class FixtureSecondScreen extends StatelessWidget {
 }
 === lib/features/fake_second/fixture_second_setting.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The setting of the second fixture feature: a row of the settings screen
@@ -16880,6 +16907,7 @@ class FixtureSetting extends StatelessWidget {
 <4087 bytes>
 === lib/features/home/home_screen.dart (home) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17467,6 +17495,7 @@ class _StepCard extends StatelessWidget {
 }
 === lib/features/onboarding/onboarding_pages.dart (onboarding) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The pages of the onboarding, in the order in which the user goes through
@@ -18039,6 +18068,7 @@ class _GridPainter extends CustomPainter {
 import 'dart:ui' show lerpDouble;
 
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -18484,6 +18514,7 @@ ValueListenable<bool> onboardingCompleted() => onboardingStatus.completed;
 void restoreOnboarding(AppPreferences preferences) =>
     onboardingStatus._restore(preferences);
 === lib/features/paywall/paywall_card.dart (paywall) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'paywall_widgets.dart';
@@ -19309,6 +19340,7 @@ bool _yearly(Plan plan) => switch (plan.period) {
   null => false,
 };
 === lib/features/paywall/paywall_step.dart (paywall) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/purchases/app_purchases.dart';
@@ -19526,6 +19558,7 @@ String noticeTextOf(BuildContext context, PaywallNotice notice) =>
     };
 === lib/features/paywall/paywall_view.dart (paywall) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/purchases/app_purchases.dart';
@@ -20037,6 +20070,7 @@ class _Links extends StatelessWidget {
 }
 === lib/features/paywall/paywall_widgets.dart (paywall) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -21004,6 +21038,7 @@ class SubscriptionSetting extends StatelessWidget {
 }
 === lib/features/paywall/subscription_setting_row.dart (paywall) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// What the entry of the subscription on the settings screen shows: a row,
@@ -21050,6 +21085,7 @@ class SubscriptionSettingRow extends StatelessWidget {
 }
 === lib/features/paywall/subscription_view.dart (paywall) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/purchases/app_purchases.dart';
@@ -21341,6 +21377,7 @@ import 'package:fixture_app/features/fake_second/fixture_second_setting.dart'
 import 'package:fixture_app/features/paywall/subscription_setting.dart'
     as entry4;
 import 'package:fixture_app/features/sign_in/account_setting.dart' as entry3;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The settings of the app: an entry for each setting that a module of the
@@ -21563,6 +21600,7 @@ class AccountSetting extends StatelessWidget {
 }
 === lib/features/sign_in/account_setting_row.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// What the entry of the account on the settings screen shows: a row, as
@@ -21612,6 +21650,7 @@ class AccountSettingRow extends StatelessWidget {
 }
 === lib/features/sign_in/account_view.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
@@ -21896,6 +21935,7 @@ class ResetPasswordScreen extends StatelessWidget {
 }
 === lib/features/sign_in/reset_password_view.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
@@ -22183,6 +22223,7 @@ ValueListenable<bool> signInAllowsApp() => appSession.allowsApp;
 ValueListenable<bool> signInHasAccount() => appSession.hasAccount;
 === lib/features/sign_in/sign_in_page.dart (sign_in) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'sign_in_widgets.dart';
@@ -22741,6 +22782,7 @@ final class AccountState {
 }
 === lib/features/sign_in/sign_in_view.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
@@ -22912,6 +22954,7 @@ class _SignInViewState extends State<SignInView> {
 === lib/features/sign_in/sign_in_widgets.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
@@ -23807,6 +23850,7 @@ class SignUpScreen extends StatelessWidget {
 }
 === lib/features/sign_in/sign_up_view.dart (sign_in) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/auth/app_session.dart';
@@ -23959,6 +24003,7 @@ class _SignUpViewState extends State<SignUpView> {
 }
 === lib/features/update_required/update_required_screen.dart (update_required) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'update_status.dart';
@@ -24876,6 +24921,7 @@ flutter:
         - asset: "assets/fonts/geist/Geist-SemiBold.ttf"
           weight: 600
 === test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

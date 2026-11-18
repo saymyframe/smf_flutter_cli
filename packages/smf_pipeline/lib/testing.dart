@@ -7,7 +7,8 @@
 /// the code of packages of modules takes the names of the classes of roles
 /// from the roles, and `roleNoteProblems` that what the template of a role
 /// says in a socket of notes names nothing of the modules that provide the
-/// roles.
+/// roles, and `flutterDeprecationProblems` that a rendered app ignores what
+/// Flutter 3.50 deprecates of its material and cupertino libraries.
 ///
 /// It runs without `package:test`, so both the tests of this package and the
 /// contract tests of the CLI can use it.
@@ -37,6 +38,7 @@ export 'src/templates.dart'
         templateFilesOf;
 export 'src/testing/dart_only_app.dart';
 export 'src/testing/file_indexer.dart';
+export 'src/testing/flutter_deprecations.dart';
 export 'src/testing/harness.dart';
 export 'src/testing/module_package.dart';
 export 'src/testing/role_class_names.dart';

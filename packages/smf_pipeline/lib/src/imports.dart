@@ -144,7 +144,7 @@ final class _Inserter {
     final previous =
         nodes.where((node) => _groupOf(_uriOf(node)) < group).lastOrNull;
     if (next != null) {
-      _insert(_lineStart(text, next.offset), '$block\n\n');
+      _insert(_startOf(text, next), '$block\n\n');
     } else if (previous != null) {
       _insert(_lineEnd(text, previous.end), '\n\n$block');
     } else {
@@ -162,7 +162,7 @@ final class _Inserter {
           .where((node) => _uriOf(node).compareTo(import.uri) > 0)
           .firstOrNull;
       if (next != null) {
-        _insert(_lineStart(text, next.offset), '$directive\n');
+        _insert(_startOf(text, next), '$directive\n');
       } else {
         _insert(_lineEnd(text, sameGroup.last.end), '\n$directive');
       }
@@ -180,7 +180,7 @@ final class _Inserter {
     if (first != null) {
       // Before the first node, or at the start of the file if only blank
       // lines come before it.
-      final start = _lineStart(text, first.offset);
+      final start = _startOf(text, first);
       _insert(
         text.substring(0, start).trim().isEmpty ? 0 : start,
         '$block\n\n',
@@ -245,6 +245,23 @@ bool _covers(_Existing known, ImportRef import) {
   final shows = known.shows;
   if (shows == null) return true;
   return import.show.isNotEmpty && shows.containsAll(import.show);
+}
+
+/// An `// ignore:` comment, which the analyzer applies to the line below it
+/// when it is alone on its line.
+final _ignoreComment = RegExp(r'^//+\s*ignore:');
+
+/// The start of the line of [node] in [text], or of the line above it when
+/// that line is an `// ignore:` comment alone, which belongs to [node]: the
+/// analyzer applies it to the line of [node], so code that goes before [node]
+/// goes above it.
+int _startOf(String text, AstNode node) {
+  final start = _lineStart(text, node.offset);
+  if (start == 0) return start;
+  final above = _lineStart(text, start - 1);
+  return _ignoreComment.hasMatch(text.substring(above, start).trim())
+      ? above
+      : start;
 }
 
 int _lineStart(String text, int offset) =>

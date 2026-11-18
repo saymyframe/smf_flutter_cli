@@ -23,12 +23,12 @@ const _replacements = ['package:material_ui/', 'package:cupertino_ui/'];
 /// name of them or of `flutter_localizations`, for `package:material_ui` or
 /// `package:cupertino_ui`.
 ///
-/// The apps allow Flutter 3.44, and those two packages need Flutter 3.47,
-/// so the templates of the modules cannot import them yet. With Flutter
-/// 3.50, every generated app that imports Flutter's material library has
-/// these infos, and so does the code that gen-l10n of Flutter 3.50 writes
-/// itself. Once the apps need Flutter 3.47 or later, the templates import
-/// the new packages and this goes.
+/// The apps keep the material library of Flutter, which their root is of,
+/// and the code that SMF generates ignores those deprecations, as does the
+/// header that gen_l10n gives the code that gen-l10n writes. So these infos
+/// come from the files of the app tests, which import the library without
+/// the ignore, and from an app of a published release of the CLI that
+/// does not ignore them yet.
 bool isToleratedAnalysisIssue(String severity, String text, String code) =>
     severity == 'info' &&
     code == 'deprecated_member_use' &&

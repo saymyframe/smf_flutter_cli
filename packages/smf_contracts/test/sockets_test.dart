@@ -627,10 +627,29 @@ void main() {
         ]),
         {
           'smf_router__args':
-              "theme: t,\nlocales: [Locale('en'), Locale('uk')],",
+              "theme: t,\nlocales: [\nLocale('en'),\nLocale('uk'),\n],",
         },
       );
       expect(args.render(const []), {'smf_router__args': ''});
+    });
+
+    test(
+        'puts each item of a list on a line of its own, so that an ignore '
+        'comment that starts an item covers the item', () {
+      expect(
+        args.render([
+          SocketContribution.arg(args, 'locales', const Fragment('a')),
+          SocketContribution.arg(
+            args,
+            'locales',
+            const Fragment('// ignore: deprecated_member_use\nb'),
+          ),
+        ]),
+        {
+          'smf_router__args':
+              'locales: [\na,\n// ignore: deprecated_member_use\nb,\n],',
+        },
+      );
     });
 
     test('names both contributors of two values of a scalar argument', () {

@@ -1141,8 +1141,8 @@ void main() {
               'darkTheme: ThemeData.dark(),\n'
               'themeMode: AppThemeMode.of(context),\n'
               'locale: AppLanguage.of(context),\n'
-              'localizationsDelegates: [AppLocalizations.delegate],\n'
-              "supportedLocales: [Locale('en')],",
+              'localizationsDelegates: [\nAppLocalizations.delegate,\n],\n'
+              "supportedLocales: [\nLocale('en'),\n],",
         },
       );
     });
@@ -1223,18 +1223,18 @@ void main() {
             // An item that it gives twice is in the list once.
             locales("Locale('en')", ofVariant),
           ]),
-          {socket.tag: "supportedLocales: [Locale('en'), Locale('uk')],"},
+          {socket.tag: "supportedLocales: [\nLocale('en'),\nLocale('uk'),\n],"},
         );
         // Contributions without an origin, as a test of a socket makes
         // them, are of one contributor.
         expect(
           socket.render([locales("Locale('en')"), locales("Locale('uk')")]),
-          {socket.tag: "supportedLocales: [Locale('en'), Locale('uk')],"},
+          {socket.tag: "supportedLocales: [\nLocale('en'),\nLocale('uk'),\n],"},
         );
         // The list of the template of a role, alone.
         expect(
           socket.render([locales('...appLocales', template)]),
-          {socket.tag: 'supportedLocales: [...appLocales],'},
+          {socket.tag: 'supportedLocales: [\n...appLocales,\n],'},
         );
       });
 
@@ -1291,7 +1291,7 @@ void main() {
           ]),
           {
             socket.tag: 'localizationsDelegates: '
-                '[A.delegate, B.delegate, C.delegate],',
+                '[\nA.delegate,\nB.delegate,\nC.delegate,\n],',
           },
         );
       });
@@ -2002,6 +2002,46 @@ void main() {
       expect(note.when, isEmpty);
       expect((note.entryValue! as AgentNote).isOfRole, isTrue);
       expect(socket.problemsWith(note), isEmpty);
+    });
+
+    test(
+        'tells that the app keeps the material library of Flutter and '
+        'ignores its deprecation, as the files of the template do', () {
+      const ignore = '// ignore: deprecated_member_use';
+      expect(
+        codeSpansOf(agentNoteOf(appEntryRole).text),
+        containsAll([
+          'MaterialApp',
+          'package:flutter/material.dart',
+          'package:flutter/cupertino.dart',
+          'GlobalMaterialLocalizations',
+          'GlobalCupertinoLocalizations',
+          ignore,
+          'package:material_ui',
+          'package:cupertino_ui',
+        ]),
+      );
+      final brick = appEntryRole.template
+          .contribute(testContext)
+          .whereType<BrickContribution>()
+          .single;
+      final ignored = <String>[];
+      for (final MapEntry(key: path, value: text)
+          in templatesOf(brick.bundle).entries) {
+        final lines = text.split('\n');
+        for (final (index, line) in lines.indexed) {
+          if (!line.startsWith("import 'package:flutter/material.dart'")) {
+            continue;
+          }
+          expect(lines[index - 1], ignore, reason: path);
+          ignored.add(path);
+        }
+      }
+      expect(ignored, [
+        AppEntryRole.failedStartFile,
+        AppEntryRole.statusBarIconsFile,
+        AppEntryRole.statusBarIconsTestFile,
+      ]);
     });
 
     test(

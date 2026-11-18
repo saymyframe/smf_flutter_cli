@@ -29,7 +29,10 @@ sealed class StateData {
 ///     ),
 ///     type: TypeRef(
 ///       'ThemeMode',
-///       import: ImportRef('package:flutter/material.dart'),
+///       import: ImportRef(
+///         'package:flutter/material.dart',
+///         ignore: ['deprecated_member_use'],
+///       ),
 ///     ),
 ///     description: 'The theme mode that the user selected; '
 ///         '`appThemeMode.choose()` changes it.',

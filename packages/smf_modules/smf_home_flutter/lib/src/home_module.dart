@@ -198,7 +198,11 @@ final class HomeModule extends SmfModule {
                 icon: Fragment(
                   'Icons.home',
                   imports: [
-                    ImportRef('package:flutter/material.dart', show: ['Icons']),
+                    ImportRef(
+                      'package:flutter/material.dart',
+                      show: ['Icons'],
+                      ignore: ['deprecated_member_use'],
+                    ),
                   ],
                 ),
               ),

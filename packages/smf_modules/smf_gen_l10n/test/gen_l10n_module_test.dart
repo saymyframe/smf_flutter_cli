@@ -481,9 +481,12 @@ void main() {
         ],
         [
           ('gen_l10n', 'AppLocalizations.delegate'),
+          // Flutter 3.50 deprecates the localizations of Material and
+          // Cupertino, which the root keeps with an ignore.
           (
             'role:localization',
-            'flutter_localizations.GlobalMaterialLocalizations.delegate',
+            '// ignore: deprecated_member_use\n'
+                'flutter_localizations.GlobalMaterialLocalizations.delegate',
           ),
           (
             'role:localization',
@@ -491,7 +494,8 @@ void main() {
           ),
           (
             'role:localization',
-            'flutter_localizations.GlobalCupertinoLocalizations.delegate',
+            '// ignore: deprecated_member_use\n'
+                'flutter_localizations.GlobalCupertinoLocalizations.delegate',
           ),
         ],
       );
@@ -553,8 +557,8 @@ void main() {
       expect(header, '// ignore_for_file: deprecated_member_use');
       // Without the header, the analyzer reports both, as flutter analyze
       // of Flutter 3.50 does in an app whose l10n.yaml has none. The apps
-      // allow Flutter 3.44, so they cannot use material_ui and
-      // cupertino_ui, which need Flutter 3.47.
+      // keep the Material library of Flutter rather than material_ui and
+      // cupertino_ui.
       expect(
         (_yamlOf(withoutHeader)! as Map<String, Object?>).keys,
         isNot(contains('header')),

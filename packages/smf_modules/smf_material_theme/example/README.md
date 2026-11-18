@@ -18,7 +18,9 @@ Adding go_router: the only provider of the router role, which home requires.
 The module writes `lib/core/theme/app_theme.dart`:
 
 ```dart
+// ignore: deprecated_member_use
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The accent of the app, and the colour that `ColorScheme.fromSeed` derives

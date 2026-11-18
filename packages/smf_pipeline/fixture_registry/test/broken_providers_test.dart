@@ -638,6 +638,13 @@ void main() {
             isEmpty,
             reason: '$contractCase',
           );
+          // Its templates, as those of every fixture, ignore what Flutter
+          // 3.50 deprecates, so that its app fails only for its bug.
+          expect(
+            flutterDeprecationProblems(result.app!),
+            isEmpty,
+            reason: '$contractCase',
+          );
         }
       });
 

@@ -147,7 +147,10 @@ final class ThemeRole extends Role<NoDsl> {
     listenable: FunctionRef('themeModeListenable', import: _themeMode),
     type: TypeRef(
       'ThemeMode',
-      import: ImportRef('package:flutter/material.dart'),
+      import: ImportRef(
+        'package:flutter/material.dart',
+        ignore: ['deprecated_member_use'],
+      ),
     ),
     description: 'The theme mode that the user selected; '
         '`appThemeMode.choose()` changes it.',
