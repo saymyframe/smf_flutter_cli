@@ -21,8 +21,16 @@ enum OnConflict {
 ///
 /// The options of the roles in the registry are added next to them, so
 /// their names must differ from these; see [names].
+///
+/// An option with a value takes one, given once, an option of a role too,
+/// but for [modules] and [allowWarning], whose values add up. package:args
+/// keeps the last of two values of an option of one value without a word,
+/// so [addTo] declares each option with a value as one of several values,
+/// and [CreateRequest.fromArgs] refuses a second value of an option of one,
+/// also the same value again.
 abstract final class CreateOptions {
-  /// `-m`, `--modules`: the modules to add, separated by commas.
+  /// `-m`, `--modules`: the modules to add, separated by commas; the
+  /// modules of every `-m` add up.
   static const modules = 'modules';
 
   /// `--org`: the organization in reverse domain notation.
@@ -77,28 +85,33 @@ abstract final class CreateOptions {
   /// [parser].
   static void addTo(ArgParser parser, Iterable<Role> roles) {
     parser
-      ..addOption(
+      ..addMultiOption(
         modules,
         abbr: 'm',
         valueHelp: 'module,module',
+        // CreateRequest.parseModules splits them.
+        splitCommas: false,
         help: 'The modules to add, separated by commas. Modules they need '
             'are added too.',
       )
-      ..addOption(
+      ..addMultiOption(
         org,
         valueHelp: 'com.example',
+        splitCommas: false,
         help: 'The organization in reverse domain notation; it starts the '
             'application id.',
       )
-      ..addOption(
+      ..addMultiOption(
         output,
         abbr: 'o',
         valueHelp: 'directory',
-        defaultsTo: '.',
+        defaultsTo: const ['.'],
+        splitCommas: false,
         help: "The directory to create the app's own directory in.",
       )
-      ..addOption(
+      ..addMultiOption(
         onConflict,
+        splitCommas: false,
         allowed: [for (final value in OnConflict.values) value.name],
         allowedHelp: {
           OnConflict.prompt.name: 'Ask, in a terminal.',
@@ -107,7 +120,7 @@ abstract final class CreateOptions {
           OnConflict.copy.name: 'Create the app next to it.',
           OnConflict.cancel.name: 'Generate nothing and exit with code 1.',
         },
-        defaultsTo: OnConflict.prompt.name,
+        defaultsTo: [OnConflict.prompt.name],
         help: "What to do if the app's directory exists and is not empty.",
       )
       ..addFlag(
@@ -143,11 +156,13 @@ abstract final class CreateOptions {
       ..addFlag(dartFix, defaultsTo: true, hide: true);
     for (final role in roles) {
       for (final option in role.options) {
-        parser.addOption(
+        parser.addMultiOption(
           option.name,
           help: option.help,
           valueHelp: option.valueHelp,
           allowed: option.allowed,
+          // A list, such as the languages of --locales, is one value.
+          splitCommas: false,
         );
       }
     }
@@ -175,10 +190,11 @@ final class CreateRequest {
   /// Parses [results] of a parser set up with [CreateOptions.addTo] for
   /// [roles].
   ///
-  /// Throws an [SmfUsageException] for more than one app name, for a
-  /// module name that is not a valid id, and for a value of
-  /// `--allow-warning` that is not the code of a warning (see
-  /// [SmfIssue.isWarningCode]).
+  /// Throws an [SmfUsageException] for more than one app name, for an
+  /// option of one value, such as `--org` or an option of a role, that is
+  /// given more than once, for a module name that is not a valid id, and
+  /// for a value of `--allow-warning` that is not the code of a warning
+  /// (see [SmfIssue.isWarningCode]).
   factory CreateRequest.fromArgs(ArgResults results, Iterable<Role> roles) {
     if (results.rest.length > 1) {
       throw SmfUsageException(
@@ -195,12 +211,22 @@ final class CreateRequest {
         );
       }
     }
+    // The value of an option of one value, or its default; see
+    // CreateOptions.
+    String? once(String name) => switch (results.multiOption(name)) {
+          [] => null,
+          [final value] => value,
+          final values => throw SmfUsageException(
+              'Give one value of --$name, not ${values.length}: '
+              '${values.map((value) => '"$value"').join(', ')}.',
+            ),
+        };
     return CreateRequest(
       appName: results.rest.firstOrNull,
-      org: results.option(CreateOptions.org),
-      outputDirectory: results.option(CreateOptions.output) ?? '.',
+      org: once(CreateOptions.org),
+      outputDirectory: once(CreateOptions.output) ?? '.',
       onConflict: OnConflict.values.byName(
-        results.option(CreateOptions.onConflict) ?? OnConflict.prompt.name,
+        once(CreateOptions.onConflict) ?? OnConflict.prompt.name,
       ),
       strict: results.flag(CreateOptions.strict),
       allowedWarnings: Set.unmodifiable(allowedWarnings),
@@ -208,15 +234,13 @@ final class CreateRequest {
       skipExternalSetup: results.flag(CreateOptions.skipExternalSetup),
       input: results.flag(CreateOptions.input),
       dartFix: results.flag(CreateOptions.dartFix),
-      modules: switch (results.option(CreateOptions.modules)) {
-        null => null,
-        final value => parseModules(value),
-      },
+      modules: results.wasParsed(CreateOptions.modules)
+          ? parseModules(results.multiOption(CreateOptions.modules).join(','))
+          : null,
       roleOptions: {
         for (final role in roles)
           for (final option in role.options)
-            if (results.wasParsed(option.name))
-              option.name: results.option(option.name),
+            if (results.wasParsed(option.name)) option.name: once(option.name),
       },
     );
   }
@@ -256,8 +280,8 @@ final class CreateRequest {
   /// Whether to run the full `dart fix` on the generated app.
   final bool dartFix;
 
-  /// The modules given with `-m`, in order and without repeats, or `null`
-  /// if the option was not given.
+  /// The modules of every `-m`, in order and without repeats, or `null` if
+  /// the option was not given.
   final List<ModuleId>? modules;
 
   /// The values of the role options given on the command line, by option
