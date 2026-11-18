@@ -16,6 +16,52 @@ const _flutter = ImportRef('package:flutter/widgets.dart');
 const _zeta = ImportRef('package:zeta/zeta.dart');
 
 void main() {
+  test(
+      'adds an import above the ignore comment of the directive that it goes '
+      'before, which ignores what the analyzer reports on the line below it',
+      () {
+    expect(
+      _add(
+        "import 'package:flutter/foundation.dart';\n"
+        '// ignore: deprecated_member_use\n'
+        "import 'package:flutter/material.dart';\n"
+        '\n'
+        'void f() {}\n',
+        const [
+          ImportRef('package:flutter/gestures.dart'),
+          ImportRef('dart:async'),
+          ImportRef(
+            'package:flutter/cupertino.dart',
+            ignore: ['deprecated_member_use'],
+          ),
+        ],
+      ),
+      "import 'dart:async';\n"
+      '\n'
+      '// ignore: deprecated_member_use\n'
+      "import 'package:flutter/cupertino.dart';\n"
+      "import 'package:flutter/foundation.dart';\n"
+      "import 'package:flutter/gestures.dart';\n"
+      '// ignore: deprecated_member_use\n'
+      "import 'package:flutter/material.dart';\n"
+      '\n'
+      'void f() {}\n',
+    );
+    // In a file without imports, above the ignore comment of the first
+    // declaration, which covers the declaration.
+    expect(
+      _add(
+        '// ignore: deprecated_member_use\n'
+        'const a = 1;\n',
+        const [ImportRef('dart:async')],
+      ),
+      "import 'dart:async';\n"
+      '\n'
+      '// ignore: deprecated_member_use\n'
+      'const a = 1;\n',
+    );
+  });
+
   test('puts each import into its group, sorted', () {
     expect(
       _add(

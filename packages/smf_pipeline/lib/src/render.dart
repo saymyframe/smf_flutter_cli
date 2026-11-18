@@ -486,6 +486,7 @@ RenderedFile _withImports(
             import.import.resolveUri(appName),
             prefix: import.import.prefix,
             show: import.import.show,
+            ignore: import.import.ignore,
           ),
           import.contributor,
           fromHook: import.fromHook,

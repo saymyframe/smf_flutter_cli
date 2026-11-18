@@ -60,6 +60,15 @@ const _roleNoteReason = 'The note of a role tells what holds whichever '
     'takes a name of Dart or of Flutter for one of a package, pass it in '
     '`allowed` with the reason. $_convention';
 
+/// What the notes of the roles name that the check takes for a name of a
+/// module of the CLI, each with the reason why it is not one.
+const _allowed = {
+  'GlobalMaterialLocalizations': 'A class of flutter_localizations, which '
+      'the root of every app with the localization role names, so the check '
+      'finds it only in files that import what gen-l10n writes.',
+  'GlobalCupertinoLocalizations': 'The same.',
+};
+
 /// The apps of the cases of every module and of every role of [modules],
 /// and their apps with every module, which have each role that the modules
 /// can bring together.
@@ -218,6 +227,7 @@ List<String> _namedWith(
       AppEntryRole.agentSections,
       textOf: (note) =>
           note.text == target ? '${note.text}\n$sentence' : note.text,
+      allowed: _allowed,
     ))
       named.firstMatch(line)![1]!,
   ];
@@ -797,6 +807,7 @@ void main() {
           results,
           AppEntryRole.agentSections,
           textOf: (note) => note.text,
+          allowed: _allowed,
         ),
         isEmpty,
         reason: _roleNoteReason,

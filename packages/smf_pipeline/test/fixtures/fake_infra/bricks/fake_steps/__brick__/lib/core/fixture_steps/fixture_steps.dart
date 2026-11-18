@@ -1,5 +1,6 @@
 import 'dart:async';
 
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The steps of the onboarding of the fixture whose action ran, in the

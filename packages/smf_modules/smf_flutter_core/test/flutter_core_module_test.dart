@@ -1040,7 +1040,7 @@ void main() {
         contains('RepaintBoundary(child: const App()),'),
       );
       final app = texts['lib/app.dart']!;
-      expect(app, contains("supportedLocales: [Locale('en')],"));
+      expect(app, contains("supportedLocales: [\nLocale('en'),\n],"));
       // The widget of the module is around that of the template of the
       // role, which is around the content of the routes.
       final builder = _namedOf(

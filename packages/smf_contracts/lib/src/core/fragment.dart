@@ -78,22 +78,31 @@ final class Fragment {
 ///
 /// Two imports are the same import when they have the same URI and prefix;
 /// the pipeline merges them into one directive and unites their [show]
-/// lists. Hiding names is not supported, because a merged import could not
-/// hide a name that another fragment uses.
+/// lists and their [ignore] lists. Hiding names is not supported, because a
+/// merged import could not hide a name that another fragment uses.
 @immutable
 final class ImportRef {
-  /// Imports [uri], a `dart:` or `package:` URI, optionally with a [prefix]
-  /// and only the names in [show].
-  const ImportRef(this.uri, {this.prefix, this.show = const []})
-      : isAppFile = false;
+  /// Imports [uri], a `dart:` or `package:` URI, optionally with a [prefix],
+  /// only the names in [show], and an `// ignore:` comment of the codes in
+  /// [ignore] on the line above the directive.
+  const ImportRef(
+    this.uri, {
+    this.prefix,
+    this.show = const [],
+    this.ignore = const [],
+  }) : isAppFile = false;
 
   /// Imports a file of the generated app by its [path] below `lib/`, such
   /// as `core/app/fallback_start_screen.dart`.
   ///
   /// The pipeline turns it into a `package:` URI with the app's package
   /// name, which modules do not need to know.
-  const ImportRef.app(String path, {this.prefix, this.show = const []})
-      : uri = path,
+  const ImportRef.app(
+    String path, {
+    this.prefix,
+    this.show = const [],
+    this.ignore = const [],
+  })  : uri = path,
         isAppFile = true;
 
   /// The imported URI, or the path below `lib/` of an [ImportRef.app].
@@ -106,26 +115,38 @@ final class ImportRef {
   /// import all names.
   final List<String> show;
 
+  /// The codes of the diagnostics that the analyzer does not report for
+  /// the directive, such as `deprecated_member_use` for
+  /// `package:flutter/material.dart`, which Flutter 3.50 deprecates: the
+  /// directive gets an `// ignore:` comment of them on the line above it.
+  /// Empty for none.
+  final List<String> ignore;
+
   /// Whether this imports a file of the generated app; see [ImportRef.app].
   final bool isAppFile;
 
   static final RegExp _identifier = RegExp(r'^[a-zA-Z_$][a-zA-Z0-9_$]*$');
 
+  static final RegExp _code = RegExp(r'^[a-z][a-z0-9_]*$');
+
   /// This import with [prefix] instead of its own prefix and without a
   /// `show` combinator, such as a template's own prefix for the file of
   /// another module, which keeps the names of that file apart from its own.
   ImportRef withPrefix(String prefix) => isAppFile
-      ? ImportRef.app(uri, prefix: prefix)
-      : ImportRef(uri, prefix: prefix);
+      ? ImportRef.app(uri, prefix: prefix, ignore: ignore)
+      : ImportRef(uri, prefix: prefix, ignore: ignore);
 
   /// The URI of the import in an app whose package is named [appName].
   String resolveUri(String appName) =>
       isAppFile ? 'package:$appName/$uri' : uri;
 
   /// The import directive in an app whose package is named [appName], such
-  /// as `import 'package:go_router/go_router.dart' as go show GoRouter;`.
+  /// as `import 'package:go_router/go_router.dart' as go show GoRouter;`,
+  /// after a line with the `// ignore:` comment of [ignore], if any.
   String toDirective(String appName) {
-    final buffer = StringBuffer("import '${resolveUri(appName)}'");
+    final buffer = StringBuffer();
+    if (ignore.isNotEmpty) buffer.writeln('// ignore: ${ignore.join(', ')}');
+    buffer.write("import '${resolveUri(appName)}'");
     if (prefix != null) buffer.write(' as $prefix');
     if (show.isNotEmpty) buffer.write(' show ${show.join(', ')}');
     buffer.write(';');
@@ -162,6 +183,14 @@ final class ImportRef {
         );
       }
     }
+    for (final code in ignore) {
+      if (!_code.hasMatch(code)) {
+        problems.add(
+          'The ignored code "$code" of "$uri" is not the code of a '
+          'diagnostic, such as deprecated_member_use.',
+        );
+      }
+    }
     return problems;
   }
 
@@ -169,7 +198,8 @@ final class ImportRef {
   /// package is named [appName].
   ///
   /// Imports of the same URI with the same prefix become one: the result
-  /// shows the union of their names, or all names if any of them shows all.
+  /// shows the union of their names, or all names if any of them shows all,
+  /// and ignores the union of their codes.
   /// The result is sorted like `directives_ordering` expects: `dart:`
   /// imports first, then `package:` imports, each by URI and then prefix.
   static List<ImportRef> merge(
@@ -177,8 +207,10 @@ final class ImportRef {
     required String appName,
   }) {
     final shown = <(String, String?), Set<String>?>{};
+    final ignored = <(String, String?), Set<String>>{};
     for (final import in imports) {
       final key = (import.resolveUri(appName), import.prefix);
+      (ignored[key] ??= {}).addAll(import.ignore);
       if (!shown.containsKey(key)) {
         shown[key] = import.show.isEmpty ? null : {...import.show};
       } else if (import.show.isEmpty) {
@@ -194,6 +226,7 @@ final class ImportRef {
           uri,
           prefix: prefix,
           show: names == null ? const [] : (names.toList()..sort()),
+          ignore: ignored[(uri, prefix)]!.toList()..sort(),
         ),
     ];
     return merged..sort(_compareDirectives);
@@ -215,10 +248,17 @@ final class ImportRef {
       other.uri == uri &&
       other.isAppFile == isAppFile &&
       other.prefix == prefix &&
-      _sameNames(other.show, show);
+      _sameNames(other.show, show) &&
+      _sameNames(other.ignore, ignore);
 
   @override
-  int get hashCode => Object.hash(uri, isAppFile, prefix, Object.hashAll(show));
+  int get hashCode => Object.hash(
+        uri,
+        isAppFile,
+        prefix,
+        Object.hashAll(show),
+        Object.hashAll(ignore),
+      );
 
   static bool _sameNames(List<String> a, List<String> b) {
     if (a.length != b.length) return false;

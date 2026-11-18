@@ -18,6 +18,7 @@ Adding shared_preferences: the only provider of the preferences role, which mate
 The module writes `lib/features/settings/settings_screen.dart`:
 
 ```dart
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:my_app/core/theme/theme_mode_setting.dart' as entry0;
 

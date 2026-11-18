@@ -2335,8 +2335,13 @@ void main() {
         'package:flutter_localizations/flutter_localizations.dart',
         prefix: 'flutter_localizations',
       );
-      String delegateOf(String kind) =>
-          'flutter_localizations.Global${kind}Localizations.delegate';
+      // Flutter 3.50 deprecates the localizations of Material and
+      // Cupertino, which the root of the app keeps, and their delegates
+      // start with an ignore of the deprecation, on a line of its own.
+      String delegateOf(String kind) => [
+            if (kind != 'Widgets') '// ignore: deprecated_member_use\n',
+            'flutter_localizations.Global${kind}Localizations.delegate',
+          ].join();
 
       final wrapper = sockets
           .singleWhere((socket) => socket.socket == AppEntryRole.rootWrappers)
@@ -2465,7 +2470,7 @@ class $name {
 
       expect(
         AppEntryRole.appArgs.render([ofRole]),
-        {AppEntryRole.appArgs.tag: 'supportedLocales: [...appLocales],'},
+        {AppEntryRole.appArgs.tag: 'supportedLocales: [\n...appLocales,\n],'},
       );
       // The module contributes before the template of the role, and is
       // the one that the conflict is reported to.

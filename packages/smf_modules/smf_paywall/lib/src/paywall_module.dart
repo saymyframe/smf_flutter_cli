@@ -180,7 +180,12 @@ final class PaywallModule extends SmfModule {
     stage: OnboardingStage.offer,
     icon: Fragment(
       'Icons.workspace_premium_outlined',
-      imports: [ImportRef('package:flutter/material.dart')],
+      imports: [
+        ImportRef(
+          'package:flutter/material.dart',
+          ignore: ['deprecated_member_use'],
+        ),
+      ],
     ),
     title: stepTitle,
     text: stepText,

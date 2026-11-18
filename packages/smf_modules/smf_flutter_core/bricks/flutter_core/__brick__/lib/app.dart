@@ -1,3 +1,4 @@
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 {{#has_router}}import 'core/router/app_router.dart';{{/has_router}}{{^has_router}}import 'core/app/fallback_start_screen.dart';{{/has_router}}

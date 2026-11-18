@@ -120,7 +120,11 @@ final class SettingsModule extends SmfModule {
                 icon: Fragment(
                   'Icons.settings',
                   imports: [
-                    ImportRef('package:flutter/material.dart', show: ['Icons']),
+                    ImportRef(
+                      'package:flutter/material.dart',
+                      show: ['Icons'],
+                      ignore: ['deprecated_member_use'],
+                    ),
                   ],
                 ),
               ),

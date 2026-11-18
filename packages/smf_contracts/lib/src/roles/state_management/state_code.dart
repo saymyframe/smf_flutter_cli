@@ -41,10 +41,9 @@ final class SharedStateCode {
         if (entry.type.import case final ofType?) ofType,
         entry.listenable.import,
       ]) {
-        _prefixes.putIfAbsent(
-          import.resolveUri(appName),
-          () => 'state${_prefixes.length}',
-        );
+        final uri = import.resolveUri(appName);
+        _prefixes.putIfAbsent(uri, () => 'state${_prefixes.length}');
+        (_ignores[uri] ??= {}).addAll(import.ignore);
       }
     }
   }
@@ -55,11 +54,20 @@ final class SharedStateCode {
   /// app, in the order they were given.
   final Map<String, String> _prefixes = {};
 
+  /// The codes that the imports of the libraries of the entries ignore, by
+  /// their URIs in the app (see [ImportRef.ignore]).
+  final Map<String, Set<String>> _ignores = {};
+
   /// The imports of the libraries of the types and functions of the
-  /// entries, each once with its prefix, in the order of the prefixes.
+  /// entries, each once with its prefix and the codes that any import of
+  /// it ignores, in the order of the prefixes.
   List<ImportRef> get imports => [
         for (final MapEntry(key: uri, value: prefix) in _prefixes.entries)
-          ImportRef(uri, prefix: prefix),
+          ImportRef(
+            uri,
+            prefix: prefix,
+            ignore: _ignores[uri]!.toList()..sort(),
+          ),
       ];
 
   /// The import directives of the file: [imports] and [own], the imports of
@@ -73,15 +81,16 @@ final class SharedStateCode {
 
   /// The directive of [import] on one line, or with its combinators on a
   /// line of their own when that line would be longer than `dart format`
-  /// keeps it.
+  /// keeps it, after the line of its ignore comment, if it has one.
   String _directiveOf(ImportRef import) {
-    final line = import.toDirective(_appName);
+    final lines = import.toDirective(_appName).split('\n');
+    final line = lines.removeLast();
     if (line.length <= _lineLength ||
         (import.prefix == null && import.show.isEmpty)) {
-      return line;
+      return [...lines, line].join('\n');
     }
     final uri = "import '${import.uri}'";
-    return '$uri\n    ${line.substring(uri.length + 1)}';
+    return [...lines, '$uri\n    ${line.substring(uri.length + 1)}'].join('\n');
   }
 
   /// The type of the value of [entry], one of the entries of this code, as

@@ -14,12 +14,20 @@ const _flutterLocalizations = ImportRef(
 );
 
 /// The delegates of Flutter's own localizations, which support every
-/// language that Flutter's widgets are translated into.
+/// language that Flutter's widgets are translated into. Flutter 3.50
+/// deprecates those of Material and Cupertino for the classes of the same
+/// names of material_ui and cupertino_ui, whose widgets the root of the app
+/// does not build, so the root keeps them and ignores the deprecation.
 const _flutterDelegates = [
-  'flutter_localizations.GlobalMaterialLocalizations.delegate',
+  '${_ignored}flutter_localizations.GlobalMaterialLocalizations.delegate',
   'flutter_localizations.GlobalWidgetsLocalizations.delegate',
-  'flutter_localizations.GlobalCupertinoLocalizations.delegate',
+  '${_ignored}flutter_localizations.GlobalCupertinoLocalizations.delegate',
 ];
+
+/// The line before a delegate of [_flutterDelegates] that Flutter 3.50
+/// deprecates: the comment that ignores the deprecation for the line below
+/// it, which an item of a list of the root has to itself.
+const _ignored = '// ignore: deprecated_member_use\n';
 
 /// The key of the `Info.plist` of the iOS app with the languages of the
 /// app.

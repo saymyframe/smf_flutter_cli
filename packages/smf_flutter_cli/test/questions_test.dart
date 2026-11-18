@@ -922,7 +922,7 @@ void main() {
       allOf(
         contains('locale: AppLocaleScope.of(context),'),
         contains('AppLocalizations.delegate,'),
-        contains('supportedLocales: [...appLocales],'),
+        contains('supportedLocales: [\n...appLocales,\n],'),
       ),
     );
     expect(

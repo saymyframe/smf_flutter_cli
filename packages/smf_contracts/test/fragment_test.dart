@@ -161,6 +161,47 @@ void main() {
       );
     });
 
+    test(
+        'renders an ignore comment of its codes on the line above the '
+        'directive, which keeps it with a prefix', () {
+      const material = ImportRef(
+        'package:flutter/material.dart',
+        show: ['Icons'],
+        ignore: ['deprecated_member_use'],
+      );
+
+      expect(
+        material.toDirective('app'),
+        '// ignore: deprecated_member_use\n'
+        "import 'package:flutter/material.dart' show Icons;",
+      );
+      expect(
+        const ImportRef.app('a.dart', ignore: ['a', 'b']).toDirective('app'),
+        "// ignore: a, b\nimport 'package:app/a.dart';",
+      );
+      expect(
+        material.withPrefix('m'),
+        const ImportRef(
+          'package:flutter/material.dart',
+          prefix: 'm',
+          ignore: ['deprecated_member_use'],
+        ),
+      );
+      expect(material.problems(), isEmpty);
+      expect(
+        material,
+        isNot(
+          const ImportRef('package:flutter/material.dart', show: ['Icons']),
+        ),
+      );
+      expect(
+        const ImportRef('package:a/a.dart', ignore: ['Deprecated member'])
+            .problems()
+            .single,
+        contains('"Deprecated member"'),
+      );
+    });
+
     test('describes itself', () {
       expect('${const ImportRef('dart:io')}', 'ImportRef(dart:io)');
       expect('${const ImportRef.app('a.dart')}', 'ImportRef.app(a.dart)');
@@ -197,6 +238,24 @@ void main() {
           const ImportRef('package:a/a.dart'),
         ]);
       }
+    });
+
+    test('ignores the codes of each of the imports it merges', () {
+      expect(
+        ImportRef.merge(
+          const [
+            ImportRef('package:a/a.dart', show: ['A']),
+            ImportRef('package:a/a.dart', ignore: ['b', 'a']),
+            ImportRef('package:a/a.dart', ignore: ['a']),
+            ImportRef('package:a/a.dart', prefix: 'a'),
+          ],
+          appName: 'app',
+        ),
+        const [
+          ImportRef('package:a/a.dart', ignore: ['a', 'b']),
+          ImportRef('package:a/a.dart', prefix: 'a'),
+        ],
+      );
     });
 
     test('keeps different prefixes of one URI apart', () {

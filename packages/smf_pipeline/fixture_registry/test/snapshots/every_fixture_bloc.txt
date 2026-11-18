@@ -177,6 +177,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- The root of the app is a `MaterialApp` of Flutter's own Material library, `package:flutter/material.dart`, and the screens are written for it. Flutter 3.50 deprecates that library, `package:flutter/cupertino.dart` and their localizations, `GlobalMaterialLocalizations` and `GlobalCupertinoLocalizations`, for `package:material_ui` and `package:cupertino_ui`, while the app also allows older Flutter. So each import of the two libraries, and each name of the two localizations, has `// ignore: deprecated_member_use` on the line above it: `flutter analyze` finds no issue on any Flutter that the app allows, and `dart fix` leaves the code as it is. Do the same in new code. Move no file to `package:material_ui` or `package:cupertino_ui`, also not through `dart fix`: their widgets find neither the theme nor the localizations of this root.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 - The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
@@ -1031,6 +1032,7 @@ import 'package:fixture_app/core/l10n/app_locale.dart';
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/theme/app_theme.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'
     as flutter_localizations;
@@ -1051,8 +1053,10 @@ class App extends StatelessWidget {
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
       FixtureTexts.delegate,
+      // ignore: deprecated_member_use
       flutter_localizations.GlobalMaterialLocalizations.delegate,
       flutter_localizations.GlobalWidgetsLocalizations.delegate,
+      // ignore: deprecated_member_use
       flutter_localizations.GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: [...appLocales],
@@ -1281,6 +1285,7 @@ final class _AnalyticsServices implements AnalyticsService {
 }
 === lib/core/app/failed_start.dart (role:app_entry) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'status_bar_icons.dart';
@@ -1398,6 +1403,7 @@ class _FailedStartScreen extends StatelessWidget {
   }
 }
 === lib/core/app/status_bar_icons.dart (role:app_entry) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5013,6 +5019,7 @@ void restoreFixtureSetting(AppPreferences preferences) {
 === lib/core/fixture_sign_in_method/fixture_sign_in_method.dart (fake_sign_in_method) ===
 import 'dart:convert';
 
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../auth/app_session.dart';
@@ -5093,6 +5100,7 @@ Future<void> startFixtureOrFail() async {
 === lib/core/fixture_steps/fixture_steps.dart (fake_steps) ===
 import 'dart:async';
 
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The steps of the onboarding of the fixture whose action ran, in the
@@ -5960,6 +5968,7 @@ import 'package:fixture_app/core/fixture_steps/fixture_steps.dart' as step0;
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/notifications/notifications_step.dart'
     as step1;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -9941,6 +9950,7 @@ import 'package:fixture_app/features/fake_second/fixture_outside_screen.dart'
 import 'package:fixture_app/features/fake_second/fixture_second_screen.dart'
     as screen2;
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_router.dart';
@@ -10884,6 +10894,7 @@ final class FakeOnboardingRoutes {
 import 'dart:math' as math;
 
 import 'package:fixture_app/core/l10n/l10n.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'app_router.dart';
@@ -11174,6 +11185,7 @@ import 'package:fixture_app/core/remote_config/app_remote_config.dart'
 import 'package:fixture_app/core/remote_config/remote_values.dart' as state8;
 import 'package:fixture_app/core/state/fixture_listenable_cubit.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart' as state3;
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart' as state2;
 import 'package:flutter/widgets.dart'
     show BuildContext, StatelessWidget, Widget;
@@ -11256,6 +11268,7 @@ final class FixtureStateBridges extends StatelessWidget {
   );
 }
 === lib/core/theme/app_theme.dart (fake_theme) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The colour that the themes of the fixture derive their colours from: one
@@ -11302,6 +11315,7 @@ ThemeData _themeOf(BuildContext context, Brightness brightness) => ThemeData(
 );
 === lib/core/theme/theme_mode.dart (role:theme) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../preferences/app_preferences.dart';
@@ -11416,6 +11430,7 @@ class FixtureCubit extends Cubit<int> {
 }
 === lib/features/fake_feature/fixture_details_screen.dart (fake_feature (fake_bloc)) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -11450,6 +11465,7 @@ class FixtureDetailsScreen extends StatelessWidget {
 }
 === lib/features/fake_feature/fixture_home_screen.dart (fake_feature) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/router/navigation.dart';
@@ -11484,6 +11500,7 @@ class FixtureHomeScreen extends StatelessWidget {
 }
 === lib/features/fake_gate/fixture_gate_screens.dart (fake_gate) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The screen that the first guard of the fixture shows in place of the
@@ -11633,6 +11650,7 @@ final ValueNotifier<bool> fixtureLateGate = ValueNotifier(true);
 ValueListenable<bool> fixtureLateGateOpen() => fixtureLateGate;
 === lib/features/fake_late_gate/fixture_late_gate_screen.dart (fake_late_gate) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The screen that the guard of the fixture shows in place of the other
@@ -11647,6 +11665,7 @@ class FixtureLateGateScreen extends StatelessWidget {
 }
 === lib/features/fake_onboarding/fixture_onboarding_screen.dart (fake_onboarding) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import '../../core/onboarding/onboarding_steps.dart';
@@ -11784,6 +11803,7 @@ class _StepPage extends StatelessWidget {
 }
 === lib/features/fake_second/fixture_members_screens.dart (fake_second) ===
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature for the holders of a badge: its
@@ -11846,6 +11866,7 @@ class FixtureLoungeSeatScreen extends StatelessWidget {
 === lib/features/fake_second/fixture_outside_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// A screen of the second fixture feature outside the main navigation,
@@ -11863,6 +11884,7 @@ class FixtureOutsideScreen extends StatelessWidget {
 === lib/features/fake_second/fixture_second_screen.dart (fake_second) ===
 import 'package:fixture_app/core/l10n/l10n.dart';
 import 'package:fixture_app/core/router/fixture_annotations.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// The screen of the second fixture feature, which can start the app too,
@@ -11882,6 +11904,7 @@ import 'package:fixture_app/core/state/fixture_state_cubits.dart'
     show FixtureStateBridges;
 import 'package:fixture_app/core/theme/app_theme.dart';
 import 'package:fixture_app/core/theme/theme_mode.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
@@ -11953,6 +11976,7 @@ flutter:
         - asset: "fonts/FixtureSans.ttf"
           weight: 400
 === test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

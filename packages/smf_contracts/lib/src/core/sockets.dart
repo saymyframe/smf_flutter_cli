@@ -142,6 +142,11 @@ final class ArgsSocket extends SocketKind {
     final byName = _byArgument(c);
     String codes(List<SocketContribution> items) =>
         items.map((item) => item.fragment!.code).join(', ');
+    // Each item of a list on a line of its own, so that an item may start
+    // with a comment of its own, such as an `// ignore:` comment, which the
+    // analyzer applies to the line below it.
+    String lines(List<SocketContribution> items) =>
+        items.map((item) => '${item.fragment!.code},\n').join();
     return {
       socket.tag: [
         for (final MapEntry(key: name, value: shape) in args.entries)
@@ -149,7 +154,7 @@ final class ArgsSocket extends SocketKind {
             if (shape == ArgShape.scalar)
               '$name: ${codes(items)},'
             else
-              '$name: [${codes(items)}],',
+              '$name: [\n${lines(items)}],',
       ].join('\n'),
     };
   }

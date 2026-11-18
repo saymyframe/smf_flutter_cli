@@ -250,19 +250,41 @@ String _missingVariant(SmfModule module, SmfModule provider, Role role) =>
     'the $role';
 
 void main() {
-  test('every module follows the rules of its roles in every app', () async {
-    final results =
-        await ContractHarness(ModuleRegistry(smfModules)).checkAll();
+  group('the apps of every module', () {
+    late List<ContractResult> results;
 
-    expect(results, isNotEmpty);
-    for (final result in results) {
+    setUpAll(() async {
+      results = await ContractHarness(ModuleRegistry(smfModules)).checkAll();
+    });
+
+    test('follow the rules of the roles of their modules', () {
+      expect(results, isNotEmpty);
+      for (final result in results) {
+        expect(
+          result.errors.map((issue) => '$issue'),
+          isEmpty,
+          reason: '$result',
+        );
+        expect(result.app, isNotNull, reason: '$result');
+      }
+    });
+
+    test(
+        'ignore what Flutter 3.50 deprecates of its material and cupertino '
+        'libraries, so that flutter analyze finds no issue in an app on '
+        'every Flutter that the apps allow, and dart fix of Flutter 3.50 '
+        'leaves the app on the material library of its root', () {
       expect(
-        result.errors.map((issue) => '$issue'),
+        {
+          for (final result in results)
+            if (result.app case final app?) ...flutterDeprecationProblems(app),
+        },
         isEmpty,
-        reason: '$result',
+        reason: 'Put // ignore: deprecated_member_use on the line above '
+            'each, or import the library of a fragment with '
+            "ImportRef(..., ignore: ['deprecated_member_use']).",
       );
-      expect(result.app, isNotNull, reason: '$result');
-    }
+    });
   });
 
   test(

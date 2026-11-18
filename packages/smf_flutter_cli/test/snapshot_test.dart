@@ -154,6 +154,10 @@ Future<void> main() async {
         ),
       );
       expect(result.errors.map((issue) => '$issue'), isEmpty);
+      // As every app of the contract harness, it ignores what Flutter 3.50
+      // deprecates, also in what only an app with every module has, such
+      // as the bridges of the state of the roles.
+      expect(flutterDeprecationProblems(result.app!), isEmpty);
 
       final snapshot = _snapshotOf(result.app!, appEntry);
       final file = File('${_directory.path}/${_fileNameOf(app)}');

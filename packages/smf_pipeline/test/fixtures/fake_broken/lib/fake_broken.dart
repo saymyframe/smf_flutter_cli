@@ -1303,7 +1303,8 @@ final class BrokenModule extends SmfModule {
     [
       (
         "import '../review/review_service.dart';\n",
-        "import 'package:flutter/material.dart';\n"
+        '// ignore: deprecated_member_use\n'
+            "import 'package:flutter/material.dart';\n"
             '\n'
             "import '../review/review_service.dart';\n",
       ),

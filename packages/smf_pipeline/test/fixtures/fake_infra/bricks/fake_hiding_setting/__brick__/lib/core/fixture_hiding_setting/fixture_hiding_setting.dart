@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 /// Whether the settings screen of the app shows [FixtureHidingSetting]: on

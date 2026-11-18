@@ -35,7 +35,10 @@ import 'package:fake_infra/bundles/fake_steps_bundle.dart';
 import 'package:fake_infra/bundles/fake_theme_bundle.dart';
 import 'package:smf_contracts/smf_contracts.dart';
 
-const _material = ImportRef('package:flutter/material.dart');
+const _material = ImportRef(
+  'package:flutter/material.dart',
+  ignore: ['deprecated_member_use'],
+);
 const _foundation = ImportRef('package:flutter/foundation.dart');
 
 /// The delegate of the texts of the Material widgets of Flutter, which are
@@ -44,6 +47,7 @@ const _foundation = ImportRef('package:flutter/foundation.dart');
 /// localization role as that template writes it, with the same prefix, so
 /// the root of an app with both has it once.
 const _materialDelegate = Fragment(
+  '// ignore: deprecated_member_use\n'
   'flutter_localizations.GlobalMaterialLocalizations.delegate',
   imports: [
     ImportRef(
@@ -883,7 +887,12 @@ final class FakeStepsModule extends SmfModule {
     translations: {'uk': 'Підтвердити'},
   );
 
-  static const _icons = [ImportRef('package:flutter/material.dart')];
+  static const _icons = [
+    ImportRef(
+      'package:flutter/material.dart',
+      ignore: ['deprecated_member_use'],
+    ),
+  ];
 
   @override
   ModuleDescriptor get descriptor => const ModuleDescriptor(

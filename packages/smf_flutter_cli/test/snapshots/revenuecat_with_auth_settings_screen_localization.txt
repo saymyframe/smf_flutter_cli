@@ -155,6 +155,7 @@ The app is plain Flutter code that nothing regenerates. Change it by hand, unles
 
 - `main()` in `lib/main.dart` initializes the binding, awaits `bootstrap()` and calls `runApp()`, in this order. When `bootstrap()` throws, `main()` calls `showFailedStart()` of `lib/core/app/failed_start.dart` and returns: the app shows `FailedStartApp`, with the error in a debug build, and the error reaches `FlutterError.onError`. Keep the `try` around `await bootstrap()` in `main()`. Start-up code goes into `bootstrap()`. Do not catch an error there just to let the app start: fix what the error names, such as a step of the setup that has not run.
 - `bootstrap()` in `lib/bootstrap.dart` runs before the first frame, in four phases: what must come before anything else, then the platform services, then the services of the app, then what needs them. Put a new statement into its phase, and import neither `package:flutter/material.dart` nor `package:flutter/cupertino.dart` there.
+- The root of the app is a `MaterialApp` of Flutter's own Material library, `package:flutter/material.dart`, and the screens are written for it. Flutter 3.50 deprecates that library, `package:flutter/cupertino.dart` and their localizations, `GlobalMaterialLocalizations` and `GlobalCupertinoLocalizations`, for `package:material_ui` and `package:cupertino_ui`, while the app also allows older Flutter. So each import of the two libraries, and each name of the two localizations, has `// ignore: deprecated_member_use` on the line above it: `flutter analyze` finds no issue on any Flutter that the app allows, and `dart fix` leaves the code as it is. Do the same in new code. Move no file to `package:material_ui` or `package:cupertino_ui`, also not through `dart fix`: their widgets find neither the theme nor the localizations of this root.
 - Put code that features share into `lib/core/<concern>/`, one directory for each concern. Put a feature, with its screens and their state, into `lib/features/<feature>/`.
 - The root of the app asks the system for the icons of the status bar that suit the theme, around every screen, with `StatusBarIcons` of `lib/core/app/status_bar_icons.dart`: dark icons on a light theme, light ones on a dark theme. A screen without an app bar needs no `AnnotatedRegion` for them. Add one only to a screen whose top has another brightness than the theme, such as a picture behind the status bar.
 - The app has the flavors `dev`, `staging` and `prod`. A `flutter` command without `--flavor` builds `dev`, in release mode too, so a build for a store takes `--flavor prod`. Code reads the flavor from `appFlavor` of `package:flutter/services.dart`. The app has one entry: add no `main_<flavor>.dart`.
@@ -809,6 +810,7 @@ use-escaping: false
 # flutter analyze from reporting them in the files that gen-l10n writes.
 header: '// ignore_for_file: deprecated_member_use'
 === lib/app.dart (flutter_core) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'
     as flutter_localizations;
@@ -829,8 +831,10 @@ class App extends StatelessWidget {
     locale: AppLocaleScope.of(context),
     localizationsDelegates: [
       AppLocalizations.delegate,
+      // ignore: deprecated_member_use
       flutter_localizations.GlobalMaterialLocalizations.delegate,
       flutter_localizations.GlobalWidgetsLocalizations.delegate,
+      // ignore: deprecated_member_use
       flutter_localizations.GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: [...appLocales],
@@ -859,6 +863,7 @@ Future<void> bootstrap() async {
 }
 === lib/core/app/failed_start.dart (role:app_entry) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 
 import 'status_bar_icons.dart';
@@ -976,6 +981,7 @@ class _FailedStartScreen extends StatelessWidget {
   }
 }
 === lib/core/app/fallback_start_screen.dart (flutter_core) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:my_app/core/l10n/l10n.dart';
@@ -1221,6 +1227,7 @@ class FallbackStartView extends StatelessWidget {
   }
 }
 === lib/core/app/status_bar_icons.dart (role:app_entry) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -3245,6 +3252,7 @@ extension AppTexts on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
 }
 === lib/core/l10n/language_setting.dart (role:localization) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
@@ -4459,6 +4467,7 @@ abstract interface class PurchasesService {
 }
 === lib/core/purchases/restore_purchases_setting.dart (role:purchases) ===
 import 'package:flutter/foundation.dart';
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
@@ -5620,6 +5629,7 @@ final class SettingsRoutes {
 === lib/core/router/not_found_screen.dart (role:router) ===
 import 'dart:math' as math;
 
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 
@@ -5877,6 +5887,7 @@ class _DashedEdge extends CustomPainter {
   bool shouldRepaint(_DashedEdge oldDelegate) => oldDelegate.color != color;
 }
 === lib/features/settings/settings_screen.dart (settings) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:my_app/core/l10n/l10n.dart';
 import 'package:my_app/core/l10n/language_setting.dart' as entry1;
@@ -6222,6 +6233,7 @@ flutter:
   uses-material-design: true
   generate: true
 === test/core/app/fallback_start_screen_test.dart (flutter_core) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6322,6 +6334,7 @@ void main() {
   });
 }
 === test/core/app/status_bar_icons_test.dart (role:app_entry) ===
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
