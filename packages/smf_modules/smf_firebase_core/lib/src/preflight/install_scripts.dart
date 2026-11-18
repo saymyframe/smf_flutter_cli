@@ -323,7 +323,8 @@ const _linux = r'''
 #
 # When Node.js is missing or older than 20, it installs its LTS version with
 # nvm in the home directory. When the global npm directory is outside the
-# home directory, it moves it to ~/.npm-global. It adds the directory of the
+# home directory, it moves it to ~/.npm-global, or, when nvm is installed,
+# installs the Firebase CLI alone there. It adds the directory of the
 # global npm executables to the PATH of new terminals, with a firebase
 # command in ~/.local/bin that runs the Firebase CLI with the Node.js that
 # installed it. It prints the directories of the Firebase CLI and of Node.js
@@ -333,6 +334,10 @@ set -euo pipefail
 
 # The version of the Node.js of nvm that the script chose, if it did.
 nvm_node=""
+
+# The global npm directory of the Firebase CLI alone, if the script chose
+# one rather than that of npm.
+cli_prefix=""
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
@@ -416,13 +421,32 @@ node_major_version() {
   echo "${version%%.*}"
 }
 
+# Whether nvm is installed: in $NVM_DIR, in ~/.nvm, or where its installer
+# puts it when XDG_CONFIG_HOME is set. While ~/.npmrc has a prefix, nvm
+# refuses to use a version of Node.js, also the default one in each new
+# terminal that loads it.
+nvm_installed() {
+  local dir
+  for dir in "${NVM_DIR:-}" "$HOME/.nvm" "${XDG_CONFIG_HOME:+$XDG_CONFIG_HOME/nvm}"; do
+    if [ -n "$dir" ] && [ -s "$dir/nvm.sh" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Moves the global npm directory to ~/.npm-global when it is outside the
-# home directory, so installing needs no sudo.
+# home directory, so installing needs no sudo: in ~/.npmrc, or, when nvm is
+# installed, for the Firebase CLI alone.
 use_npm_prefix_in_home() {
   local prefix
   prefix="$(npm config get prefix 2>/dev/null || true)"
   if [[ -z "$prefix" || "$prefix" == /usr* || "$prefix" != "$HOME"* ]]; then
     mkdir -p "$HOME/.npm-global"
+    if nvm_installed; then
+      cli_prefix="$HOME/.npm-global"
+      return
+    fi
     npm config set prefix "$HOME/.npm-global" >/dev/null
     echo "smf-note=Moved the global directory of npm to $HOME/.npm-global, in ~/.npmrc, so that it needs no sudo."
   fi
@@ -481,11 +505,17 @@ if ! firebase_runs; then
     load_nvm || true
   fi
   use_npm_prefix_in_home
-  npm install -g firebase-tools
+  if [ -n "$cli_prefix" ]; then
+    npm install -g --prefix "$cli_prefix" firebase-tools
+    echo "smf-note=Installed the Firebase CLI in $cli_prefix, without a prefix in ~/.npmrc, which nvm does not allow: update it with \"npm install -g --prefix ~/.npm-global firebase-tools\"."
+    npm_bin="$cli_prefix/bin"
+  else
+    npm install -g firebase-tools
+    npm_bin="$(npm prefix -g)/bin"
+  fi
   if [ -n "$nvm_node" ]; then
     echo "smf-note=Installed the Firebase CLI with Node.js $nvm_node of nvm."
   fi
-  npm_bin="$(npm prefix -g)/bin"
   # nvm puts the directory of its Node.js on the PATH itself.
   if ! path_contains "$npm_bin"; then
     add_to_path_of_new_terminals "$npm_bin"
