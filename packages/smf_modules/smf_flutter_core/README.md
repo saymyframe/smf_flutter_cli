@@ -25,7 +25,7 @@ SMF generates apps for Flutter 3.44 or newer and Dart 3.12 or newer. It is teste
 
 ## Updating the Flutter template
 
-The files in `bricks/flutter_core/__brick__` are those that `flutter create --platforms=android,ios --org com.example --no-pub my_app` writes with Flutter 3.44.2, with these changes:
+The files in `bricks/flutter_core/__brick__` are those that `flutter create --platforms=android,ios --org com.example --no-pub my_app` writes with Flutter 3.44.9, with these changes:
 
 - The names and ids come from the app. `CFBundleName` is its name in Pascal case. The Android namespace, application id and Kotlin package path, and the iOS bundle id are variables of the brick.
 - `android:label` is the placeholder `${appName}` and `CFBundleDisplayName` is `$(APP_DISPLAY_NAME)`, so each flavor has a name of its own on the device, the name of the app in title case with `Dev` or `Staging` after it, and without either for `prod`.
@@ -37,7 +37,7 @@ The files in `bricks/flutter_core/__brick__` are those that `flutter create --pl
 - The `.gitignore` at the root of the app ends with the tag of the patterns that the modules keep out of git, on a line of its own. A tag that gets nothing leaves no line, so an app without such a pattern has the `.gitignore` of `flutter create`.
 - `ios/Runner/AppDelegate.swift` holds two tags. The tag of the code that runs before the launch of the app finishes is in `application(_:didFinishLaunchingWithOptions:)`, before `return super.application(...)`. The tag of the code that needs the engine of the app, such as a method channel, is in `didInitializeImplicitFlutterEngine(_:)`, after `GeneratedPluginRegistrant.register(with:)`. Without such code the file is the one of `flutter create`.
 - `ios/Runner/Runner.entitlements` belongs to the brick. It holds the tag of the entitlements of the app and is empty when no module adds any. Every build configuration of the Runner target signs with it (`CODE_SIGN_ENTITLEMENTS`), and the Runner group of `project.pbxproj` refers to it, the way Xcode does when it adds a capability.
-- The Gradle wrapper takes Gradle 9.3.1 and `settings.gradle.kts` the Android Gradle plugin 9.1.1, later than those of Flutter 3.44.2. Flutter 3.50 fails the build of a project with older ones, and Flutter 3.44 builds with these too.
+- The Gradle wrapper takes Gradle 9.3.1 and `settings.gradle.kts` the Android Gradle plugin 9.1.1, later than those of Flutter 3.44.9. Flutter 3.50 fails the build of a project with older ones, and Flutter 3.44 builds with these too.
 - `lib/`, `test/`, `pubspec.yaml`, `README.md` and `analysis_options.yaml` are SMF's own.
 
 `gradlew`, `gradle-wrapper.jar`, `local.properties`, `.idea/` and the `.iml` files are left out: Flutter writes the Gradle wrapper when it builds the app, and the rest belongs to one machine.

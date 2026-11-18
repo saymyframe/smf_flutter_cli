@@ -34,7 +34,7 @@ This project and everyone participating in it is governed by our Code of Conduct
 
 ## Development setup
 
-CI pins Dart 3.12.2, and the output of the formatter depends on its version, so develop with that Dart, which Flutter 3.44.2 comes with.
+CI pins Dart 3.12.2, and the output of the formatter depends on its version, so develop with that Dart, which Flutter 3.44.9 comes with.
 
 1. Clone the repository
 2. Install Melos and the Mason CLI: `dart pub global activate melos` and `dart pub global activate mason_cli`
