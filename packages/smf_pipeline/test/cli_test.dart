@@ -174,6 +174,52 @@ void main() {
     expect(host.logger.infos.last, contains('Usage: smf create <app name>'));
   });
 
+  test(
+      'takes the modules of every -m, and stops at an option of one value '
+      'that is given twice', () async {
+    modules = [...modulesWith(), TestModule('second')];
+
+    expect(
+      await smf([
+        'create',
+        'my_app',
+        '-m',
+        'second',
+        '-m',
+        'extra',
+        '--explain',
+      ]),
+      SmfExitCodes.success,
+    );
+    expect(
+      host.logger.infos,
+      containsAllInOrder([
+        'Modules',
+        '  second: requested',
+        '  extra: requested',
+      ]),
+    );
+
+    expect(
+      await smf([
+        'create',
+        'my_app',
+        '--org',
+        'com.a',
+        '--org',
+        'com.b',
+        '--no-input',
+      ]),
+      SmfExitCodes.usage,
+    );
+    expect(
+      host.logger.errors.last,
+      'Give one value of --org, not 2: "com.a", "com.b".',
+    );
+    expect(host.logger.infos.last, contains('Usage: smf create <app name>'));
+    expect(created, isEmpty);
+  });
+
   test('the help of an unknown command is a usage error', () async {
     expect(await smf(['help', 'nope']), SmfExitCodes.usage);
     expect(

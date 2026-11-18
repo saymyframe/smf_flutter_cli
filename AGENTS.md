@@ -260,7 +260,7 @@ cd packages/smf_flutter_cli
 dart run bin/smf_flutter.dart create my_app -o /tmp/out --org com.example --no-input --on-conflict replace
 ```
 
-Modules are chosen with `-m`, and every option of `create` comes from the command line with `--no-input`. `--explain` prints what would be generated and whether the machine is ready, without changing anything.
+Modules are chosen with `-m`, whose modules add up when it is given more than once, and every option of `create` comes from the command line with `--no-input`. Every other option with a value takes one, an option of a role too, such as the mode option `--auth-mode`: package:args would keep the last of two values without a word, so `CreateOptions.addTo` declares each, by the options of the roles of the registry, as an option of several values, and `CreateRequest.fromArgs` stops at a second one with a usage error that names the option, also when the two values are the same. A flag given twice takes the last, as the `--dart-fix` that the Windows job of CI gives after the `--no-dart-fix` of the matrix. `--explain` prints what would be generated and whether the machine is ready, without changing anything.
 
 ## Generated files and templates
 

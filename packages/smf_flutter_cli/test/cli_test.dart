@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:smf_flutter_cli/smf_flutter_cli.dart';
 import 'package:smf_flutter_cli/src/banner.dart';
 import 'package:smf_flutter_cli/version.dart';
+import 'package:smf_pipeline/smf_pipeline.dart';
 import 'package:test/test.dart';
 
 /// A standard stream that records what is written to it.
@@ -89,6 +90,47 @@ void main() {
         'them.',
       ),
     );
+    expect(directory.listSync(), isEmpty);
+  });
+
+  test(
+      'stops at an option of a role of its modules that is given twice, a '
+      'mode option too', () async {
+    final directory = Directory.systemTemp.createTempSync('smf_cli_');
+    addTearDown(() => directory.deleteSync(recursive: true));
+    // The options of the roles of the registry, not a list of their names,
+    // so that the option of a role that comes later takes one value too.
+    final options = [
+      for (final role in ModuleRegistry(smfModules).roles) ...role.options,
+    ];
+    expect(options.where((option) => option.isMode), isNotEmpty);
+
+    for (final option in options) {
+      final [first, second, ...] = option.allowed ?? const ['a', 'b'];
+      // A run that took the last value would stop at the two state managers
+      // before it checks the machine or writes a file.
+      final (code, _, err) = await _smf([
+        'create',
+        'my_app',
+        '--no-input',
+        '-m',
+        'bloc,riverpod',
+        '-o',
+        directory.path,
+        '--${option.name}',
+        first,
+        '--${option.name}=$second',
+      ]);
+
+      expect(code, 64, reason: option.name);
+      expect(
+        err,
+        contains(
+          'Give one value of --${option.name}, not 2: "$first", "$second".',
+        ),
+        reason: option.name,
+      );
+    }
     expect(directory.listSync(), isEmpty);
   });
 

@@ -11,6 +11,7 @@ void main() {
     options: const [
       RoleOption(name: 'start', help: 'The start.', valueHelp: 'path'),
       RoleOption(name: 'mode', help: 'The mode.', allowed: ['a', 'b']),
+      RoleOption.mode(name: 'hours', help: 'The hours.', values: ['24', '12']),
     ],
   );
 
@@ -83,6 +84,75 @@ void main() {
 
   test('an empty -m asks for no modules', () {
     expect(parse(['-m', '']).modules, isEmpty);
+  });
+
+  test('takes the modules of every -m, in order and without repeats', () {
+    // A script may add the modules one at a time, as with args+=(-m "$m").
+    expect(
+      parse(['-m', 'home,dio', '--modules', 'get_it,home', '-m', '', '-mdio'])
+          .modules,
+      [
+        const ModuleId('home'),
+        const ModuleId('dio'),
+        const ModuleId('get_it'),
+      ],
+    );
+  });
+
+  test('refuses an option of one value that is given twice', () {
+    final parser = ArgParser();
+    CreateOptions.addTo(parser, [role]);
+    // The modules and the codes of warnings add up over their options. Every
+    // other option, and each option of a role, takes one value, which a
+    // second one would otherwise replace without a word.
+    const several = {CreateOptions.modules, CreateOptions.allowWarning};
+    final once = [
+      for (final option in parser.options.values)
+        if (!option.isFlag && !several.contains(option.name)) option,
+    ];
+    expect(
+      once.map((option) => option.name),
+      containsAll([
+        'org',
+        'output',
+        'on-conflict',
+        // A mode option of a role too, whose values make other apps.
+        for (final option in role.options) option.name,
+      ]),
+    );
+    expect(role.options.where((option) => option.isMode), isNotEmpty);
+    for (final option in once) {
+      final [first, second, ...] = option.allowed ?? const ['a', 'b'];
+      expect(
+        () => parse(['--${option.name}', first, '--${option.name}=$second']),
+        throwsA(
+          isA<SmfUsageException>().having(
+            (e) => e.message,
+            'message',
+            'Give one value of --${option.name}, not 2: "$first", "$second".',
+          ),
+        ),
+        reason: option.name,
+      );
+    }
+    // The same value twice, and through the abbreviation.
+    expect(
+      () => parse(['-o', '/my apps', '--output', '/my apps', '-o', 'x']),
+      throwsA(
+        isA<SmfUsageException>().having(
+          (e) => e.message,
+          'message',
+          'Give one value of --output, not 3: "/my apps", "/my apps", "x".',
+        ),
+      ),
+    );
+  });
+
+  test('a flag given twice takes the last', () {
+    // The Windows job of CI gives --dart-fix after the --no-dart-fix of the
+    // options of the matrix, to generate an app as a user does.
+    expect(parse(['--no-dart-fix', '--dart-fix']).dartFix, isTrue);
+    expect(parse(['--strict', '--strict']).strict, isTrue);
   });
 
   test('rejects invalid module names and several app names', () {

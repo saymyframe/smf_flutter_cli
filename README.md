@@ -53,7 +53,7 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 
 | Option | What it does |
 | --- | --- |
-| `-m`, `--modules` | The modules, separated by commas. |
+| `-m`, `--modules` | The modules, separated by commas. The modules of every `-m` add up. |
 | `--org` | The organization in reverse domain notation, `com.example` by default. |
 | `-o`, `--output` | The directory in which the app's directory is created. |
 | `--no-input` | Ask nothing; everything comes from the options. |
@@ -65,6 +65,8 @@ smf create my_app --org com.example -m home,bottom_tabs,get_it,bloc --no-input
 | `--locales` | The languages of the app among those that the texts of its modules are in, such as `en,uk`. All of them by default. |
 | `--auth-mode` | Who may use the app without an account: nobody (`required`, the default), everyone (`guest`), or everyone as an anonymous user (`anonymous`). |
 | `--analytics-collection` | Whether the app collects analytics from its first start (`on`, the default), or nothing until its code turns collection on, for example once the user has agreed (`off`). |
+
+Every other option with a value is given once: a second value, even the same one, is a wrong command line. A flag given twice takes the last.
 
 `smf create` exits with 0 on success, 1 when generation failed, 64 for a wrong command line, 70 for an unexpected error and 130 when you cancel it. The [reference of `smf create`](https://doc.saymyframe.com/guides/smf-create) has the details.
 
