@@ -14,17 +14,20 @@ import 'package:test/test.dart';
 
 /// npm, which reports as its global directory the parent of its own
 /// directory, like an npm installed with Node.js, or the one that
-/// `npm config set prefix` stored. As npm does, `npm install -g
+/// `npm config set prefix` stored in `~/.npmrc`, as npm does, or the one
+/// that `--prefix` after `-g` gives a command. As npm does, `npm install -g
 /// firebase-tools` puts the Firebase CLI into its `lib/node_modules`, and a
 /// link to it, the firebase command, into its `bin`.
 const _npm = r'''#!/bin/sh
 echo "npm $*" >> "$HOME/calls.log"
 prefix="$(cd "$(dirname "$0")/.." && pwd)"
-if [ -f "$HOME/npm_prefix" ]; then prefix="$(cat "$HOME/npm_prefix")"; fi
+stored="$(grep '^prefix=' "$HOME/.npmrc" 2>/dev/null || true)"
+if [ -n "$stored" ]; then prefix="${stored#prefix=}"; fi
+if [ "$3" = --prefix ]; then prefix="$4"; set -- "$1" "$2" "$5"; fi
 case "$1 $2" in
   "prefix -g") echo "$prefix" ;;
   "config get") echo "$prefix" ;;
-  "config set") echo "$4" > "$HOME/npm_prefix" ;;
+  "config set") echo "$3=$4" >> "$HOME/.npmrc" ;;
   "install -g")
     cli="$prefix/lib/node_modules/firebase-tools/lib/bin"
     mkdir -p "$prefix/bin" "$cli"
@@ -98,6 +101,13 @@ String _firebaseCommandNote(String home, String node) =>
     'Added a firebase command to $home/.local/bin, which runs the Firebase '
     'CLI with $node.';
 
+/// The note of the Firebase CLI that the Linux script installed into
+/// `~/.npm-global` of [home] alone, for a machine with nvm.
+String _aloneNote(String home) => 'Installed the Firebase CLI in '
+    '$home/.npm-global, without a prefix in ~/.npmrc, which nvm does not '
+    'allow: update it with "npm install -g --prefix ~/.npm-global '
+    'firebase-tools".';
+
 /// The note that the firebase command [path], which did not run, still
 /// does not.
 String _staleNote(String path) => '$path does not run, and a new terminal '
@@ -161,13 +171,22 @@ final class _Machine {
       _installNodeIn(bin(name), version);
 
   /// Puts Node.js [version] of nvm and its npm into their directory in the
-  /// nvm of the home directory, and on the PATH, as nvm does with its
-  /// default Node.js in a terminal; returns the directory.
-  String installNodeOfNvm(String version) => _installNodeIn(
-        Directory('${home.path}/.nvm/versions/node/$version/bin')
-          ..createSync(recursive: true),
+  /// nvm of the home directory, or of [nvmDir], and on the PATH, as nvm does
+  /// with its default Node.js in a terminal; returns the directory.
+  String installNodeOfNvm(String version, {String? nvmDir}) => _installNodeIn(
+        Directory(
+          '${nvmDir ?? '${home.path}/.nvm'}/versions/node/$version/bin',
+        )..createSync(recursive: true),
         version,
       );
+
+  /// Puts nvm into [directory], by default `~/.nvm`, and returns it.
+  String installNvm([String? directory]) {
+    final nvm = Directory(directory ?? '${home.path}/.nvm')
+      ..createSync(recursive: true);
+    File('${nvm.path}/nvm.sh').writeAsStringSync(_nvm);
+    return nvm.path;
+  }
 
   String _installNodeIn(Directory directory, String version) {
     _write(directory, 'node', _node(version));
@@ -230,7 +249,7 @@ final class _Machine {
     final script = InstallScript.of(system)!;
     final file = File('${root.path}/${script.fileName}')
       ..writeAsStringSync(script.text);
-    return Process.runSync(
+    final result = Process.runSync(
       // The PATH of the script has no bash.
       '/bin/bash',
       [file.path],
@@ -247,6 +266,27 @@ final class _Machine {
         'TEMPLATES': templates.path,
         ...variables,
       },
+    );
+    _expectNvmStillWorks(variables);
+    return result;
+  }
+
+  /// Expects that `~/.npmrc` has neither a prefix nor a globalconfig when
+  /// nvm is installed: in $NVM_DIR, in `~/.nvm` or in $XDG_CONFIG_HOME/nvm.
+  /// While it has one, nvm refuses to use a version of Node.js, also the
+  /// default one that each new terminal that loads nvm uses. The test reads
+  /// the file as nvm does.
+  void _expectNvmStillWorks(Map<String, String> variables) {
+    final installed = [
+      variables['NVM_DIR'],
+      '${home.path}/.nvm',
+      if (variables['XDG_CONFIG_HOME'] case final config?) '$config/nvm',
+    ].nonNulls.any((directory) => File('$directory/nvm.sh').existsSync());
+    if (!installed) return;
+    expect(
+      homeFile('.npmrc') ?? '',
+      isNot(matches(RegExp('^(prefix|globalconfig) *=', multiLine: true))),
+      reason: 'nvm refuses to work while ~/.npmrc has a prefix',
     );
   }
 
@@ -322,7 +362,7 @@ void main() {
         'of the shell of the user', () {
       machine.installNode('node');
       final prefix = '${machine.home.path}/.npm-custom';
-      File('${machine.home.path}/npm_prefix').writeAsStringSync(prefix);
+      File('${machine.home.path}/.npmrc').writeAsStringSync('prefix=$prefix\n');
 
       for (final (shell, profile) in [
         ('/bin/zsh', '.zprofile'),
@@ -352,7 +392,7 @@ void main() {
         '~/.bash_profile that would hide it', () {
       machine.installNode('node');
       final prefix = '${machine.home.path}/.npm-custom';
-      File('${machine.home.path}/npm_prefix').writeAsStringSync(prefix);
+      File('${machine.home.path}/.npmrc').writeAsStringSync('prefix=$prefix\n');
       File('${machine.home.path}/.profile').writeAsStringSync('umask 022\n');
 
       final result = machine.run(HostOperatingSystem.macos, shell: '/bin/bash');
@@ -633,6 +673,8 @@ void main() {
         'node -p process.execPath',
         'node $home/.npm-global/bin/firebase --version',
       ]);
+      // So the installations that follow need no sudo either.
+      expect(machine.homeFile('.npmrc'), 'prefix=$home/.npm-global\n');
       expect(
         machine.homeFile('.bashrc'),
         'export PATH="\$PATH:$home/.npm-global/bin"\n'
@@ -654,6 +696,89 @@ void main() {
         _firebaseCommandNote(home, node),
         'Added \$HOME/.local/bin to the PATH in $rc, for new terminals.',
       ]);
+    });
+
+    // nvm stops using a Node.js while ~/.npmrc has a prefix, in each new
+    // terminal that loads it; see _Machine._expectNvmStillWorks.
+    for (final (where, variables) in [
+      ('in ~/.nvm', (String root) => <String, String>{}),
+      ('in NVM_DIR', (String root) => {'NVM_DIR': '$root/nvm'}),
+      (
+        'in XDG_CONFIG_HOME',
+        (String root) => {'XDG_CONFIG_HOME': '$root/config'},
+      ),
+    ]) {
+      test(
+          'installs the Firebase CLI into ~/.npm-global alone when nvm is '
+          'installed $where, and leaves ~/.npmrc as it is', () {
+        final root = machine.root.path;
+        final environment = variables(root);
+        machine
+          ..installNode('usr')
+          ..installNvm(
+            environment['NVM_DIR'] ??
+                switch (environment['XDG_CONFIG_HOME']) {
+                  final config? => '$config/nvm',
+                  null => null,
+                },
+          );
+        final home = machine.home.path;
+        File('$home/.npmrc').writeAsStringSync('fund=false\n');
+
+        final result = machine.run(
+          HostOperatingSystem.linux,
+          shell: '/bin/bash',
+          variables: environment,
+        );
+
+        expect(result, succeeded(), reason: '${result.stderr}');
+        expect(machine.homeFile('.npmrc'), 'fund=false\n');
+        final usr = machine.bin('usr').path;
+        expect(machine.calls, [
+          'node -v',
+          'npm config get prefix',
+          'npm install -g --prefix $home/.npm-global firebase-tools',
+          'node -p process.execPath',
+          'node $home/.npm-global/bin/firebase --version',
+        ]);
+        expect(binDirsIn('${result.stdout}'), ['$home/.npm-global/bin', usr]);
+        expect(
+          machine.homeFile('.local/bin/firebase'),
+          _firebaseCommand('$usr/node', _cliIn('$home/.npm-global')),
+        );
+        final rc = '$home/.bashrc';
+        expect(notesIn('${result.stdout}'), [
+          _aloneNote(home),
+          'Added $home/.npm-global/bin to the PATH in $rc, for new terminals.',
+          _firebaseCommandNote(home, '$usr/node'),
+          'Added \$HOME/.local/bin to the PATH in $rc, for new terminals.',
+        ]);
+      });
+    }
+
+    test(
+        'installs the Firebase CLI into ~/.npm-global alone when the '
+        'Node.js of nvm is outside the home directory', () {
+      // nvm for every user of the machine, with its default Node.js first
+      // on the PATH.
+      final nvm = machine.installNvm('${machine.root.path}/nvm');
+      final node22 = machine.installNodeOfNvm('v22.11.0', nvmDir: nvm);
+
+      final result = machine.run(
+        HostOperatingSystem.linux,
+        shell: '/bin/bash',
+        variables: {'NVM_DIR': nvm},
+      );
+
+      expect(result, succeeded(), reason: '${result.stderr}');
+      final home = machine.home.path;
+      expect(machine.homeFile('.npmrc'), isNull);
+      expect(
+        machine.calls,
+        contains('npm install -g --prefix $home/.npm-global firebase-tools'),
+      );
+      expect(binDirsIn('${result.stdout}'), ['$home/.npm-global/bin', node22]);
+      expect(notesIn('${result.stdout}').first, _aloneNote(home));
     });
 
     test(
